@@ -19,7 +19,7 @@ use axum::{
 };
 use serde::Serialize;
 use std::sync::Arc;
-use tei_cost_surface::{DispatchPlan, default_substrates, dispatch};
+use tei_cost_surface::{DispatchPlan, Preset, default_substrates, dispatch, enumerate_presets};
 use tei_ir::Workload;
 use tei_stack::{Stack, StackData};
 use tei_substrate_traits::Substrate;
@@ -56,6 +56,10 @@ async fn health(State(state): State<AppState>) -> Json<HealthResponse> {
 
 async fn get_stack(State(state): State<AppState>) -> Json<StackData> {
     Json(state.stack.data.clone())
+}
+
+async fn list_presets(State(state): State<AppState>) -> Json<Vec<Preset>> {
+    Json(enumerate_presets(&state.stack, &state.substrates))
 }
 
 async fn list_substrates(State(state): State<AppState>) -> Json<Vec<SubstrateInfo>> {
@@ -133,6 +137,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/health", get(health))
         .route("/api/stack", get(get_stack))
         .route("/api/substrates", get(list_substrates))
+        .route("/api/presets", get(list_presets))
         .route("/api/dispatch", post(post_dispatch))
         .route("/api/import/onnx", post(post_import_onnx))
         // ONNX models can be hundreds of MB — lift the default 2 MB body limit.

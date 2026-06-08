@@ -392,11 +392,63 @@ function preset(name) {
   return [];
 }
 
+// Built from /api/presets at page load.
+const CATALOG_PRESETS = {};
+
 $('preset').addEventListener('change', (e) => {
-  const list = preset(e.target.value);
+  const key = e.target.value;
+  // Catalog presets win if both define the key.
+  if (CATALOG_PRESETS[key]) {
+    const w = CATALOG_PRESETS[key];
+    setInvocations(w.invocations.map(iv => {
+      const dims = (iv.profile.shape && iv.profile.shape.dims) || [];
+      const m = dims.length >= 1 ? dims[0] : 512;
+      const n = dims.length >= 2 ? dims[1] : 2048;
+      return {
+        primitive_id: iv.primitive_id,
+        count: iv.count,
+        label: iv.label,
+        batch: iv.profile.batch || 1,
+        dtype: iv.profile.dtype || 'f16',
+        m, k: iv.profile.reduce_dim || 768, n,
+        variables: iv.profile.variables || 1024,
+        sweeps:    iv.profile.sweeps    || 10000,
+      };
+    }));
+    return;
+  }
+  const list = preset(key);
   if (list.length === 0) return;
   setInvocations(list);
 });
+
+// Fetch catalog-driven presets and append them to the dropdown.
+async function loadCatalogPresets() {
+  try {
+    const res = await fetch(`${API_BASE}/api/presets`);
+    if (!res.ok) return;
+    const presets = await res.json();
+    const select = $('preset');
+    // Group by `category`.
+    const groups = {};
+    for (const p of presets) {
+      (groups[p.category] ||= []).push(p);
+      CATALOG_PRESETS[p.key] = p.workload;
+    }
+    for (const [cat, list] of Object.entries(groups)) {
+      const grp = document.createElement('optgroup');
+      grp.label = cat;
+      for (const p of list) {
+        const opt = document.createElement('option');
+        opt.value = p.key;
+        opt.textContent = p.label;
+        opt.title = p.description;
+        grp.appendChild(opt);
+      }
+      select.appendChild(grp);
+    }
+  } catch (_) { /* silent — static presets still work */ }
+}
 
 $('add-invocation').addEventListener('click', () => {
   state.invocations.push(makeInv({ label: '' }));
@@ -696,6 +748,7 @@ $('onnx-file').addEventListener('change', (e) => {
 window.addEventListener('DOMContentLoaded', () => {
   $('preset').value = 'transformer-layer';
   setInvocations(preset('transformer-layer'));
+  loadCatalogPresets();
   fetch(`${API_BASE}/health`).then(r => r.ok && dispatch()).catch(() => {});
 });
 </script>

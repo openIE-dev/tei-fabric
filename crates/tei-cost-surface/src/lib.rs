@@ -18,6 +18,9 @@ use tei_ir::Workload;
 use tei_stack::Stack;
 use tei_substrate_traits::{Cost, Substrate};
 
+pub mod presets;
+pub use presets::{Preset, enumerate_presets};
+
 /// One invocation's resolved assignment.
 #[derive(Debug, Clone, Serialize)]
 pub struct Assignment {
