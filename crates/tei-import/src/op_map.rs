@@ -23,6 +23,7 @@ pub fn map_op(op_type: &str) -> Option<(u32, &'static str)> {
         "Gemm"            => Some((18, "matmul")),
         "MatMulInteger"   => Some((18, "matmul")),
         "QLinearMatMul"   => Some((18, "matmul")),
+        "FusedMatMul"     => Some((18, "matmul")),
         "Attention"       => Some((20, "matmul")),
         "MultiHeadAttention" => Some((20, "matmul")),
 

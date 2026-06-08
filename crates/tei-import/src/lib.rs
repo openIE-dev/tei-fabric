@@ -78,7 +78,22 @@ fn build_shape_map(g: &proto::GraphProto) -> HashMap<String, Vec<i64>> {
         let tensor_type = vi.r#type.as_ref()?.tensor_type.as_ref()?;
         let shape = tensor_type.shape.as_ref()?;
         let dims: Vec<i64> = shape.dim.iter()
-            .map(|d| if d.dim_value > 0 { d.dim_value } else { -1 })
+            .map(|d| {
+                if d.dim_value > 0 {
+                    d.dim_value
+                } else {
+                    // Symbolic dim — substitute a sensible default so shape
+                    // inference can propagate downstream. The cost surface
+                    // is approximate; 1 (or seq=128) is fine for ranking.
+                    match d.dim_param.as_str() {
+                        "" => 1,
+                        s if s.contains("seq") || s.contains("sequence") => 128,
+                        s if s.contains("batch") || s == "N" => 1,
+                        s if s.contains("token") => 128,
+                        _ => 1,
+                    }
+                }
+            })
             .collect();
         Some((name, dims))
     };
