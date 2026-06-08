@@ -1,0 +1,338 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+<Layout title="Cost surface">
+
+<!-- ═══ HERO ═══ -->
+<section class="max-w-5xl mx-auto px-6 pt-20 pb-12">
+  <p class="section-label mb-5">Cost-surface dispatcher</p>
+  <h1 class="font-display text-5xl md:text-6xl font-bold text-brand-white leading-[1.05] tracking-tight mb-6">
+    Pick a workload. <span class="text-brand-amber italic">See the substrate.</span>
+  </h1>
+  <p class="text-brand-light text-lg md:text-xl max-w-3xl leading-relaxed">
+    tei-fabric reads the Periodic Stack of Computation and dispatches each primitive to the substrate whose physics performs it at the lowest joule cost. Per-physics models, citations on every constant.
+  </p>
+</section>
+
+<!-- ═══ DEMO ═══ -->
+<section class="max-w-7xl mx-auto px-6 pb-24">
+  <div class="grid lg:grid-cols-[420px_1fr] gap-6">
+
+    <!-- ─── FORM ─── -->
+    <div class="glass-card p-6 self-start">
+      <p class="section-label mb-5">Workload</p>
+
+      <label class="block font-mono text-[11px] text-brand-gray uppercase tracking-wider mb-2">Preset</label>
+      <select id="preset" class="mb-5">
+        <option value="attention" selected>Transformer attention (matmul · 512×768×2048)</option>
+        <option value="small">Small matmul (32×32×32)</option>
+        <option value="resnet">ResNet50 conv block (matmul-equivalent)</option>
+      </select>
+
+      <label class="block font-mono text-[11px] text-brand-gray uppercase tracking-wider mb-2">Primitive</label>
+      <select id="primitive" class="mb-5">
+        <option value="18" selected>18 · Dense MatMul</option>
+        <option value="17">17 · GEMV</option>
+        <option value="24">24 · Convolution</option>
+      </select>
+
+      <div class="grid grid-cols-3 gap-3 mb-5">
+        <div>
+          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">m</label>
+          <input id="m" type="number" value="512" min="1" />
+        </div>
+        <div>
+          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">k</label>
+          <input id="k" type="number" value="768" min="1" />
+        </div>
+        <div>
+          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">n</label>
+          <input id="n" type="number" value="2048" min="1" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 mb-5">
+        <div>
+          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Batch</label>
+          <input id="batch" type="number" value="1" min="1" />
+        </div>
+        <div>
+          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Dtype</label>
+          <select id="dtype">
+            <option value="i4">INT4</option>
+            <option value="i8">INT8</option>
+            <option value="f16" selected>FP16</option>
+            <option value="bf16">BF16</option>
+            <option value="f32">FP32</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 mb-5">
+        <div>
+          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Cycles / sec</label>
+          <input id="cps" type="number" value="30" min="1" />
+        </div>
+        <div>
+          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Budget (W)</label>
+          <input id="budget" type="number" step="0.1" value="5" min="0.1" />
+        </div>
+      </div>
+
+      <button id="dispatch-btn" class="primary w-full mt-2">DISPATCH →</button>
+
+      <p id="api-status" class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mt-4 text-center">
+        API: <span id="api-base">http://localhost:9651</span>
+      </p>
+    </div>
+
+    <!-- ─── RESULTS ─── -->
+    <div id="results" class="space-y-5">
+      <div class="glass-card p-10 text-center">
+        <p class="section-label mb-4">Awaiting dispatch</p>
+        <p class="text-brand-light text-base leading-relaxed">
+          Configure a workload on the left and dispatch. The cost-surface runtime will price the primitive on every registered substrate and pick the lowest-joule fit that meets the fidelity bound.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ DISPATCH SCRIPT ═══ -->
+<script is:inline>
+const API_BASE = (() => {
+  // Convention: serve from same host on :9651 unless overridden via ?api=
+  const url = new URL(window.location.href);
+  const override = url.searchParams.get('api');
+  if (override) return override;
+  return 'http://localhost:9651';
+})();
+document.getElementById('api-base').textContent = API_BASE;
+
+const PRESETS = {
+  attention: { primitive: 18, m: 512, k: 768, n: 2048, batch: 1, dtype: 'f16', cps: 30, budget: 5 },
+  small:     { primitive: 18, m: 32,  k: 32,  n: 32,   batch: 1, dtype: 'f16', cps: 30, budget: 1 },
+  resnet:    { primitive: 24, m: 56,  k: 576, n: 56,   batch: 1, dtype: 'f16', cps: 30, budget: 5 },
+};
+
+document.getElementById('preset').addEventListener('change', (e) => {
+  const p = PRESETS[e.target.value];
+  if (!p) return;
+  for (const [k, v] of Object.entries(p)) {
+    const el = document.getElementById(k === 'primitive' ? 'primitive' : k);
+    if (el) el.value = String(v);
+  }
+});
+
+function $(id) { return document.getElementById(id); }
+function fmtJoules(j) {
+  if (j === 0) return '0 J';
+  const abs = Math.abs(j);
+  if (abs >= 1) return j.toExponential(3) + ' J';
+  if (abs >= 1e-3) return (j * 1e3).toFixed(3) + ' mJ';
+  if (abs >= 1e-6) return (j * 1e6).toFixed(3) + ' µJ';
+  if (abs >= 1e-9) return (j * 1e9).toFixed(3) + ' nJ';
+  if (abs >= 1e-12) return (j * 1e12).toFixed(3) + ' pJ';
+  if (abs >= 1e-15) return (j * 1e15).toFixed(3) + ' fJ';
+  return j.toExponential(3) + ' J';
+}
+function fmtTime(s) {
+  if (s === 0) return '0 s';
+  const abs = Math.abs(s);
+  if (abs >= 1) return s.toFixed(3) + ' s';
+  if (abs >= 1e-3) return (s * 1e3).toFixed(3) + ' ms';
+  if (abs >= 1e-6) return (s * 1e6).toFixed(3) + ' µs';
+  if (abs >= 1e-9) return (s * 1e9).toFixed(3) + ' ns';
+  return s.toExponential(3) + ' s';
+}
+function fmtPower(w) {
+  if (w === 0) return '0 W';
+  const abs = Math.abs(w);
+  if (abs >= 1) return w.toFixed(3) + ' W';
+  if (abs >= 1e-3) return (w * 1e3).toFixed(3) + ' mW';
+  if (abs >= 1e-6) return (w * 1e6).toFixed(3) + ' µW';
+  if (abs >= 1e-9) return (w * 1e9).toFixed(3) + ' nW';
+  return w.toExponential(3) + ' W';
+}
+
+function colorForSubstrate(name) {
+  switch (name) {
+    case 'baseline':  return 'cyan';
+    case 'photonic':  return 'violet';
+    case 'in-memory': return '';   // amber default
+    default:          return '';
+  }
+}
+
+async function dispatch() {
+  const btn = $('dispatch-btn');
+  btn.disabled = true;
+  btn.textContent = 'DISPATCHING…';
+
+  const body = {
+    goal: `${$('primitive').selectedOptions[0].textContent} · ${$('m').value}×${$('k').value}×${$('n').value} @ ${$('dtype').value}`,
+    invocations: [{
+      primitive_id: parseInt($('primitive').value, 10),
+      count: 1,
+      label: $('preset').selectedOptions[0].textContent,
+      profile: {
+        shape: { dims: [parseInt($('m').value, 10), parseInt($('n').value, 10)] },
+        reduce_dim: parseInt($('k').value, 10),
+        batch: parseInt($('batch').value, 10),
+        dtype: $('dtype').value,
+      },
+    }],
+    constraints: {
+      cycles_per_second: parseFloat($('cps').value),
+      power_budget_w: parseFloat($('budget').value),
+      volume: 10000,
+    },
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/api/dispatch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const plan = await res.json();
+    renderPlan(plan);
+  } catch (e) {
+    $('results').innerHTML = `
+      <div class="glass-card p-8" style="border-color: rgba(239, 68, 68, 0.3);">
+        <p class="section-label mb-3" style="color: #ef4444;">Dispatch failed</p>
+        <p class="text-brand-light font-mono text-sm">${e.message}</p>
+        <p class="text-brand-gray text-sm mt-3">Is <code>tei-serve</code> running on ${API_BASE}? Start it with <code>cargo run -p tei-serve</code> from the workspace root.</p>
+      </div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'DISPATCH →';
+  }
+}
+
+function renderPlan(plan) {
+  const root = $('results');
+  const savings = plan.savings_factor;
+  const within = plan.within_budget;
+
+  // ── headline: savings + budget gauge ─────────────────────────────────
+  const headline = `
+    <div class="glass-card p-8">
+      <div class="grid md:grid-cols-3 gap-8">
+        <div>
+          <p class="section-label mb-3">Joules saved</p>
+          <p class="font-display text-5xl font-bold text-brand-amber italic">${savings.toFixed(0)}<span class="text-3xl">×</span></p>
+          <p class="text-brand-gray text-xs font-mono mt-2 tracking-wider uppercase">vs CPU/GPU baseline</p>
+        </div>
+        <div>
+          <p class="section-label mb-3">Power @ ${plan.assignments.length ? '' : ''}${$('cps').value} Hz</p>
+          <p class="font-display text-4xl font-bold text-brand-white">${fmtPower(plan.power_w)}</p>
+          <p class="text-brand-gray text-xs font-mono mt-2 tracking-wider uppercase">
+            baseline: ${fmtPower(plan.baseline_power_w)}
+          </p>
+        </div>
+        <div>
+          <p class="section-label mb-3">Budget</p>
+          <p class="font-display text-4xl font-bold ${within ? 'text-brand-cyan' : 'text-brand-amber'}">${within ? 'WITHIN' : 'OVER'}</p>
+          <p class="text-brand-gray text-xs font-mono mt-2 tracking-wider uppercase">limit ${fmtPower(plan.power_budget_w)}</p>
+        </div>
+      </div>
+    </div>`;
+
+  // ── per-substrate aggregate ──────────────────────────────────────────
+  const maxJ = Math.max(...plan.per_substrate_joules.map(s => s.joules), plan.baseline_total_joules, 1e-30);
+  const aggBars = plan.per_substrate_joules
+    .map(s => {
+      const pct = (s.joules / maxJ * 100).toFixed(2);
+      const color = colorForSubstrate(s.substrate);
+      return `
+        <div>
+          <div class="flex items-baseline justify-between mb-1.5">
+            <span class="font-mono text-[12px] text-brand-light">${s.display}</span>
+            <span class="font-mono text-[11px] text-brand-amber">${fmtJoules(s.joules)} · ${s.op_count} op${s.op_count===1?'':'s'}</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill ${color}" style="width: ${pct}%"></div></div>
+        </div>`;
+    }).join('');
+
+  const baselinePct = (plan.baseline_total_joules / maxJ * 100).toFixed(2);
+  const aggregate = `
+    <div class="glass-card p-7">
+      <p class="section-label mb-5">Cost surface · joules by substrate</p>
+      <div class="space-y-4">
+        ${aggBars}
+        <div class="pt-4 border-t border-brand-border">
+          <div class="flex items-baseline justify-between mb-1.5">
+            <span class="font-mono text-[12px] text-brand-gray uppercase tracking-wider">Baseline only (if dispatched everywhere)</span>
+            <span class="font-mono text-[11px] text-brand-gray">${fmtJoules(plan.baseline_total_joules)}</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill cyan" style="width: ${baselinePct}%; opacity: 0.4;"></div></div>
+        </div>
+      </div>
+    </div>`;
+
+  // ── per-invocation breakdown ─────────────────────────────────────────
+  const invs = plan.assignments.map(a => {
+    const considered = a.considered.map(o => {
+      const supportedTag = o.supported
+        ? `<span class="text-brand-amber">${fmtJoules(o.joules_total)}</span>`
+        : `<span class="text-brand-gray">— not supported</span>`;
+      const chosen = o.substrate === a.chosen_substrate
+        ? `<span class="font-mono text-[10px] text-brand-amber bg-brand-amber/10 border border-brand-amber/30 px-1.5 py-0.5 rounded">CHOSEN</span>`
+        : '';
+      return `
+        <div class="flex items-baseline justify-between py-1.5 border-b border-brand-border last:border-b-0">
+          <span class="font-mono text-[12px] text-brand-light flex items-center gap-2">${o.display} ${chosen}</span>
+          <span class="font-mono text-[11px]">${supportedTag}</span>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="glass-card p-7">
+        <div class="flex items-baseline justify-between mb-2 flex-wrap gap-3">
+          <div>
+            <p class="font-mono text-[10px] text-brand-amber tracking-wider uppercase mb-1">primitive ${a.primitive_id} · ${a.family} · ${a.thermo}</p>
+            <h3 class="font-display text-2xl font-bold text-brand-white">${a.primitive_name}</h3>
+          </div>
+          <div class="text-right">
+            <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider">Dispatched to</p>
+            <p class="font-display text-lg font-bold text-brand-amber italic">${a.chosen_display}</p>
+          </div>
+        </div>
+        ${a.label ? `<p class="text-brand-gray text-sm mb-3">${a.label}</p>` : ''}
+        <p class="text-brand-light text-sm mb-5"><span class="text-brand-amber">→</span> ${a.justification}</p>
+
+        <p class="section-label mb-3">Considered set</p>
+        <div>${considered}</div>
+
+        <div class="grid grid-cols-3 gap-4 mt-5 pt-5 border-t border-brand-border">
+          <div>
+            <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">J / op</p>
+            <p class="font-mono text-sm text-brand-white">${fmtJoules(a.chosen_cost.joules_per_op)}</p>
+          </div>
+          <div>
+            <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">s / op</p>
+            <p class="font-mono text-sm text-brand-white">${fmtTime(a.chosen_cost.seconds_per_op)}</p>
+          </div>
+          <div>
+            <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">Accuracy loss</p>
+            <p class="font-mono text-sm text-brand-white">${(a.chosen_cost.accuracy_loss * 100).toFixed(2)}%</p>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  root.innerHTML = headline + aggregate + invs;
+}
+
+$('dispatch-btn').addEventListener('click', dispatch);
+
+// Kick off one dispatch on page load so the visitor sees a result immediately.
+window.addEventListener('DOMContentLoaded', () => {
+  // Probe /health first to confirm the server is up.
+  fetch(`${API_BASE}/health`).then(r => r.ok && dispatch()).catch(() => {});
+});
+</script>
+
+</Layout>

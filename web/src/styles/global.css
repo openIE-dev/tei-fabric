@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-dark: #050810;
+  --color-brand-navy: #0F1419;
+  --color-brand-blue: #1E3A5F;
+  --color-brand-cyan: #00D4AA;
+  --color-brand-amber: #F59E0B;
+  --color-brand-gold: #D97706;
+  --color-brand-slate: #94A3B8;
+  --color-brand-gray: #64748B;
+  --color-brand-light: #CBD5E1;
+  --color-brand-white: #FFFFFF;
+  --color-brand-border: rgba(255,255,255,0.06);
+
+  --font-display: 'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  background: var(--color-brand-dark);
+  color: var(--color-brand-light);
+  font-family: var(--font-body);
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+.glass-card {
+  background: rgba(15, 20, 25, 0.6);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid var(--color-brand-border);
+  border-radius: 12px;
+}
+
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-brand-amber);
+  font-weight: 600;
+}
+
+.bar-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  overflow: hidden;
+}
+.bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--color-brand-amber), var(--color-brand-gold));
+}
+.bar-fill.cyan {
+  background: linear-gradient(90deg, var(--color-brand-cyan), #0EA5E9);
+}
+.bar-fill.violet {
+  background: linear-gradient(90deg, #a78bfa, #818CF8);
+}
+
+input, select {
+  background: rgba(15, 20, 25, 0.6);
+  border: 1px solid var(--color-brand-border);
+  color: var(--color-brand-white);
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+input:focus, select:focus {
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+button.primary {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: var(--color-brand-amber);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 0.65rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  transition: all 0.15s ease;
+}
+button.primary:hover {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: var(--color-brand-amber);
+}
+button.primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

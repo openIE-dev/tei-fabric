@@ -1,0 +1,40 @@
+---
+import '../styles/global.css';
+interface Props {
+  title?: string;
+  description?: string;
+}
+const { title = 'tei-fabric', description = 'The Rust runtime, simulation, and visualization for the Thermodynamic Edge Intelligence compute fabric.' } = Astro.props;
+---
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="description" content={description} />
+    <title>{title} · tei-fabric</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body class="font-body">
+    <header class="border-b border-brand-border">
+      <div class="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+        <a href="/" class="no-underline flex items-baseline gap-3">
+          <span class="font-display text-lg font-bold tracking-tight text-brand-white">tei-fabric</span>
+          <span class="font-mono text-[11px] text-brand-amber tracking-[3px] uppercase">v0.1</span>
+        </a>
+        <nav class="font-mono text-xs uppercase tracking-wider text-brand-gray flex gap-6">
+          <a href="https://compute.openie.dev" class="hover:text-brand-amber transition-colors no-underline">Periodic Stack →</a>
+          <a href="https://github.com/openie-dev/tei-fabric" class="hover:text-brand-amber transition-colors no-underline">GitHub →</a>
+        </nav>
+      </div>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer class="border-t border-brand-border mt-32">
+      <div class="max-w-7xl mx-auto px-6 py-8 text-brand-gray font-mono text-[11px] tracking-wider uppercase">
+        <p>tei-fabric · Apache 2.0 · built by Thermodynamic Edge Intelligence Corp.</p>
+      </div>
+    </footer>
+  </body>
+</html>
