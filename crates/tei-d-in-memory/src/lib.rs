@@ -65,11 +65,11 @@ const IN_MEMORY_ACCURACY_LOSS: f64 = 0.01;
 fn primitive_is_crossbar_native(p: &Primitive) -> bool {
     matches!(
         p.id,
-        17 |  // GEMV — the canonical fit
-        18 |  // Dense matmul (decomposed into a sequence of MVMs)
-        19 |  // SpMM / SpMV (sparse-on-sparse: limited but real)
-        24 |  // Convolution (im2col → MVM)
-        25    // Cross-correlation
+        18 |  // Dense MatMul — decomposes into a sequence of MVMs    (LA · L2)
+        19 |  // SpMM / SpMV — canonical crossbar fit                  (LA · L2)
+        20 |  // Attention — Q·Kᵀ and ·V are MVMs                       (LA · L2)
+        24 |  // Convolution — im2col → MVM                             (TR · L2)
+        48    // Tensor network contraction — matmul sequences           (TEN · L2)
     )
 }
 
@@ -125,7 +125,7 @@ impl Substrate for InMemory {
     }
 
     fn cost(&self, primitive: &Primitive, profile: &OpProfile) -> Cost {
-        if matches!(primitive.id, 17 | 18 | 19 | 24 | 25)
+        if matches!(primitive.id, 18 | 19 | 20 | 24 | 48)
             && profile.matmul_macs().is_some()
         {
             return self.matmul_energy(profile);

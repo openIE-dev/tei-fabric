@@ -65,6 +65,9 @@ html, body {
 .bar-fill.violet {
   background: linear-gradient(90deg, #a78bfa, #818CF8);
 }
+.bar-fill.gold {
+  background: linear-gradient(90deg, #fbbf24, #D97706);
+}
 
 input, select {
   background: rgba(15, 20, 25, 0.6);

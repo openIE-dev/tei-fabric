@@ -73,21 +73,14 @@ const PHOTONIC_ACCURACY_LOSS: f64 = 0.005;
 fn primitive_is_photonic_native(p: &Primitive) -> bool {
     matches!(
         p.id,
-        // Linear-algebra core (family code matches Periodic Stack catalog):
-        17 |  // GEMV
-        18 |  // Dense matmul (GEMM)
-        19 |  // SpMM / SpMV
-        20 |  // Attention dot-products (QKᵀ + V)
-        24 |  // Convolution
-        25 |  // Cross-correlation
-        76 |  // QR / LU / SVD (Givens / Householder rotations)
-        77 |  // Eigendecomposition
-        // Linear transforms (fully bijective):
-        38 |  // FFT (DFT)
-        39 |  // Inverse FFT
-        40 |  // NTT (number-theoretic transform)
-        41 |  // Wavelet transform
-        42    // Hadamard / Walsh transform
+        18 |  // Dense MatMul                         (LA · L2)
+        19 |  // SpMM / SpMV                          (LA · L2)
+        20 |  // Attention                            (LA · L2)
+        24 |  // Convolution                          (TR · L2)
+        48 |  // Tensor network contraction           (TEN · L2)
+        53 |  // Photonic MZI transform               (ANALOG)
+        76 |  // Matrix decomposition (QR/LU/SVD …)   (LA · L2)
+        77    // Eigendecomposition                   (LA · L2)
     )
 }
 
@@ -146,7 +139,7 @@ impl Substrate for Photonic {
 
     fn cost(&self, primitive: &Primitive, profile: &OpProfile) -> Cost {
         // Matmul-class primitives — full physics model.
-        if matches!(primitive.id, 17 | 18 | 19 | 20 | 24 | 25 | 76 | 77)
+        if matches!(primitive.id, 18 | 19 | 20 | 24 | 48 | 53 | 76 | 77)
             && profile.matmul_macs().is_some()
         {
             return self.matmul_energy(profile);

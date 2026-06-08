@@ -77,6 +77,15 @@ pub struct OpProfile {
     /// Activation sparsity if known (0.0 = dense, 1.0 = fully sparse).
     #[serde(default)]
     pub sparsity: f64,
+    /// Sweeps / chain length / proposal count for sampling-class primitives
+    /// (MCMC, Gibbs, simulated annealing, Bayesian posterior chain length).
+    /// None when not applicable.
+    #[serde(default)]
+    pub sweeps: Option<u64>,
+    /// Variable count for sampling problems — number of p-bits, dimension
+    /// of the Ising / EBM / posterior. None when not applicable.
+    #[serde(default)]
+    pub variables: Option<usize>,
 }
 
 fn default_batch() -> usize { 1 }
@@ -93,6 +102,14 @@ impl OpProfile {
         };
         let k = self.reduce_dim?;
         Some((m_n as u64) * (k as u64) * (self.batch as u64))
+    }
+
+    /// Total atomic sample events for a sampling-class invocation.
+    /// `sweeps × variables`. Returns `None` if either is missing.
+    pub fn sample_events(&self) -> Option<u64> {
+        let s = self.sweeps?;
+        let v = self.variables? as u64;
+        Some(s * v * (self.batch as u64))
     }
 }
 

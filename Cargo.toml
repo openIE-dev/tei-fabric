@@ -7,6 +7,7 @@ members = [
     "crates/tei-d-baseline",
     "crates/tei-d-photonic",
     "crates/tei-d-in-memory",
+    "crates/tei-d-stochastic",
     "crates/tei-cost-surface",
     "bin/tei-serve",
 ]
@@ -27,6 +28,7 @@ tei-substrate-traits = { path = "crates/tei-substrate-traits" }
 tei-d-baseline = { path = "crates/tei-d-baseline" }
 tei-d-photonic = { path = "crates/tei-d-photonic" }
 tei-d-in-memory = { path = "crates/tei-d-in-memory" }
+tei-d-stochastic = { path = "crates/tei-d-stochastic" }
 tei-cost-surface = { path = "crates/tei-cost-surface" }
 
 # External

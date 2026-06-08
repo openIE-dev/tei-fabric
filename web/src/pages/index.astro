@@ -27,27 +27,53 @@ import Layout from '../layouts/Layout.astro';
         <option value="attention" selected>Transformer attention (matmul · 512×768×2048)</option>
         <option value="small">Small matmul (32×32×32)</option>
         <option value="resnet">ResNet50 conv block (matmul-equivalent)</option>
+        <option value="maxcut">Max-Cut · simulated annealing (256 nodes · 4k sweeps)</option>
+        <option value="ising">Ising-EBM Gibbs sampling (1024 p-bits · 10k sweeps)</option>
+        <option value="bayes">Bayesian posterior chain (128 vars · 5k samples)</option>
       </select>
 
       <label class="block font-mono text-[11px] text-brand-gray uppercase tracking-wider mb-2">Primitive</label>
       <select id="primitive" class="mb-5">
         <option value="18" selected>18 · Dense MatMul</option>
-        <option value="17">17 · GEMV</option>
+        <option value="19">19 · SpMM / SpMV</option>
+        <option value="20">20 · Attention</option>
         <option value="24">24 · Convolution</option>
+        <option value="48">48 · Tensor network contraction</option>
+        <option value="39">39 · MCMC / Langevin step</option>
+        <option value="258">258 · Simulated annealing</option>
+        <option value="99">99 · Bayesian posterior</option>
+        <option value="38">38 · Monte Carlo accept/reject</option>
       </select>
 
-      <div class="grid grid-cols-3 gap-3 mb-5">
-        <div>
-          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">m</label>
-          <input id="m" type="number" value="512" min="1" />
+      <!-- Matmul-class fields -->
+      <div id="matmul-fields">
+        <div class="grid grid-cols-3 gap-3 mb-5">
+          <div>
+            <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">m</label>
+            <input id="m" type="number" value="512" min="1" />
+          </div>
+          <div>
+            <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">k</label>
+            <input id="k" type="number" value="768" min="1" />
+          </div>
+          <div>
+            <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">n</label>
+            <input id="n" type="number" value="2048" min="1" />
+          </div>
         </div>
-        <div>
-          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">k</label>
-          <input id="k" type="number" value="768" min="1" />
-        </div>
-        <div>
-          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">n</label>
-          <input id="n" type="number" value="2048" min="1" />
+      </div>
+
+      <!-- Sampling-class fields -->
+      <div id="sampling-fields" style="display: none;">
+        <div class="grid grid-cols-2 gap-3 mb-5">
+          <div>
+            <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Variables</label>
+            <input id="variables" type="number" value="1024" min="1" />
+          </div>
+          <div>
+            <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Sweeps</label>
+            <input id="sweeps" type="number" value="10000" min="1" />
+          </div>
         </div>
       </div>
 
@@ -110,18 +136,38 @@ const API_BASE = (() => {
 document.getElementById('api-base').textContent = API_BASE;
 
 const PRESETS = {
-  attention: { primitive: 18, m: 512, k: 768, n: 2048, batch: 1, dtype: 'f16', cps: 30, budget: 5 },
-  small:     { primitive: 18, m: 32,  k: 32,  n: 32,   batch: 1, dtype: 'f16', cps: 30, budget: 1 },
-  resnet:    { primitive: 24, m: 56,  k: 576, n: 56,   batch: 1, dtype: 'f16', cps: 30, budget: 5 },
+  attention: { kind: 'matmul', primitive: 18, m: 512, k: 768, n: 2048, batch: 1, dtype: 'f16', cps: 30, budget: 5 },
+  small:     { kind: 'matmul', primitive: 18, m: 32,  k: 32,  n: 32,   batch: 1, dtype: 'f16', cps: 30, budget: 1 },
+  resnet:    { kind: 'matmul', primitive: 24, m: 56,  k: 576, n: 56,   batch: 1, dtype: 'f16', cps: 30, budget: 5 },
+  maxcut:    { kind: 'sampling', primitive: 258, variables: 256,  sweeps: 4000,  batch: 1, dtype: 'i8',  cps: 30, budget: 5 },
+  ising:     { kind: 'sampling', primitive: 39,  variables: 1024, sweeps: 10000, batch: 1, dtype: 'i8',  cps: 30, budget: 5 },
+  bayes:     { kind: 'sampling', primitive: 99,  variables: 128,  sweeps: 5000,  batch: 1, dtype: 'f16', cps: 30, budget: 5 },
 };
+
+const SAMPLING_PRIMITIVES = new Set([8, 38, 39, 99, 245, 251, 258, 274]);
+
+function updateFormForKind(kind) {
+  document.getElementById('matmul-fields').style.display   = kind === 'matmul'   ? '' : 'none';
+  document.getElementById('sampling-fields').style.display = kind === 'sampling' ? '' : 'none';
+}
+
+function inferKindFromPrimitive(pid) {
+  return SAMPLING_PRIMITIVES.has(pid) ? 'sampling' : 'matmul';
+}
 
 document.getElementById('preset').addEventListener('change', (e) => {
   const p = PRESETS[e.target.value];
   if (!p) return;
   for (const [k, v] of Object.entries(p)) {
-    const el = document.getElementById(k === 'primitive' ? 'primitive' : k);
+    if (k === 'kind') continue;
+    const el = document.getElementById(k);
     if (el) el.value = String(v);
   }
+  updateFormForKind(p.kind);
+});
+
+document.getElementById('primitive').addEventListener('change', (e) => {
+  updateFormForKind(inferKindFromPrimitive(parseInt(e.target.value, 10)));
 });
 
 function $(id) { return document.getElementById(id); }
@@ -157,10 +203,11 @@ function fmtPower(w) {
 
 function colorForSubstrate(name) {
   switch (name) {
-    case 'baseline':  return 'cyan';
-    case 'photonic':  return 'violet';
-    case 'in-memory': return '';   // amber default
-    default:          return '';
+    case 'baseline':   return 'cyan';
+    case 'photonic':   return 'violet';
+    case 'in-memory':  return '';      // amber (default fill)
+    case 'stochastic': return 'gold';
+    default:           return '';
   }
 }
 
@@ -169,18 +216,38 @@ async function dispatch() {
   btn.disabled = true;
   btn.textContent = 'DISPATCHING…';
 
+  const pid = parseInt($('primitive').value, 10);
+  const kind = inferKindFromPrimitive(pid);
+
+  let profile, goal;
+  if (kind === 'sampling') {
+    const v = parseInt($('variables').value, 10);
+    const s = parseInt($('sweeps').value, 10);
+    profile = {
+      shape: { dims: [v] },
+      batch: parseInt($('batch').value, 10),
+      dtype: $('dtype').value,
+      sweeps: s,
+      variables: v,
+    };
+    goal = `${$('primitive').selectedOptions[0].textContent} · ${v} vars · ${s} sweeps`;
+  } else {
+    profile = {
+      shape: { dims: [parseInt($('m').value, 10), parseInt($('n').value, 10)] },
+      reduce_dim: parseInt($('k').value, 10),
+      batch: parseInt($('batch').value, 10),
+      dtype: $('dtype').value,
+    };
+    goal = `${$('primitive').selectedOptions[0].textContent} · ${$('m').value}×${$('k').value}×${$('n').value} @ ${$('dtype').value}`;
+  }
+
   const body = {
-    goal: `${$('primitive').selectedOptions[0].textContent} · ${$('m').value}×${$('k').value}×${$('n').value} @ ${$('dtype').value}`,
+    goal,
     invocations: [{
-      primitive_id: parseInt($('primitive').value, 10),
+      primitive_id: pid,
       count: 1,
       label: $('preset').selectedOptions[0].textContent,
-      profile: {
-        shape: { dims: [parseInt($('m').value, 10), parseInt($('n').value, 10)] },
-        reduce_dim: parseInt($('k').value, 10),
-        batch: parseInt($('batch').value, 10),
-        dtype: $('dtype').value,
-      },
+      profile,
     }],
     constraints: {
       cycles_per_second: parseFloat($('cps').value),

@@ -1,0 +1,13 @@
+[package]
+name = "tei-d-stochastic"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Stochastic substrate dialect — sMTJ / p-bit thermodynamic-sampling physics."
+
+[dependencies]
+tei-stack.workspace = true
+tei-ir.workspace = true
+tei-substrate-traits.workspace = true

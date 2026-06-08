@@ -105,7 +105,16 @@ impl Substrate for Baseline {
 
         let atomic_ops_per_invocation: u64 = match primitive.id {
             // Matmul-class: m·k·n MACs per invocation.
-            17 | 18 | 19 | 20 | 24 | 25 => profile.matmul_macs().unwrap_or(1),
+            // (Dense MatMul · SpMM/SpMV · Attention · Convolution · Tensor-network ·
+            //  Matrix decomposition · Eigendecomposition.)
+            18 | 19 | 20 | 24 | 48 | 76 | 77 => profile.matmul_macs().unwrap_or(1),
+            // Sampling-class: sweeps × variables sample events per invocation.
+            // (Stochastic rounding · MC accept/reject · MCMC step ·
+            //  Bayesian posterior · Discrete-Gaussian sampling ·
+            //  Bootstrap resampling · Simulated annealing · Lattice Boltzmann.)
+            8 | 38 | 39 | 99 | 245 | 251 | 258 | 274 => {
+                profile.sample_events().unwrap_or(1)
+            }
             _ => 1,
         };
 

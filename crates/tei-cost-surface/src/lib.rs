@@ -85,12 +85,13 @@ pub struct SubstrateAggregate {
     pub op_count: u64,
 }
 
-/// Default substrate set for v0 — baseline + photonic + in-memory.
+/// Default substrate set — baseline + photonic + in-memory + stochastic.
 pub fn default_substrates() -> Vec<Arc<dyn Substrate>> {
     vec![
         Arc::new(tei_d_baseline::Baseline) as Arc<dyn Substrate>,
         Arc::new(tei_d_photonic::Photonic) as Arc<dyn Substrate>,
         Arc::new(tei_d_in_memory::InMemory) as Arc<dyn Substrate>,
+        Arc::new(tei_d_stochastic::Stochastic) as Arc<dyn Substrate>,
     ]
 }
 
