@@ -21,6 +21,21 @@ import Layout from '../layouts/Layout.astro';
     <!-- ─── FORM ─── -->
     <div class="space-y-5 self-start">
 
+      <!-- import -->
+      <div class="glass-card p-6">
+        <p class="section-label mb-4">Import ONNX</p>
+        <p class="text-brand-gray text-xs leading-relaxed mb-4">
+          Drop a real .onnx file — the fabric will parse the graph, map each operator to a Periodic Stack primitive, and populate the invocation list below.
+        </p>
+        <label class="block">
+          <input id="onnx-file" type="file" accept=".onnx,application/octet-stream" style="display: none;" />
+          <span id="onnx-file-label" class="block text-center font-mono text-[12px] text-brand-cyan border border-dashed border-brand-cyan/40 px-4 py-3 rounded-md cursor-pointer hover:bg-brand-cyan/5 hover:border-brand-cyan transition-all">
+            CHOOSE .onnx FILE →
+          </span>
+        </label>
+        <p id="onnx-status" class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mt-3 text-center" style="display:none;"></p>
+      </div>
+
       <!-- preset -->
       <div class="glass-card p-6">
         <p class="section-label mb-4">Workload preset</p>
@@ -615,6 +630,65 @@ function renderPlan(plan) {
 }
 
 $('dispatch-btn').addEventListener('click', dispatch);
+
+// ────────────────────────────────────────────────────────────────────
+// ONNX import
+// ────────────────────────────────────────────────────────────────────
+async function importOnnx(file) {
+  const status = $('onnx-status');
+  status.style.display = '';
+  status.textContent = `READING ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)…`;
+  try {
+    const bytes = await file.arrayBuffer();
+    status.textContent = `POSTING ${(bytes.byteLength / 1024 / 1024).toFixed(1)} MB to /api/import/onnx…`;
+    const res = await fetch(`${API_BASE}/api/import/onnx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: bytes,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status} — ${await res.text()}`);
+    const report = await res.json();
+    // Convert the workload's invocations back to form state.
+    const fromReport = report.workload.invocations.map((iv) => {
+      const p = PRIM_BY_ID[iv.primitive_id] || { kind: 'scalar' };
+      const out = {
+        primitive_id: iv.primitive_id,
+        count: iv.count,
+        label: iv.label,
+        batch: iv.profile.batch || 1,
+        dtype: iv.profile.dtype || 'f16',
+        m: 1, k: 1, n: 1,
+        variables: 1024, sweeps: 10000,
+      };
+      const dims = (iv.profile.shape && iv.profile.shape.dims) || [];
+      if (p.kind === 'matmul' && dims.length >= 2 && iv.profile.reduce_dim) {
+        out.m = dims[0];
+        out.n = dims[1];
+        out.k = iv.profile.reduce_dim;
+      } else if (p.kind === 'sampling') {
+        out.variables = iv.profile.variables || dims[0] || 1024;
+        out.sweeps    = iv.profile.sweeps || 10000;
+      } else {
+        if (dims.length >= 2) { out.m = dims[0]; out.n = dims[1]; }
+        if (iv.profile.reduce_dim) out.k = iv.profile.reduce_dim;
+      }
+      return out;
+    });
+    setInvocations(fromReport);
+    const skipped = Object.entries(report.skipped_unmapped || {})
+      .map(([k, v]) => `${k}×${v}`).join(', ');
+    const skippedNote = skipped ? ` · unmapped: ${skipped}` : '';
+    status.innerHTML = `<span class="text-brand-cyan">✓</span> ${report.model_name || file.name} · ${report.mapped_count}/${report.node_count} ops mapped${skippedNote}`;
+    dispatch();
+  } catch (e) {
+    status.innerHTML = `<span style="color:#ef4444;">✗ Import failed:</span> ${e.message}`;
+  }
+}
+
+$('onnx-file').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (file) importOnnx(file);
+});
 
 // ────────────────────────────────────────────────────────────────────
 // Auto-load: populate with the transformer-layer preset and dispatch.

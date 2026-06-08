@@ -11,7 +11,8 @@
 
 use axum::{
     Json, Router,
-    extract::State,
+    body::Bytes,
+    extract::{DefaultBodyLimit, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
@@ -78,6 +79,15 @@ async fn post_dispatch(
     Ok(Json(plan))
 }
 
+async fn post_import_onnx(
+    State(_state): State<AppState>,
+    body: Bytes,
+) -> Result<Json<tei_import::ImportReport>, (StatusCode, String)> {
+    tei_import::parse_onnx(&body)
+        .map(Json)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("ONNX parse failed: {e}")))
+}
+
 async fn not_found() -> impl IntoResponse {
     (StatusCode::NOT_FOUND, "not found")
 }
@@ -124,6 +134,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/stack", get(get_stack))
         .route("/api/substrates", get(list_substrates))
         .route("/api/dispatch", post(post_dispatch))
+        .route("/api/import/onnx", post(post_import_onnx))
+        // ONNX models can be hundreds of MB — lift the default 2 MB body limit.
+        .layer(DefaultBodyLimit::max(512 * 1024 * 1024))
         .fallback(not_found)
         .layer(cors)
         .with_state(state);

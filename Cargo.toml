@@ -10,6 +10,7 @@ members = [
     "crates/tei-d-stochastic",
     "crates/tei-d-reversible",
     "crates/tei-cost-surface",
+    "crates/tei-import",
     "bin/tei-serve",
 ]
 
@@ -32,6 +33,7 @@ tei-d-in-memory = { path = "crates/tei-d-in-memory" }
 tei-d-stochastic = { path = "crates/tei-d-stochastic" }
 tei-d-reversible = { path = "crates/tei-d-reversible" }
 tei-cost-surface = { path = "crates/tei-cost-surface" }
+tei-import = { path = "crates/tei-import" }
 
 # External
 serde = { version = "1", features = ["derive"] }
