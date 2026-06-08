@@ -85,13 +85,16 @@ pub struct SubstrateAggregate {
     pub op_count: u64,
 }
 
-/// Default substrate set — baseline + photonic + in-memory + stochastic.
-pub fn default_substrates() -> Vec<Arc<dyn Substrate>> {
+/// Default substrate set — baseline + photonic + in-memory + stochastic +
+/// reversible. The reversible dialect needs the catalog at construction
+/// time so it can consult Bennett-decomposition edges.
+pub fn default_substrates(stack: Arc<Stack>) -> Vec<Arc<dyn Substrate>> {
     vec![
         Arc::new(tei_d_baseline::Baseline) as Arc<dyn Substrate>,
         Arc::new(tei_d_photonic::Photonic) as Arc<dyn Substrate>,
         Arc::new(tei_d_in_memory::InMemory) as Arc<dyn Substrate>,
         Arc::new(tei_d_stochastic::Stochastic) as Arc<dyn Substrate>,
+        Arc::new(tei_d_reversible::Reversible::new(stack)) as Arc<dyn Substrate>,
     ]
 }
 

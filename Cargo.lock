@@ -568,6 +568,7 @@ dependencies = [
  "tei-d-baseline",
  "tei-d-in-memory",
  "tei-d-photonic",
+ "tei-d-reversible",
  "tei-d-stochastic",
  "tei-ir",
  "tei-stack",
@@ -594,6 +595,15 @@ dependencies = [
 
 [[package]]
 name = "tei-d-photonic"
+version = "0.1.0"
+dependencies = [
+ "tei-ir",
+ "tei-stack",
+ "tei-substrate-traits",
+]
+
+[[package]]
+name = "tei-d-reversible"
 version = "0.1.0"
 dependencies = [
  "tei-ir",

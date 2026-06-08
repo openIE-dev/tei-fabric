@@ -30,6 +30,9 @@ import Layout from '../layouts/Layout.astro';
         <option value="maxcut">Max-Cut · simulated annealing (256 nodes · 4k sweeps)</option>
         <option value="ising">Ising-EBM Gibbs sampling (1024 p-bits · 10k sweeps)</option>
         <option value="bayes">Bayesian posterior chain (128 vars · 5k samples)</option>
+        <option value="dct">DCT · 1024 × 1024 (pure-L₀ transform)</option>
+        <option value="hilbert">Hilbert transform · 1024 × 1024 (pure-L₀)</option>
+        <option value="kalman">Kalman filter step · 64-state</option>
       </select>
 
       <label class="block font-mono text-[11px] text-brand-gray uppercase tracking-wider mb-2">Primitive</label>
@@ -39,6 +42,11 @@ import Layout from '../layouts/Layout.astro';
         <option value="20">20 · Attention</option>
         <option value="24">24 · Convolution</option>
         <option value="48">48 · Tensor network contraction</option>
+        <option value="76">76 · Matrix decomposition</option>
+        <option value="77">77 · Eigendecomposition</option>
+        <option value="79">79 · DCT (pure-L₀)</option>
+        <option value="80">80 · Hilbert transform (pure-L₀)</option>
+        <option value="109">109 · Kalman filter step</option>
         <option value="39">39 · MCMC / Langevin step</option>
         <option value="258">258 · Simulated annealing</option>
         <option value="99">99 · Bayesian posterior</option>
@@ -142,6 +150,9 @@ const PRESETS = {
   maxcut:    { kind: 'sampling', primitive: 258, variables: 256,  sweeps: 4000,  batch: 1, dtype: 'i8',  cps: 30, budget: 5 },
   ising:     { kind: 'sampling', primitive: 39,  variables: 1024, sweeps: 10000, batch: 1, dtype: 'i8',  cps: 30, budget: 5 },
   bayes:     { kind: 'sampling', primitive: 99,  variables: 128,  sweeps: 5000,  batch: 1, dtype: 'f16', cps: 30, budget: 5 },
+  dct:       { kind: 'matmul', primitive: 79, m: 1024, k: 1024, n: 1024, batch: 1, dtype: 'f16', cps: 30, budget: 5 },
+  hilbert:   { kind: 'matmul', primitive: 80, m: 1024, k: 1024, n: 1024, batch: 1, dtype: 'f16', cps: 30, budget: 5 },
+  kalman:    { kind: 'matmul', primitive: 109, m: 64,  k: 64,   n: 64,   batch: 1, dtype: 'f16', cps: 30, budget: 5 },
 };
 
 const SAMPLING_PRIMITIVES = new Set([8, 38, 39, 99, 245, 251, 258, 274]);
@@ -207,6 +218,7 @@ function colorForSubstrate(name) {
     case 'photonic':   return 'violet';
     case 'in-memory':  return '';      // amber (default fill)
     case 'stochastic': return 'gold';
+    case 'reversible': return 'emerald';
     default:           return '';
   }
 }

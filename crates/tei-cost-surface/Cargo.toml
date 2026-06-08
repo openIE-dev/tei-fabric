@@ -15,4 +15,5 @@ tei-d-baseline.workspace = true
 tei-d-photonic.workspace = true
 tei-d-in-memory.workspace = true
 tei-d-stochastic.workspace = true
+tei-d-reversible.workspace = true
 serde.workspace = true

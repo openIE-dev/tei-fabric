@@ -68,6 +68,9 @@ html, body {
 .bar-fill.gold {
   background: linear-gradient(90deg, #fbbf24, #D97706);
 }
+.bar-fill.emerald {
+  background: linear-gradient(90deg, #34d399, #059669);
+}
 
 input, select {
   background: rgba(15, 20, 25, 0.6);

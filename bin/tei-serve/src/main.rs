@@ -102,7 +102,7 @@ async fn main() -> anyhow::Result<()> {
         stack.data.families.len()
     );
 
-    let substrates = Arc::new(default_substrates());
+    let substrates = Arc::new(default_substrates(stack.clone()));
     info!(
         "registered substrates: {}",
         substrates

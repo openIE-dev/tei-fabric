@@ -1,0 +1,13 @@
+[package]
+name = "tei-d-reversible"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Reversible substrate dialect — adiabatic CMOS / S2LAL physics + Bennett-decomposition kernel."
+
+[dependencies]
+tei-stack.workspace = true
+tei-ir.workspace = true
+tei-substrate-traits.workspace = true
