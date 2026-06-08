@@ -1,0 +1,5636 @@
+{
+  "version": "1.0",
+  "generated": "2026-04-08",
+  "totals": {
+    "primitives": 258,
+    "families": 33,
+    "l0_free": 36,
+    "has_hardware": 29,
+    "hardware_gap": 229,
+    "composition_edges": 297,
+    "bennett_decompositions": 26,
+    "thermodynamic_inheritance_edges": 20
+  },
+  "families": [
+    {
+      "code": "FOUND",
+      "name": "Foundational algebra",
+      "description": "Rings, fields, ordered sets \u2014 integer/float/bitwise/sort",
+      "count": 13
+    },
+    {
+      "code": "FF",
+      "name": "Finite fields",
+      "description": "Galois fields, polynomial rings, lattice/EC crypto",
+      "count": 20
+    },
+    {
+      "code": "LA",
+      "name": "Linear algebra",
+      "description": "Dense and sparse matrices, attention, decompositions",
+      "count": 9
+    },
+    {
+      "code": "TR",
+      "name": "Transforms",
+      "description": "Spectral, hierarchical, autodiff, wavelet",
+      "count": 24
+    },
+    {
+      "code": "SR",
+      "name": "Semirings",
+      "description": "Tropical, log, Viterbi, sum-product, fuzzy",
+      "count": 10
+    },
+    {
+      "code": "NL",
+      "name": "Nonlinear",
+      "description": "Activations, softmax, normalization, interpolation",
+      "count": 7
+    },
+    {
+      "code": "PROB",
+      "name": "Probabilistic",
+      "description": "Hash, RNG, MCMC, Monte Carlo, spectral measure",
+      "count": 6
+    },
+    {
+      "code": "MEM",
+      "name": "Memory & relations",
+      "description": "Scatter/gather, joins, automata, constraints, matching",
+      "count": 10
+    },
+    {
+      "code": "HD",
+      "name": "Hyperdimensional",
+      "description": "FHRR, binary HD, Hopf",
+      "count": 4
+    },
+    {
+      "code": "TEN",
+      "name": "Tensor & quantum",
+      "description": "Tensor contraction, quantum gates, exterior product",
+      "count": 3
+    },
+    {
+      "code": "NEURO",
+      "name": "Neuromorphic",
+      "description": "LIF neurons, STDP, spiking dynamics",
+      "count": 2
+    },
+    {
+      "code": "ANALOG",
+      "name": "Analog & physical",
+      "description": "Crossbar MAC, photonic MZI, sigma-delta, B-spline",
+      "count": 5
+    },
+    {
+      "code": "STOCH",
+      "name": "Stochastic chemistry",
+      "description": "Gillespie, strand displacement, sequence alignment",
+      "count": 5
+    },
+    {
+      "code": "FRONT",
+      "name": "Formal frontier",
+      "description": "Reversible arith, SAT/SMT, term rewriting, model check",
+      "count": 7
+    },
+    {
+      "code": "SYM",
+      "name": "Symmetry",
+      "description": "M\u00f6bius, group FT, symplectic, Clebsch-Gordan",
+      "count": 5
+    },
+    {
+      "code": "OPT",
+      "name": "Optimization",
+      "description": "Proximal, LP, ADMM, IP, BFGS, simulated annealing",
+      "count": 17
+    },
+    {
+      "code": "CODE",
+      "name": "Coding",
+      "description": "Syndrome, entropy, polar, LDPC, RS, BCH, fountain",
+      "count": 10
+    },
+    {
+      "code": "TOPO",
+      "name": "Topological",
+      "description": "Simplicial, persistent homology, knots, Steenrod",
+      "count": 6
+    },
+    {
+      "code": "CAT",
+      "name": "Category theory",
+      "description": "Functors, natural transformations, adjunctions",
+      "count": 4
+    },
+    {
+      "code": "CALC",
+      "name": "Calculus / analysis",
+      "description": "Differentiation, integration, FEM, residue, AC",
+      "count": 16
+    },
+    {
+      "code": "STAT",
+      "name": "Statistical inference",
+      "description": "MLE, Bayes, PCA, KDE, bootstrap, RANSAC",
+      "count": 11
+    },
+    {
+      "code": "COMB",
+      "name": "Combinatorial",
+      "description": "Generating functions, M\u00f6bius, matroid, RSK, Burnside",
+      "count": 7
+    },
+    {
+      "code": "TYPE",
+      "name": "Type theory",
+      "description": "Beta reduction, type inference",
+      "count": 2
+    },
+    {
+      "code": "STPROC",
+      "name": "Stochastic processes",
+      "description": "Brownian, Kalman, particle filter",
+      "count": 3
+    },
+    {
+      "code": "GEOM",
+      "name": "Computational geometry",
+      "description": "Convex hull, Voronoi, ICP, marching cubes",
+      "count": 4
+    },
+    {
+      "code": "GAME",
+      "name": "Game theory",
+      "description": "Nash, minimax, mechanism design",
+      "count": 3
+    },
+    {
+      "code": "NT",
+      "name": "Number theory",
+      "description": "Primality, factoring, GCD, Hensel, AKS, Pollard",
+      "count": 11
+    },
+    {
+      "code": "DIFFGEO",
+      "name": "Differential geometry",
+      "description": "Parallel transport, curvature, Dirac, Hodge, Ricci flow",
+      "count": 6
+    },
+    {
+      "code": "LANG",
+      "name": "Formal languages",
+      "description": "Parsing, NFA\u2192DFA, BWT, KMP, edit distance",
+      "count": 3
+    },
+    {
+      "code": "ALGGEOM",
+      "name": "Algebraic geometry",
+      "description": "Gr\u00f6bner, sheaves, intersection multiplicity, Chow",
+      "count": 5
+    },
+    {
+      "code": "PHYSMATH",
+      "name": "Mathematical physics",
+      "description": "Partition fn, OPE, lattice gauge, Wilson loop, RG",
+      "count": 10
+    },
+    {
+      "code": "DYNSYS",
+      "name": "Dynamical systems",
+      "description": "ODE, Lyapunov, bifurcation, attractors, PID",
+      "count": 6
+    },
+    {
+      "code": "MEAS",
+      "name": "Measure theory",
+      "description": "Lebesgue, Radon-Nikodym, conditional expectation",
+      "count": 4
+    }
+  ],
+  "primitives": [
+    {
+      "id": 1,
+      "name": "Integer arithmetic",
+      "family": "FOUND",
+      "B": "B0\u2013B3",
+      "C": "L2",
+      "D": "D0\u2013D1",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "HW",
+      "wave": 0,
+      "silicon_target": "Standard ALU (universal)"
+    },
+    {
+      "id": 2,
+      "name": "Bitwise logic",
+      "family": "FOUND",
+      "B": "B0\u2013B3",
+      "C": "L0/L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "HW",
+      "wave": 0,
+      "silicon_target": "Standard logic gates (universal); XOR/NOT/SWAP are L\u2080"
+    },
+    {
+      "id": 3,
+      "name": "Float arithmetic",
+      "family": "FOUND",
+      "B": "B0\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "HW",
+      "wave": 0,
+      "silicon_target": "IEEE 754 FPU (universal)"
+    },
+    {
+      "id": 4,
+      "name": "Fused multiply-add",
+      "family": "FOUND",
+      "B": "B1\u2013B3",
+      "C": "L2",
+      "D": "D1\u2013D2",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "HW",
+      "wave": 0,
+      "silicon_target": "FMA unit (every modern CPU/GPU)"
+    },
+    {
+      "id": 5,
+      "name": "Comparison / predicate",
+      "family": "FOUND",
+      "B": "B0\u2013B3",
+      "C": "L2max",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "HW",
+      "wave": 0,
+      "silicon_target": "Comparator tree"
+    },
+    {
+      "id": 6,
+      "name": "Sort / rank",
+      "family": "FOUND",
+      "B": "B0\u2013B4",
+      "C": "L2max",
+      "D": "D1\u2013D2",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Bitonic / merge sorting network ASIC"
+    },
+    {
+      "id": 7,
+      "name": "Quantize / dequantize",
+      "family": "FOUND",
+      "B": "B1\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "HW",
+      "wave": 0,
+      "silicon_target": "FP\u2192INT converter (Tensor Cores)"
+    },
+    {
+      "id": 8,
+      "name": "Stochastic rounding",
+      "family": "FOUND",
+      "B": "B1\u2013B3",
+      "C": "L1+L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "EM",
+      "wave": 0,
+      "silicon_target": "Probabilistic rounder with entropy port"
+    },
+    {
+      "id": 9,
+      "name": "Interval arithmetic",
+      "family": "FOUND",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Directed-rounding paired-FPU"
+    },
+    {
+      "id": 10,
+      "name": "Geometric algebra product",
+      "family": "FOUND",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Clifford multivector multiplier (Cl(p,q))"
+    },
+    {
+      "id": 11,
+      "name": "GF(2^n) arithmetic",
+      "family": "FF",
+      "B": "B0\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "ISA",
+      "wave": 0,
+      "silicon_target": "Carry-less multiplier (CLMUL/PCLMUL)"
+    },
+    {
+      "id": 12,
+      "name": "NTT / inverse NTT",
+      "family": "FF",
+      "B": "B0\u2013B3",
+      "C": "L0",
+      "D": "D1\u2013D2",
+      "E": 0,
+      "F": "1to1",
+      "existing": "ISA",
+      "wave": 0,
+      "silicon_target": "Number-theoretic butterfly engine"
+    },
+    {
+      "id": 13,
+      "name": "Polynomial ring ops",
+      "family": "FF",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Cyclotomic Z_q[X] ALU"
+    },
+    {
+      "id": 14,
+      "name": "FHE bootstrapping",
+      "family": "FF",
+      "B": "B2\u2013B4",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "EM",
+      "wave": 0,
+      "silicon_target": "Bootstrapping engine (BFV/CKKS/TFHE)"
+    },
+    {
+      "id": 15,
+      "name": "Modular exponentiation",
+      "family": "FF",
+      "B": "B0\u2013B3",
+      "C": "L2",
+      "D": "D0\u2013D1",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "ISA",
+      "wave": 0,
+      "silicon_target": "Square-and-multiply engine (RSA core)"
+    },
+    {
+      "id": 16,
+      "name": "Elliptic curve point ops",
+      "family": "FF",
+      "B": "B0\u2013B3",
+      "C": "L2",
+      "D": "D0\u2013D1",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "ISA",
+      "wave": 0,
+      "silicon_target": "Point doubling/addition unit"
+    },
+    {
+      "id": 17,
+      "name": "Lattice reduction",
+      "family": "FF",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Gram-Schmidt + size-reduce + swap engine \u2014 post-quantum crypto core"
+    },
+    {
+      "id": 18,
+      "name": "Dense MatMul",
+      "family": "LA",
+      "B": "B0\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "HW",
+      "wave": 0,
+      "silicon_target": "Systolic matmul array (Tensor Cores)"
+    },
+    {
+      "id": 19,
+      "name": "SpMM / SpMV",
+      "family": "LA",
+      "B": "B0\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "HW",
+      "wave": 0,
+      "silicon_target": "Sparse matrix engine (Cerebras, Graphcore)"
+    },
+    {
+      "id": 20,
+      "name": "Attention",
+      "family": "LA",
+      "B": "B2\u2013B4",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "HW",
+      "wave": 0,
+      "silicon_target": "Attention block (Tensor Cores + softmax + accumulate)"
+    },
+    {
+      "id": 21,
+      "name": "Reduction",
+      "family": "TR",
+      "B": "B0\u2013B3",
+      "C": "L2max",
+      "D": "D1\u2013D2",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "HW",
+      "wave": 0,
+      "silicon_target": "Reduction tree"
+    },
+    {
+      "id": 22,
+      "name": "Scan / prefix sum",
+      "family": "TR",
+      "B": "B0\u2013B3",
+      "C": "L2",
+      "D": "D5 sequential",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "HW",
+      "wave": 0,
+      "silicon_target": "Prefix-scan unit (Blelloch)"
+    },
+    {
+      "id": 23,
+      "name": "FFT",
+      "family": "TR",
+      "B": "B0\u2013B3",
+      "C": "L0",
+      "D": "D1\u2013D2",
+      "E": 0,
+      "F": "1to1",
+      "existing": "ISA",
+      "wave": 0,
+      "silicon_target": "Cooley-Tukey butterfly engine"
+    },
+    {
+      "id": 24,
+      "name": "Convolution",
+      "family": "TR",
+      "B": "B0\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "HW",
+      "wave": 0,
+      "silicon_target": "Convolution kernel (CNN cores)"
+    },
+    {
+      "id": 25,
+      "name": "Wavelet transform",
+      "family": "TR",
+      "B": "B0\u2013B4",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Lifting-scheme filter bank"
+    },
+    {
+      "id": 26,
+      "name": "Pooling",
+      "family": "TR",
+      "B": "B2\u2013B4",
+      "C": "L2max",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "HW",
+      "wave": 0,
+      "silicon_target": "Pool unit (max/avg)"
+    },
+    {
+      "id": 27,
+      "name": "AD tape ops",
+      "family": "TR",
+      "B": "B4",
+      "C": "L2+L3",
+      "D": "D5 sequential",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Tape recorder + replay engine"
+    },
+    {
+      "id": 28,
+      "name": "Multipole expansion",
+      "family": "TR",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 0,
+      "F": "1toN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Hierarchical FMM accelerator"
+    },
+    {
+      "id": 29,
+      "name": "Tropical semiring",
+      "family": "SR",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "(min,+) ALU"
+    },
+    {
+      "id": 30,
+      "name": "Log-semiring",
+      "family": "SR",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "logsumexp pipeline"
+    },
+    {
+      "id": 31,
+      "name": "Viterbi semiring",
+      "family": "SR",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D1\u2013D2",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "(max,\u00d7) DP engine with traceback"
+    },
+    {
+      "id": 32,
+      "name": "Sum-product message passing",
+      "family": "SR",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Factor graph message engine"
+    },
+    {
+      "id": 33,
+      "name": "Activation fn",
+      "family": "NL",
+      "B": "B0\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "HW",
+      "wave": 0,
+      "silicon_target": "ReLU/GELU/SiLU unit"
+    },
+    {
+      "id": 34,
+      "name": "Softmax",
+      "family": "NL",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "HW",
+      "wave": 0,
+      "silicon_target": "Softmax pipeline (exp + reduce + divide)"
+    },
+    {
+      "id": 35,
+      "name": "Normalization",
+      "family": "NL",
+      "B": "B2\u2013B4",
+      "C": "L2",
+      "D": "D1\u2013D2",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "HW",
+      "wave": 0,
+      "silicon_target": "LayerNorm / BatchNorm unit"
+    },
+    {
+      "id": 36,
+      "name": "Hash",
+      "family": "PROB",
+      "B": "B0\u2013B3",
+      "C": "L2max",
+      "D": "D4 embarrassing",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "ISA",
+      "wave": 0,
+      "silicon_target": "Cryptographic hash unit (SHA, BLAKE)"
+    },
+    {
+      "id": 37,
+      "name": "RNG",
+      "family": "PROB",
+      "B": "B1\u2013B3",
+      "C": "L1",
+      "D": "D4 embarrassing",
+      "E": 0,
+      "F": "1toN",
+      "existing": "ISA",
+      "wave": 0,
+      "silicon_target": "True/pseudo RNG (RDRAND, RDSEED)"
+    },
+    {
+      "id": 38,
+      "name": "Monte Carlo accept/reject",
+      "family": "PROB",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D4 embarrassing",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Importance sampler with proposal/target"
+    },
+    {
+      "id": 39,
+      "name": "MCMC / Langevin step",
+      "family": "PROB",
+      "B": "B0\u2013B4",
+      "C": "L2+L3",
+      "D": "D5 sequential",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Metropolis stepper with stored chain"
+    },
+    {
+      "id": 40,
+      "name": "Scatter / gather",
+      "family": "MEM",
+      "B": "B1\u2013B3",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "ISA",
+      "wave": 0,
+      "silicon_target": "Indexed load/store unit"
+    },
+    {
+      "id": 41,
+      "name": "Embedding lookup",
+      "family": "MEM",
+      "B": "B2\u2013B4",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1toN",
+      "existing": "HW",
+      "wave": 0,
+      "silicon_target": "HBM-backed lookup table"
+    },
+    {
+      "id": 42,
+      "name": "Finite automaton step",
+      "family": "MEM",
+      "B": "B0\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 1,
+      "F": "NtoN",
+      "existing": "ISA",
+      "wave": 0,
+      "silicon_target": "DFA state-transition unit"
+    },
+    {
+      "id": 43,
+      "name": "Relational join",
+      "family": "MEM",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Hash-join / sort-merge accelerator"
+    },
+    {
+      "id": 44,
+      "name": "Constraint propagation",
+      "family": "MEM",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 3,
+      "F": "NtoN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "CSP domain narrowing engine"
+    },
+    {
+      "id": 45,
+      "name": "Unification",
+      "family": "MEM",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "MGU substitution engine"
+    },
+    {
+      "id": 46,
+      "name": "FHRR bind/unbind",
+      "family": "HD",
+      "B": "B0\u2013B4",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Circular convolution unit (FFT-based)"
+    },
+    {
+      "id": 47,
+      "name": "HD bind/bundle/permute",
+      "family": "HD",
+      "B": "B0\u2013B4",
+      "C": "L0/L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "XOR + majority-vote unit (binary HD)"
+    },
+    {
+      "id": 48,
+      "name": "Tensor network contraction",
+      "family": "TEN",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D2\u2013D3",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Contraction-order optimizer + sparse contractor"
+    },
+    {
+      "id": 49,
+      "name": "Quantum gate ops",
+      "family": "TEN",
+      "B": "B0\u2013B1",
+      "C": "L0",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "1to1",
+      "existing": "EM",
+      "wave": 0,
+      "silicon_target": "Quantum processor (superconducting/trapped-ion/photonic)"
+    },
+    {
+      "id": 50,
+      "name": "Spike / LIF neuron",
+      "family": "NEURO",
+      "B": "B0\u2013B2",
+      "C": "L2+L3",
+      "D": "D5 sequential",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "EM",
+      "wave": 0,
+      "silicon_target": "Neuromorphic core (Loihi, Xylo, Akida)"
+    },
+    {
+      "id": 51,
+      "name": "STDP",
+      "family": "NEURO",
+      "B": "B0\u2013B2",
+      "C": "L2+L3",
+      "D": "D5 sequential",
+      "E": 3,
+      "F": "NtoN",
+      "existing": "EM",
+      "wave": 0,
+      "silicon_target": "On-chip plasticity engine"
+    },
+    {
+      "id": 52,
+      "name": "Analog crossbar MAC",
+      "family": "ANALOG",
+      "B": "B1\u2013B2",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "EM",
+      "wave": 0,
+      "silicon_target": "Memristor / RRAM crossbar (Mythic, Rain)"
+    },
+    {
+      "id": 53,
+      "name": "Photonic MZI transform",
+      "family": "ANALOG",
+      "B": "B1\u2013B2",
+      "C": "L0",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "1to1",
+      "existing": "EM",
+      "wave": 0,
+      "silicon_target": "Mach-Zehnder mesh (Lightmatter)"
+    },
+    {
+      "id": 54,
+      "name": "Sigma-delta modulation",
+      "family": "ANALOG",
+      "B": "B1\u2013B2",
+      "C": "L2+L3",
+      "D": "D5 sequential",
+      "E": 1,
+      "F": "NtoN",
+      "existing": "EM",
+      "wave": 0,
+      "silicon_target": "\u03a3-\u0394 modulator with noise shaping"
+    },
+    {
+      "id": 55,
+      "name": "B-spline / NURBS eval",
+      "family": "ANALOG",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "de Boor recursion unit"
+    },
+    {
+      "id": 56,
+      "name": "Gillespie step",
+      "family": "STOCH",
+      "B": "B0\u2013B4",
+      "C": "L1+L2",
+      "D": "D5 sequential",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Stochastic simulation engine"
+    },
+    {
+      "id": 57,
+      "name": "Reversible arithmetic",
+      "family": "FRONT",
+      "B": "B0\u2013B1",
+      "C": "L0",
+      "D": "D0\u2013D1",
+      "E": 0,
+      "F": "1to1",
+      "existing": "TH",
+      "wave": 0,
+      "silicon_target": "Toffoli/Fredkin reversible logic substrate"
+    },
+    {
+      "id": 58,
+      "name": "SAT/SMT oracle",
+      "family": "FRONT",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "SAT accelerator (CDCL or Ising annealer)"
+    },
+    {
+      "id": 59,
+      "name": "Symbolic term rewriting",
+      "family": "FRONT",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Term-rewriting engine (Mathematica-class)"
+    },
+    {
+      "id": 60,
+      "name": "Strand displacement",
+      "family": "STOCH",
+      "B": "B0\u2013B1",
+      "C": "L2",
+      "D": "D4 embarrassing",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "TH",
+      "wave": 0,
+      "silicon_target": "DNA strand-displacement substrate"
+    },
+    {
+      "id": 61,
+      "name": "Radon / inverse Radon",
+      "family": "TR",
+      "B": "B0\u2013B4",
+      "C": "L0",
+      "D": "D4 embarrassing",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Tomographic projection / backprojection unit"
+    },
+    {
+      "id": 62,
+      "name": "M\u00f6bius / zeta transform",
+      "family": "SYM",
+      "B": "B0\u2013B4",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Poset-traversal M\u00f6bius unit"
+    },
+    {
+      "id": 63,
+      "name": "Group FT (non-abelian)",
+      "family": "SYM",
+      "B": "B0\u2013B4",
+      "C": "L0",
+      "D": "D1\u2013D2",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Group-equivariant transform engine"
+    },
+    {
+      "id": 64,
+      "name": "Symplectic integrator step",
+      "family": "SYM",
+      "B": "B0\u2013B4",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Verlet / leapfrog phase-space stepper"
+    },
+    {
+      "id": 65,
+      "name": "Proximal operator",
+      "family": "OPT",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Prox-operator evaluator (soft-threshold, projection)"
+    },
+    {
+      "id": 67,
+      "name": "Syndrome decode",
+      "family": "CODE",
+      "B": "B0\u2013B3",
+      "C": "L2",
+      "D": "D1\u2013D2",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "ISA",
+      "wave": 0,
+      "silicon_target": "Generic syndrome decoder"
+    },
+    {
+      "id": 68,
+      "name": "Fuzzy semiring",
+      "family": "SR",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "(max,min) fuzzy-logic ALU"
+    },
+    {
+      "id": 69,
+      "name": "Entropy coding (arith/ANS)",
+      "family": "CODE",
+      "B": "B0\u2013B3",
+      "C": "L0",
+      "D": "D4 embarrassing",
+      "E": 0,
+      "F": "1to1",
+      "existing": "ISA",
+      "wave": 0,
+      "silicon_target": "Range/ANS coder unit"
+    },
+    {
+      "id": 70,
+      "name": "LP pivot / basis exchange",
+      "family": "OPT",
+      "B": "B0\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "wave": 0,
+      "silicon_target": "Simplex pivot engine"
+    },
+    {
+      "id": 71,
+      "name": "Bilinear pairing",
+      "family": "FF",
+      "B": "B0\u2013B3",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "ISA",
+      "wave": 0,
+      "silicon_target": "Pairing engine (Miller loop + final exponentiation)"
+    },
+    {
+      "id": 72,
+      "name": "Discrete log oracle",
+      "family": "FRONT",
+      "B": "B0",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "TH",
+      "wave": 0,
+      "silicon_target": "DLOG oracle (Shor on quantum, sieves on classical)"
+    },
+    {
+      "id": 73,
+      "name": "Lattice meet/join",
+      "family": "FOUND",
+      "B": "B1\u2013B3",
+      "C": "L2max",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Comparator tree with lattice semantics",
+      "wave": 1
+    },
+    {
+      "id": 74,
+      "name": "Quasigroup op",
+      "family": "FOUND",
+      "B": "B1\u2013B3",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "Lookup table or algebraic unit (Latin square)",
+      "wave": 1
+    },
+    {
+      "id": 75,
+      "name": "CRT (Chinese Remainder)",
+      "family": "FOUND",
+      "B": "B1\u2013B3",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "Modular arithmetic unit with CRT reconstruction",
+      "wave": 1
+    },
+    {
+      "id": 76,
+      "name": "Matrix decomposition",
+      "family": "LA",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Dedicated QR/LU/SVD datapath (systolic + Givens rotation)",
+      "wave": 1
+    },
+    {
+      "id": 77,
+      "name": "Eigendecomposition",
+      "family": "LA",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Iterative engine (QR algorithm, Lanczos)",
+      "wave": 1
+    },
+    {
+      "id": 78,
+      "name": "Krylov subspace gen",
+      "family": "LA",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 2,
+      "F": "1toN",
+      "existing": "SW",
+      "silicon_target": "SpMV engine with state buffer for basis vectors",
+      "wave": 1
+    },
+    {
+      "id": 79,
+      "name": "DCT",
+      "family": "TR",
+      "B": "B1\u2013B3",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "Butterfly network (like FFT, real-valued)",
+      "wave": 1
+    },
+    {
+      "id": 80,
+      "name": "Hilbert transform",
+      "family": "TR",
+      "B": "B2\u2013B3",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "FFT + phase shift + iFFT pipeline",
+      "wave": 1
+    },
+    {
+      "id": 81,
+      "name": "Laplace/Z-transform",
+      "family": "TR",
+      "B": "B2\u2013B3",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "Dedicated s/z-domain engine",
+      "wave": 1
+    },
+    {
+      "id": 82,
+      "name": "Kleene star",
+      "family": "SR",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Transitive closure engine (graph accelerator)",
+      "wave": 1
+    },
+    {
+      "id": 83,
+      "name": "Special functions",
+      "family": "NL",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Piecewise polynomial + CORDIC for Bessel/erf/gamma",
+      "wave": 1
+    },
+    {
+      "id": 84,
+      "name": "Persistent homology",
+      "family": "MEM",
+      "B": "B2\u2013B4",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Matrix reduction engine (Smith normal form)",
+      "wave": 1
+    },
+    {
+      "id": 85,
+      "name": "Graph isomorphism",
+      "family": "MEM",
+      "B": "B2\u2013B4",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Color refinement + backtrack accelerator",
+      "wave": 1
+    },
+    {
+      "id": 86,
+      "name": "Exterior product",
+      "family": "TEN",
+      "B": "B1\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Antisymmetric multiply unit",
+      "wave": 1
+    },
+    {
+      "id": 87,
+      "name": "Simplicial complex",
+      "family": "TOPO",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Spatial index + complex builder",
+      "wave": 1
+    },
+    {
+      "id": 88,
+      "name": "Filtration",
+      "family": "TOPO",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Parameterized complex cascade",
+      "wave": 1
+    },
+    {
+      "id": 89,
+      "name": "Functor application",
+      "family": "CAT",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Structure-preserving map engine",
+      "wave": 1
+    },
+    {
+      "id": 90,
+      "name": "Natural transformation",
+      "family": "CAT",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Functor morphism engine",
+      "wave": 1
+    },
+    {
+      "id": 91,
+      "name": "Adjunction resolution",
+      "family": "CAT",
+      "B": "B3\u2013B4",
+      "C": "L0",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "Hom-set bijection unit",
+      "wave": 1
+    },
+    {
+      "id": 92,
+      "name": "Comultiplication",
+      "family": "HD",
+      "B": "B2\u2013B3",
+      "C": "L1",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1toN",
+      "existing": "SW",
+      "silicon_target": "Tensor product generator",
+      "wave": 1
+    },
+    {
+      "id": 93,
+      "name": "Hopf antipode",
+      "family": "HD",
+      "B": "B2\u2013B3",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "Anti-automorphism unit",
+      "wave": 1
+    },
+    {
+      "id": 94,
+      "name": "Differentiation",
+      "family": "CALC",
+      "B": "B1\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Finite difference engine / AD tape unit",
+      "wave": 2
+    },
+    {
+      "id": 95,
+      "name": "Integration/quadrature",
+      "family": "CALC",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Accumulator with quadrature weights",
+      "wave": 2
+    },
+    {
+      "id": 96,
+      "name": "It\u00f4 integral",
+      "family": "CALC",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D5 sequential",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Stochastic accumulator with RNG",
+      "wave": 2
+    },
+    {
+      "id": 97,
+      "name": "Variational derivative",
+      "family": "CALC",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Functional AD unit",
+      "wave": 2
+    },
+    {
+      "id": 98,
+      "name": "MLE / MAP estimation",
+      "family": "STAT",
+      "B": "B2\u2013B3",
+      "C": "L2max",
+      "D": "D1 vector",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Likelihood accumulator + optimizer",
+      "wave": 2
+    },
+    {
+      "id": 99,
+      "name": "Bayesian posterior",
+      "family": "STAT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Prior \u00d7 likelihood multiply-accumulate",
+      "wave": 2
+    },
+    {
+      "id": 100,
+      "name": "PCA / ICA",
+      "family": "STAT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Eigendecomp (#77) on covariance matrix",
+      "wave": 2
+    },
+    {
+      "id": 101,
+      "name": "Kernel density est.",
+      "family": "STAT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Kernel evaluation + accumulation",
+      "wave": 2
+    },
+    {
+      "id": 102,
+      "name": "Natural gradient",
+      "family": "STAT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Fisher information inverse \u00d7 gradient",
+      "wave": 2
+    },
+    {
+      "id": 103,
+      "name": "Generating fn extract",
+      "family": "COMB",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "1toN",
+      "existing": "SW",
+      "silicon_target": "Polynomial coefficient extraction",
+      "wave": 2
+    },
+    {
+      "id": 104,
+      "name": "M\u00f6bius inversion",
+      "family": "COMB",
+      "B": "B2\u2013B3",
+      "C": "L0",
+      "D": "D3 graph",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "Poset traversal with inversion weights",
+      "wave": 2
+    },
+    {
+      "id": 105,
+      "name": "Matroid ops",
+      "family": "COMB",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Independence oracle + greedy selector",
+      "wave": 2
+    },
+    {
+      "id": 106,
+      "name": "Beta reduction",
+      "family": "TYPE",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Substitution engine (lambda machine)",
+      "wave": 2
+    },
+    {
+      "id": 107,
+      "name": "Type inference",
+      "family": "TYPE",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Unification + constraint solver",
+      "wave": 2
+    },
+    {
+      "id": 108,
+      "name": "Brownian increment",
+      "family": "STPROC",
+      "B": "B2\u2013B3",
+      "C": "L1",
+      "D": "D4 embarrassing",
+      "E": 0,
+      "F": "1toN",
+      "existing": "SW",
+      "silicon_target": "Gaussian RNG with \u221a\u0394t scaling",
+      "wave": 2
+    },
+    {
+      "id": 109,
+      "name": "Kalman filter step",
+      "family": "STPROC",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Predict-update matmul pipeline",
+      "wave": 2
+    },
+    {
+      "id": 110,
+      "name": "Particle filter",
+      "family": "STPROC",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Weighted particle resampler",
+      "wave": 2
+    },
+    {
+      "id": 111,
+      "name": "Knot invariant",
+      "family": "TOPO",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Skein relation evaluator",
+      "wave": 2
+    },
+    {
+      "id": 112,
+      "name": "Homology computation",
+      "family": "TOPO",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Smith normal form reduction engine",
+      "wave": 2
+    },
+    {
+      "id": 113,
+      "name": "Clebsch-Gordan",
+      "family": "SYM",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Tensor product decomposition unit",
+      "wave": 2
+    },
+    {
+      "id": 114,
+      "name": "Character computation",
+      "family": "SYM",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Trace evaluator",
+      "wave": 2
+    },
+    {
+      "id": 115,
+      "name": "Full Clifford product",
+      "family": "ANALOG",
+      "B": "B1\u2013B2",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Geometric algebra multiply unit",
+      "wave": 2
+    },
+    {
+      "id": 116,
+      "name": "Branch and bound",
+      "family": "OPT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Search tree pruning accelerator",
+      "wave": 2
+    },
+    {
+      "id": 117,
+      "name": "Evolutionary selection",
+      "family": "OPT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 3,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Population fitness sorter + crossover unit",
+      "wave": 2
+    },
+    {
+      "id": 118,
+      "name": "Convex hull",
+      "family": "GEOM",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Point sorting + tangent-walk engine",
+      "wave": 3
+    },
+    {
+      "id": 119,
+      "name": "Voronoi/Delaunay",
+      "family": "GEOM",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Incremental insertion engine",
+      "wave": 3
+    },
+    {
+      "id": 120,
+      "name": "Point location",
+      "family": "GEOM",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Spatial index traversal unit",
+      "wave": 3
+    },
+    {
+      "id": 121,
+      "name": "Boolean CSG",
+      "family": "GEOM",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Edge intersection + polygon builder",
+      "wave": 3
+    },
+    {
+      "id": 122,
+      "name": "Nash equilibrium",
+      "family": "GAME",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Lemke-Howson pivot engine",
+      "wave": 3
+    },
+    {
+      "id": 123,
+      "name": "Minimax/alpha-beta",
+      "family": "GAME",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Game tree evaluator with pruning",
+      "wave": 3
+    },
+    {
+      "id": 124,
+      "name": "Mechanism design",
+      "family": "GAME",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Auction/VCG evaluator",
+      "wave": 3
+    },
+    {
+      "id": 125,
+      "name": "Primality test",
+      "family": "NT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Modular exponentiation + witness check",
+      "wave": 3
+    },
+    {
+      "id": 126,
+      "name": "Integer factorization",
+      "family": "NT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Sieve engine (quadratic/number field)",
+      "wave": 3
+    },
+    {
+      "id": 127,
+      "name": "GCD (Euclidean)",
+      "family": "NT",
+      "B": "B1\u2013B3",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Iterative divider (or **L\u2080** for extended GCD)",
+      "wave": 3
+    },
+    {
+      "id": 128,
+      "name": "Continued fractions",
+      "family": "NT",
+      "B": "B2\u2013B3",
+      "C": "L0",
+      "D": "D5 sequential",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "Floor-divide + reciprocal chain",
+      "wave": 3
+    },
+    {
+      "id": 129,
+      "name": "Parallel transport",
+      "family": "DIFFGEO",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D5 sequential",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Connection coefficient accumulator",
+      "wave": 3
+    },
+    {
+      "id": 130,
+      "name": "Geodesic computation",
+      "family": "DIFFGEO",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D5 sequential",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "ODE integrator on manifold",
+      "wave": 3
+    },
+    {
+      "id": 131,
+      "name": "Curvature tensor",
+      "family": "DIFFGEO",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Christoffel symbol + Riemann evaluator",
+      "wave": 3
+    },
+    {
+      "id": 132,
+      "name": "Exponential map",
+      "family": "DIFFGEO",
+      "B": "B2\u2013B3",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "Geodesic shooter (tangent \u2192 point)",
+      "wave": 3
+    },
+    {
+      "id": 133,
+      "name": "Parsing",
+      "family": "LANG",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D5 sequential",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "CYK/Earley table-fill engine",
+      "wave": 3
+    },
+    {
+      "id": 134,
+      "name": "NFA\u2192DFA",
+      "family": "LANG",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Subset construction engine",
+      "wave": 3
+    },
+    {
+      "id": 135,
+      "name": "Language reversal",
+      "family": "LANG",
+      "B": "B1\u2013B3",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "Bit/byte reverser (trivial in hardware)",
+      "wave": 3
+    },
+    {
+      "id": 136,
+      "name": "Sparse recovery",
+      "family": "TR",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "L1 minimization engine (ADMM/ISTA)",
+      "wave": 3
+    },
+    {
+      "id": 137,
+      "name": "RIP check",
+      "family": "TR",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Norm-preserving verifier",
+      "wave": 3
+    },
+    {
+      "id": 138,
+      "name": "Gr\u00f6bner basis",
+      "family": "ALGGEOM",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Polynomial reduction engine",
+      "wave": 4
+    },
+    {
+      "id": 139,
+      "name": "Variety intersection",
+      "family": "ALGGEOM",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Resultant evaluator",
+      "wave": 4
+    },
+    {
+      "id": 140,
+      "name": "Sheaf cohomology",
+      "family": "ALGGEOM",
+      "B": "B4",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Spectral sequence reduction",
+      "wave": 4
+    },
+    {
+      "id": 141,
+      "name": "Partition function",
+      "family": "PHYSMATH",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Transfer matrix engine",
+      "wave": 4
+    },
+    {
+      "id": 142,
+      "name": "OPE",
+      "family": "PHYSMATH",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1toN",
+      "existing": "SW",
+      "silicon_target": "Series expansion accumulator",
+      "wave": 4
+    },
+    {
+      "id": 143,
+      "name": "Cobordism composition",
+      "family": "PHYSMATH",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "TQFT functor evaluator",
+      "wave": 4
+    },
+    {
+      "id": 144,
+      "name": "Feynman diagrams",
+      "family": "PHYSMATH",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "1toN",
+      "existing": "SW",
+      "silicon_target": "Diagram generator + loop integrator",
+      "wave": 4
+    },
+    {
+      "id": 145,
+      "name": "ODE integration",
+      "family": "DYNSYS",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Runge-Kutta / adaptive step engine",
+      "wave": 4
+    },
+    {
+      "id": 146,
+      "name": "Lyapunov exponent",
+      "family": "DYNSYS",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Tangent map accumulator",
+      "wave": 4
+    },
+    {
+      "id": 147,
+      "name": "Poincar\u00e9 section",
+      "family": "DYNSYS",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Zero-crossing detector + state logger",
+      "wave": 4
+    },
+    {
+      "id": 148,
+      "name": "Bifurcation detection",
+      "family": "DYNSYS",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Parameter sweep + eigenvalue tracker",
+      "wave": 4
+    },
+    {
+      "id": 149,
+      "name": "Attractor characterization",
+      "family": "DYNSYS",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Box-counting dimension estimator",
+      "wave": 4
+    },
+    {
+      "id": 150,
+      "name": "Lebesgue integral",
+      "family": "MEAS",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Measure-weighted accumulator",
+      "wave": 4
+    },
+    {
+      "id": 151,
+      "name": "Radon-Nikodym",
+      "family": "MEAS",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Density ratio estimator",
+      "wave": 4
+    },
+    {
+      "id": 152,
+      "name": "Conditional expectation",
+      "family": "MEAS",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Projection onto sub-sigma-algebra",
+      "wave": 4
+    },
+    {
+      "id": 153,
+      "name": "Spectral decomposition",
+      "family": "PROB",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Operator diagonalization engine",
+      "wave": 4
+    },
+    {
+      "id": 154,
+      "name": "Functional calculus",
+      "family": "PROB",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Matrix function evaluator (exp, log, sqrt)",
+      "wave": 4
+    },
+    {
+      "id": 155,
+      "name": "QEC syndrome extract",
+      "family": "FF",
+      "B": "B1\u2013B2",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Stabilizer measurement circuit",
+      "wave": 4
+    },
+    {
+      "id": 156,
+      "name": "QEC correction",
+      "family": "FF",
+      "B": "B1\u2013B2",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "Unitary Pauli correction circuit",
+      "wave": 4
+    },
+    {
+      "id": 157,
+      "name": "Logical qubit encoding",
+      "family": "FF",
+      "B": "B1\u2013B2",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Encoding circuit (surface/Steane code)",
+      "wave": 4
+    },
+    {
+      "id": 158,
+      "name": "Black-Scholes PDE",
+      "family": "TR",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Backward PDE solver (Crank-Nicolson)",
+      "wave": 4
+    },
+    {
+      "id": 159,
+      "name": "Greeks computation",
+      "family": "TR",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "AD tape applied to pricing model",
+      "wave": 4
+    },
+    {
+      "id": 160,
+      "name": "Reaction-diffusion",
+      "family": "STOCH",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Laplacian + reaction kernel pipeline",
+      "wave": 4
+    },
+    {
+      "id": 161,
+      "name": "Sequence alignment",
+      "family": "STOCH",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "DP scoring matrix engine (tropical semiring)",
+      "wave": 4
+    },
+    {
+      "id": 162,
+      "name": "Phylogenetic tree",
+      "family": "STOCH",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "ML/Bayesian tree search engine",
+      "wave": 4
+    },
+    {
+      "id": 163,
+      "name": "FEM assembly",
+      "family": "CALC",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Element stiffness accumulator",
+      "wave": 4
+    },
+    {
+      "id": 164,
+      "name": "Multigrid restriction",
+      "family": "CALC",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Weighted downsample unit",
+      "wave": 4
+    },
+    {
+      "id": 165,
+      "name": "Multigrid prolongation",
+      "family": "CALC",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1toN",
+      "existing": "SW",
+      "silicon_target": "Interpolation upsample unit",
+      "wave": 4
+    },
+    {
+      "id": 166,
+      "name": "PDE time-step",
+      "family": "CALC",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Stencil engine + linear solver",
+      "wave": 4
+    },
+    {
+      "id": 167,
+      "name": "Spectral method eval",
+      "family": "CALC",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "FFT + ik-multiply pipeline",
+      "wave": 4
+    },
+    {
+      "id": 168,
+      "name": "Spherical harmonics",
+      "family": "TR",
+      "B": "B2\u2013B3",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "Spherical butterfly network",
+      "wave": 4
+    },
+    {
+      "id": 169,
+      "name": "Graph Fourier transform",
+      "family": "TR",
+      "B": "B2\u2013B3",
+      "C": "L0",
+      "D": "D3 graph",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "Laplacian eigendecomp + projection",
+      "wave": 4
+    },
+    {
+      "id": 170,
+      "name": "Sparse format conversion",
+      "family": "LA",
+      "B": "B1\u2013B3",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "Index reorganization unit",
+      "wave": 4
+    },
+    {
+      "id": 171,
+      "name": "Incomplete factorization",
+      "family": "LA",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Sparse triangular engine with fill control",
+      "wave": 4
+    },
+    {
+      "id": 172,
+      "name": "Fill-in reordering",
+      "family": "LA",
+      "B": "B2\u2013B3",
+      "C": "L0",
+      "D": "D3 graph",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "Permutation optimizer",
+      "wave": 4
+    },
+    {
+      "id": 173,
+      "name": "Max-flow / min-cut",
+      "family": "SR",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Push-relabel accelerator",
+      "wave": 4
+    },
+    {
+      "id": 174,
+      "name": "Graph coloring",
+      "family": "SR",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Greedy color assignment unit",
+      "wave": 4
+    },
+    {
+      "id": 175,
+      "name": "Graph partitioning",
+      "family": "SR",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Spectral bisection engine",
+      "wave": 4
+    },
+    {
+      "id": 176,
+      "name": "ADMM step",
+      "family": "OPT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Alternating proximal engine",
+      "wave": 4
+    },
+    {
+      "id": 177,
+      "name": "Interior point step",
+      "family": "OPT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "KKT system solver",
+      "wave": 4
+    },
+    {
+      "id": 178,
+      "name": "Polar code SC decode",
+      "family": "CODE",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D5 sequential",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Likelihood butterfly decoder",
+      "wave": 4
+    },
+    {
+      "id": 179,
+      "name": "LDPC BP decode",
+      "family": "CODE",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Tanner graph message engine",
+      "wave": 4
+    },
+    {
+      "id": 180,
+      "name": "ZK proof generation",
+      "family": "FF",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Commitment + polynomial eval engine",
+      "wave": 4
+    },
+    {
+      "id": 181,
+      "name": "ZK proof verification",
+      "family": "FF",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Pairing check / hash chain verifier",
+      "wave": 4
+    },
+    {
+      "id": 182,
+      "name": "MPC round",
+      "family": "FF",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Garbled circuit evaluator",
+      "wave": 4
+    },
+    {
+      "id": 183,
+      "name": "Adaptive filter (LMS)",
+      "family": "TR",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 3,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Error-feedback weight updater",
+      "wave": 4
+    },
+    {
+      "id": 184,
+      "name": "Beamforming",
+      "family": "TR",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Weighted array combiner",
+      "wave": 4
+    },
+    {
+      "id": 185,
+      "name": "OFDM mod/demod",
+      "family": "TR",
+      "B": "B2\u2013B3",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "IFFT/FFT with subcarrier mapping",
+      "wave": 4
+    },
+    {
+      "id": 186,
+      "name": "Riccati solve (LQR)",
+      "family": "OPT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Matrix Riccati iteration engine",
+      "wave": 4
+    },
+    {
+      "id": 187,
+      "name": "MPC step",
+      "family": "OPT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Horizon QP solver",
+      "wave": 4
+    },
+    {
+      "id": 188,
+      "name": "PID update",
+      "family": "DYNSYS",
+      "B": "B1\u2013B3",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 3,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "P+I+D accumulator",
+      "wave": 4
+    },
+    {
+      "id": 189,
+      "name": "KL divergence",
+      "family": "STAT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Log-ratio accumulator",
+      "wave": 4
+    },
+    {
+      "id": 190,
+      "name": "Channel capacity",
+      "family": "CODE",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Blahut-Arimoto iteration engine",
+      "wave": 4
+    },
+    {
+      "id": 191,
+      "name": "Polynomial interpolation",
+      "family": "NL",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Lagrange basis evaluator",
+      "wave": 4
+    },
+    {
+      "id": 192,
+      "name": "Spline interpolation",
+      "family": "NL",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Piecewise polynomial engine",
+      "wave": 4
+    },
+    {
+      "id": 193,
+      "name": "Pad\u00e9 approximation",
+      "family": "NL",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Rational function fitter",
+      "wave": 4
+    },
+    {
+      "id": 194,
+      "name": "Model checking",
+      "family": "FRONT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "BDD / SAT-based state explorer",
+      "wave": 4
+    },
+    {
+      "id": 195,
+      "name": "Proof search",
+      "family": "FRONT",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Resolution / superposition engine",
+      "wave": 4
+    },
+    {
+      "id": 196,
+      "name": "Fixed-point computation",
+      "family": "FRONT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Monotone iteration engine",
+      "wave": 4
+    },
+    {
+      "id": 221,
+      "name": "Dirac operator application",
+      "family": "DIFFGEO",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix (sparse)",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Spinor-field stencil engine; \u03b3-matrix multiply pipeline on bundle sections",
+      "wave": 7
+    },
+    {
+      "id": 222,
+      "name": "Dixmier trace",
+      "family": "MEAS",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Singular-trace evaluator over operator spectrum",
+      "wave": 7
+    },
+    {
+      "id": 223,
+      "name": "Cyclic cohomology",
+      "family": "TOPO",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Cyclic-complex reduction engine (Connes b, B operators)",
+      "wave": 7
+    },
+    {
+      "id": 224,
+      "name": "p-adic arithmetic",
+      "family": "NT",
+      "B": "B1\u2013B3",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Left-propagating-carry ALU; ultrametric arithmetic unit",
+      "wave": 7
+    },
+    {
+      "id": 225,
+      "name": "Hensel lifting",
+      "family": "NT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D5 sequential",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Iterative precision-doubling root refiner (p-adic Newton)",
+      "wave": 7
+    },
+    {
+      "id": 226,
+      "name": "Subobject classifier evaluation",
+      "family": "CAT",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Characteristic-morphism unit; truth-object \u03a9 resolver",
+      "wave": 7
+    },
+    {
+      "id": 227,
+      "name": "Intersection multiplicity",
+      "family": "ALGGEOM",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Tor-functor evaluator (resolution + tensor product)",
+      "wave": 7
+    },
+    {
+      "id": 228,
+      "name": "Chow ring product",
+      "family": "ALGGEOM",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Cycle-class multiplier modulo rational equivalence",
+      "wave": 7
+    },
+    {
+      "id": 229,
+      "name": "Lattice gauge sweep (HMC)",
+      "family": "PHYSMATH",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D4 embarrassing",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "SU(3) link-update engine + MD integrator (every lattice site in parallel)",
+      "wave": 7
+    },
+    {
+      "id": 230,
+      "name": "Wilson loop evaluation",
+      "family": "PHYSMATH",
+      "B": "B1\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Ordered SU(3) product accumulator + trace unit",
+      "wave": 7
+    },
+    {
+      "id": 231,
+      "name": "Fermion matrix inversion",
+      "family": "PHYSMATH",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix (sparse)",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Sparse complex CG/multigrid for lattice Dirac operator \u2014 **the lattice QCD bottleneck**",
+      "wave": 7
+    },
+    {
+      "id": 232,
+      "name": "Tropicalization",
+      "family": "SR",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Polynomial \u2192 tropical converter (valuation extractor + (min,+) recoder)",
+      "wave": 7
+    },
+    {
+      "id": 233,
+      "name": "Monodromy computation",
+      "family": "DIFFGEO",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D5 sequential",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Holonomy accumulator on fiber bundle (path-ordered transport)",
+      "wave": 7
+    },
+    {
+      "id": 234,
+      "name": "Residue computation",
+      "family": "CALC",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Pole detector + Laurent-coefficient extractor",
+      "wave": 7
+    },
+    {
+      "id": 235,
+      "name": "Analytic continuation",
+      "family": "CALC",
+      "B": "B3\u2013B4",
+      "C": "L1",
+      "D": "D5 sequential",
+      "E": 0,
+      "F": "1toN",
+      "existing": "SW",
+      "silicon_target": "Pad\u00e9 / series-continuation engine (generative)",
+      "wave": 7
+    },
+    {
+      "id": 236,
+      "name": "Steenrod square",
+      "family": "TOPO",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Cohomology-operation evaluator on Z/2 chains",
+      "wave": 7
+    },
+    {
+      "id": 237,
+      "name": "Deformation quantization",
+      "family": "PHYSMATH",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Moyal star-product multiplier (formal-series engine)",
+      "wave": 7
+    },
+    {
+      "id": 238,
+      "name": "Renormalization group step",
+      "family": "PHYSMATH",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Block-spin / coarse-graining engine (Wilson RG flow)",
+      "wave": 7
+    },
+    {
+      "id": 239,
+      "name": "Perturbative expansion",
+      "family": "PHYSMATH",
+      "B": "B2\u2013B3",
+      "C": "L1",
+      "D": "D5 sequential",
+      "E": 2,
+      "F": "1toN",
+      "existing": "SW",
+      "silicon_target": "Asymptotic-series term generator (Feynman or symbolic)",
+      "wave": 7
+    },
+    {
+      "id": 240,
+      "name": "Reed-Solomon decoding",
+      "family": "CODE",
+      "B": "B1\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Berlekamp-Massey + Chien search engine",
+      "wave": 8
+    },
+    {
+      "id": 241,
+      "name": "BCH decoding",
+      "family": "CODE",
+      "B": "B1\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Syndrome computation + error locator polynomial unit",
+      "wave": 8
+    },
+    {
+      "id": 242,
+      "name": "Reed-Muller decoding",
+      "family": "CODE",
+      "B": "B1\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Fast Hadamard transform + majority logic decoder",
+      "wave": 8
+    },
+    {
+      "id": 243,
+      "name": "BCJR (turbo) decoding",
+      "family": "CODE",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Forward-backward trellis with extrinsic information exchange",
+      "wave": 8
+    },
+    {
+      "id": 244,
+      "name": "Fountain (LT/Raptor) decoding",
+      "family": "CODE",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Belief propagation on rateless code graph",
+      "wave": 8
+    },
+    {
+      "id": 245,
+      "name": "Discrete Gaussian sampling (lattice crypto)",
+      "family": "FF",
+      "B": "B2\u2013B3",
+      "C": "L1",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1toN",
+      "existing": "SW",
+      "silicon_target": "Rejection sampler over discrete Gaussian \u2014 Kyber/Dilithium signature core (distinct from #17 LLL which reduces the basis)",
+      "wave": 8
+    },
+    {
+      "id": 246,
+      "name": "Isogeny step (V\u00e9lu)",
+      "family": "FF",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "V\u00e9lu formula evaluator over isogeny graph (CSIDH/SIDH)",
+      "wave": 8
+    },
+    {
+      "id": 247,
+      "name": "ZK-friendly hash (Poseidon/MiMC)",
+      "family": "FF",
+      "B": "B1\u2013B3",
+      "C": "L2max",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Sponge construction over prime-field S-boxes \u2014 every zkSNARK gadget (distinct from #71 pairing)",
+      "wave": 8
+    },
+    {
+      "id": 248,
+      "name": "Shamir secret reconstruction",
+      "family": "FF",
+      "B": "B1\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Lagrange interpolation over GF(p)",
+      "wave": 8
+    },
+    {
+      "id": 249,
+      "name": "Threshold signature partial",
+      "family": "FF",
+      "B": "B2\u2013B3",
+      "C": "L1",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1toN",
+      "existing": "SW",
+      "silicon_target": "Share generator with verifiable randomness",
+      "wave": 8
+    },
+    {
+      "id": 250,
+      "name": "Verifiable delay function (VDF)",
+      "family": "FF",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D5 sequential",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Iterated squaring in class group (intentionally serial)",
+      "wave": 8
+    },
+    {
+      "id": 251,
+      "name": "Bootstrap resampling",
+      "family": "STAT",
+      "B": "B2\u2013B3",
+      "C": "L1",
+      "D": "D4 embarrassing",
+      "E": 2,
+      "F": "1toN",
+      "existing": "SW",
+      "silicon_target": "Resample-with-replacement + statistic accumulator",
+      "wave": 8
+    },
+    {
+      "id": 252,
+      "name": "Permutation test",
+      "family": "STAT",
+      "B": "B2\u2013B3",
+      "C": "L1",
+      "D": "D4 embarrassing",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Label shuffler + null distribution accumulator",
+      "wave": 8
+    },
+    {
+      "id": 253,
+      "name": "Robust M-estimator",
+      "family": "STAT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Iteratively reweighted least squares with influence function (Huber/Tukey)",
+      "wave": 8
+    },
+    {
+      "id": 254,
+      "name": "Quantile regression",
+      "family": "STAT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Pinball loss minimizer (LP-based)",
+      "wave": 8
+    },
+    {
+      "id": 255,
+      "name": "RANSAC",
+      "family": "STAT",
+      "B": "B2\u2013B3",
+      "C": "L1",
+      "D": "D4 embarrassing",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Random subset sampler + consensus counter",
+      "wave": 8
+    },
+    {
+      "id": 256,
+      "name": "Cutting plane (Gomory/Benders)",
+      "family": "OPT",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Cut generator + LP re-solver",
+      "wave": 8
+    },
+    {
+      "id": 257,
+      "name": "Column generation",
+      "family": "OPT",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 2,
+      "F": "1toN",
+      "existing": "SW",
+      "silicon_target": "Pricing subproblem solver + master LP updater",
+      "wave": 8
+    },
+    {
+      "id": 258,
+      "name": "Simulated annealing",
+      "family": "OPT",
+      "B": "B2\u2013B3",
+      "C": "L1",
+      "D": "D5 sequential",
+      "E": 3,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Random move + Metropolis criterion + cooling schedule",
+      "wave": 8
+    },
+    {
+      "id": 259,
+      "name": "Tabu search",
+      "family": "OPT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D5 sequential",
+      "E": 3,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Move evaluator + tabu list memory",
+      "wave": 8
+    },
+    {
+      "id": 260,
+      "name": "Lagrangian relaxation",
+      "family": "OPT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Dual update + subgradient combine",
+      "wave": 8
+    },
+    {
+      "id": 261,
+      "name": "Quasi-Newton (BFGS/L-BFGS)",
+      "family": "OPT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Rank-2 Hessian approximation updater",
+      "wave": 8
+    },
+    {
+      "id": 262,
+      "name": "Hungarian assignment",
+      "family": "OPT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Augmenting path / dual variable engine",
+      "wave": 8
+    },
+    {
+      "id": 263,
+      "name": "AKS primality (deterministic)",
+      "family": "NT",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Polynomial congruence checker over Z[x]/(x^r-1, n)",
+      "wave": 8
+    },
+    {
+      "id": 264,
+      "name": "Baby-step giant-step (DLOG)",
+      "family": "NT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Hash table + pre/post compute engine",
+      "wave": 8
+    },
+    {
+      "id": 265,
+      "name": "Pollard rho",
+      "family": "NT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D5 sequential",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Cycle detection on iterated function",
+      "wave": 8
+    },
+    {
+      "id": 266,
+      "name": "Index calculus",
+      "family": "NT",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Smooth relation collector + linear algebra over Z/p",
+      "wave": 8
+    },
+    {
+      "id": 267,
+      "name": "Lucas-Lehmer (Mersenne)",
+      "family": "NT",
+      "B": "B1\u2013B3",
+      "C": "L2",
+      "D": "D5 sequential",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Iterated squaring mod 2^p \u2212 1 with FFT-based multiply",
+      "wave": 8
+    },
+    {
+      "id": 268,
+      "name": "Burnside enumeration",
+      "family": "COMB",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D0 scalar",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Group orbit counter: |G|\u207b\u00b9 \u03a3 |Fix(g)|",
+      "wave": 8
+    },
+    {
+      "id": 269,
+      "name": "P\u00f3lya enumeration",
+      "family": "COMB",
+      "B": "B3\u2013B4",
+      "C": "L2",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Cycle index polynomial evaluator",
+      "wave": 8
+    },
+    {
+      "id": 270,
+      "name": "Permanent (Ryser)",
+      "family": "COMB",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Subset-sum permanent engine (#P-hard; boson sampling core)",
+      "wave": 8
+    },
+    {
+      "id": 271,
+      "name": "RSK correspondence",
+      "family": "COMB",
+      "B": "B2\u2013B3",
+      "C": "L0",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "Insertion/bumping engine \u2014 bijection between permutations and Young tableau pairs",
+      "wave": 8
+    },
+    {
+      "id": 272,
+      "name": "Discontinuous Galerkin",
+      "family": "CALC",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Element-local basis + numerical flux engine",
+      "wave": 8
+    },
+    {
+      "id": 273,
+      "name": "Boundary element method",
+      "family": "CALC",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Surface integral kernel evaluator (dense + hierarchical)",
+      "wave": 8
+    },
+    {
+      "id": 274,
+      "name": "Lattice Boltzmann step",
+      "family": "CALC",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Streaming + collision (D2Q9/D3Q19) \u2014 natural systolic fit",
+      "wave": 8
+    },
+    {
+      "id": 275,
+      "name": "Smoothed particle hydrodynamics",
+      "family": "CALC",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Neighbor search + kernel-weighted accumulator",
+      "wave": 8
+    },
+    {
+      "id": 276,
+      "name": "Immersed boundary method",
+      "family": "CALC",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 2,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Lagrangian-Eulerian coupling with delta-function spreading",
+      "wave": 8
+    },
+    {
+      "id": 277,
+      "name": "Wavelet packet decomposition",
+      "family": "TR",
+      "B": "B1\u2013B3",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "Tree-structured QMF filter bank",
+      "wave": 8
+    },
+    {
+      "id": 278,
+      "name": "Chirplet transform",
+      "family": "TR",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D2 matrix",
+      "E": 0,
+      "F": "NtoN",
+      "existing": "SW",
+      "silicon_target": "Time-frequency-chirp atom matcher",
+      "wave": 8
+    },
+    {
+      "id": 279,
+      "name": "Prolate spheroidal (Slepian) transform",
+      "family": "TR",
+      "B": "B3\u2013B4",
+      "C": "L0",
+      "D": "D1 vector",
+      "E": 0,
+      "F": "1to1",
+      "existing": "SW",
+      "silicon_target": "Bandlimited basis projection engine",
+      "wave": 8
+    },
+    {
+      "id": 280,
+      "name": "Stable matching (Gale-Shapley)",
+      "family": "OPT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Proposal-rejection ledger",
+      "wave": 8
+    },
+    {
+      "id": 281,
+      "name": "Auction algorithm",
+      "family": "OPT",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Distributed bid-update for assignment",
+      "wave": 8
+    },
+    {
+      "id": 282,
+      "name": "Bipartite matching (Hopcroft-Karp)",
+      "family": "MEM",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "BFS+DFS layered augmenting path engine",
+      "wave": 8
+    },
+    {
+      "id": 283,
+      "name": "Stoer-Wagner min cut",
+      "family": "MEM",
+      "B": "B2\u2013B3",
+      "C": "L2",
+      "D": "D3 graph",
+      "E": 2,
+      "F": "Nto1",
+      "existing": "SW",
+      "silicon_target": "Maximum adjacency ordering + cut-of-the-phase engine",
+      "wave": 8
+    }
+  ],
+  "edges": {
+    "composition": [
+      {
+        "source": 2,
+        "target": 1,
+        "label": "XOR+AND \u2192 adder",
+        "wave": "v1"
+      },
+      {
+        "source": 1,
+        "target": 4,
+        "label": "mul+add \u2192 FMA",
+        "wave": "v1"
+      },
+      {
+        "source": 4,
+        "target": 18,
+        "label": "FMA grid \u2192 matmul",
+        "wave": "v1"
+      },
+      {
+        "source": 21,
+        "target": 18,
+        "label": "accumulation in matmul",
+        "wave": "v1"
+      },
+      {
+        "source": 18,
+        "target": 20,
+        "label": "QK^T and V projection",
+        "wave": "v1"
+      },
+      {
+        "source": 34,
+        "target": 20,
+        "label": "softmax in attention",
+        "wave": "v1"
+      },
+      {
+        "source": 4,
+        "target": 23,
+        "label": "butterfly = FMA + twiddle",
+        "wave": "v1"
+      },
+      {
+        "source": 40,
+        "target": 23,
+        "label": "index permutation in FFT",
+        "wave": "v1"
+      },
+      {
+        "source": 1,
+        "target": 12,
+        "label": "integer arith mod q \u2192 NTT",
+        "wave": "v1"
+      },
+      {
+        "source": 23,
+        "target": 24,
+        "label": "conv theorem: FFT+mul+iFFT",
+        "wave": "v1"
+      },
+      {
+        "source": 12,
+        "target": 14,
+        "label": "NTT in FHE bootstrap",
+        "wave": "v1"
+      },
+      {
+        "source": 13,
+        "target": 14,
+        "label": "poly ring in FHE bootstrap",
+        "wave": "v1"
+      },
+      {
+        "source": 27,
+        "target": 39,
+        "label": "AD tape in MCMC",
+        "wave": "v1"
+      },
+      {
+        "source": 37,
+        "target": 39,
+        "label": "RNG in MCMC",
+        "wave": "v1"
+      },
+      {
+        "source": 38,
+        "target": 39,
+        "label": "accept/reject in MCMC",
+        "wave": "v1"
+      },
+      {
+        "source": 30,
+        "target": 32,
+        "label": "logsumexp in message passing",
+        "wave": "v1"
+      },
+      {
+        "source": 21,
+        "target": 32,
+        "label": "marginalize in message passing",
+        "wave": "v1"
+      },
+      {
+        "source": 29,
+        "target": 31,
+        "label": "tropical DP in Viterbi",
+        "wave": "v1"
+      },
+      {
+        "source": 22,
+        "target": 31,
+        "label": "scan in Viterbi",
+        "wave": "v1"
+      },
+      {
+        "source": 15,
+        "target": 71,
+        "label": "field arith in pairing (Miller loop)",
+        "wave": "v1"
+      },
+      {
+        "source": 16,
+        "target": 71,
+        "label": "EC ops in pairing",
+        "wave": "v1"
+      },
+      {
+        "source": 11,
+        "target": 67,
+        "label": "GF arith in syndrome compute",
+        "wave": "v1"
+      },
+      {
+        "source": 32,
+        "target": 67,
+        "label": "BP in LDPC decode",
+        "wave": "v1"
+      },
+      {
+        "source": 49,
+        "target": 72,
+        "label": "Shor via quantum gates solves DLP",
+        "wave": "v1"
+      },
+      {
+        "source": 23,
+        "target": 61,
+        "label": "filtered backprojection uses FFT",
+        "wave": "v1"
+      },
+      {
+        "source": 18,
+        "target": 48,
+        "label": "matmul as tensor contraction case",
+        "wave": "v1"
+      },
+      {
+        "source": 5,
+        "target": 73,
+        "label": "lattice meet/join is implemented as comparison + selection",
+        "wave": "v2"
+      },
+      {
+        "source": 1,
+        "target": 74,
+        "label": "quasigroup ops decompose into integer arith on Latin-square encoding",
+        "wave": "v2"
+      },
+      {
+        "source": 15,
+        "target": 75,
+        "label": "CRT reconstruction uses modular exponentiation for inverses",
+        "wave": "v2"
+      },
+      {
+        "source": 4,
+        "target": 76,
+        "label": "Givens / Householder rotations in QR/LU/SVD are FMA-based",
+        "wave": "v2"
+      },
+      {
+        "source": 18,
+        "target": 76,
+        "label": "matrix decomposition operates on a dense matrix product structure",
+        "wave": "v2"
+      },
+      {
+        "source": 76,
+        "target": 77,
+        "label": "QR algorithm for eigendecomposition iterates QR factorization",
+        "wave": "v2"
+      },
+      {
+        "source": 18,
+        "target": 77,
+        "label": "the iterative kernel of every eigensolver is dense matmul",
+        "wave": "v2"
+      },
+      {
+        "source": 19,
+        "target": 78,
+        "label": "Krylov subspace generation iterates sparse matrix-vector product",
+        "wave": "v2"
+      },
+      {
+        "source": 21,
+        "target": 78,
+        "label": "Gram-Schmidt orthogonalization at each step uses reduction (inner products)",
+        "wave": "v2"
+      },
+      {
+        "source": 4,
+        "target": 79,
+        "label": "DCT butterfly is a real-valued FMA tree",
+        "wave": "v2"
+      },
+      {
+        "source": 23,
+        "target": 80,
+        "label": "Hilbert transform = FFT \u2192 phase shift \u2192 iFFT",
+        "wave": "v2"
+      },
+      {
+        "source": 23,
+        "target": 81,
+        "label": "Laplace/Z-transform reduces to FFT after suitable substitution",
+        "wave": "v2"
+      },
+      {
+        "source": 29,
+        "target": 82,
+        "label": "Kleene star is the (min,+) tropical matrix exponentiation",
+        "wave": "v2"
+      },
+      {
+        "source": 18,
+        "target": 82,
+        "label": "transitive closure iterates Boolean / tropical matmul",
+        "wave": "v2"
+      },
+      {
+        "source": 4,
+        "target": 83,
+        "label": "special functions (Bessel, erf, gamma) are evaluated via CORDIC or polynomial FMA",
+        "wave": "v2"
+      },
+      {
+        "source": 21,
+        "target": 83,
+        "label": "polynomial summation uses reduction",
+        "wave": "v2"
+      },
+      {
+        "source": 76,
+        "target": 84,
+        "label": "persistent homology reduces a boundary matrix using Smith normal form",
+        "wave": "v2"
+      },
+      {
+        "source": 43,
+        "target": 85,
+        "label": "graph isomorphism reduces to canonical-form join over labelled subgraphs",
+        "wave": "v2"
+      },
+      {
+        "source": 44,
+        "target": 85,
+        "label": "color-refinement isomorphism is constraint propagation on vertex partitions",
+        "wave": "v2"
+      },
+      {
+        "source": 10,
+        "target": 86,
+        "label": "exterior product is the antisymmetrized geometric algebra product",
+        "wave": "v2"
+      },
+      {
+        "source": 43,
+        "target": 87,
+        "label": "simplicial complex construction joins point neighborhoods into faces",
+        "wave": "v2"
+      },
+      {
+        "source": 87,
+        "target": 88,
+        "label": "filtration is a parameterized cascade of simplicial complexes",
+        "wave": "v2"
+      },
+      {
+        "source": 45,
+        "target": 89,
+        "label": "functor application unifies object/morphism mappings",
+        "wave": "v2"
+      },
+      {
+        "source": 89,
+        "target": 90,
+        "label": "natural transformation is a family of morphisms commuting with two functors",
+        "wave": "v2"
+      },
+      {
+        "source": 89,
+        "target": 91,
+        "label": "adjunction resolution is the natural bijection between functor hom-sets",
+        "wave": "v2"
+      },
+      {
+        "source": 46,
+        "target": 92,
+        "label": "comultiplication is the categorical dual of FHRR bind (which IS multiplication)",
+        "wave": "v2"
+      },
+      {
+        "source": 46,
+        "target": 93,
+        "label": "Hopf antipode is the inverse element under FHRR-style binding",
+        "wave": "v2"
+      },
+      {
+        "source": 1,
+        "target": 94,
+        "label": "finite-difference differentiation = integer subtract + divide",
+        "wave": "v2"
+      },
+      {
+        "source": 4,
+        "target": 94,
+        "label": "AD-tape differentiation accumulates FMA in reverse",
+        "wave": "v2"
+      },
+      {
+        "source": 4,
+        "target": 95,
+        "label": "quadrature is a weighted FMA over sample points",
+        "wave": "v2"
+      },
+      {
+        "source": 21,
+        "target": 95,
+        "label": "the accumulator phase of integration is reduction",
+        "wave": "v2"
+      },
+      {
+        "source": 95,
+        "target": 96,
+        "label": "It\u00f4 integral is integration over a Brownian path",
+        "wave": "v2"
+      },
+      {
+        "source": 37,
+        "target": 96,
+        "label": "It\u00f4 integration draws Brownian increments from RNG",
+        "wave": "v2"
+      },
+      {
+        "source": 94,
+        "target": 97,
+        "label": "variational derivative is functional differentiation",
+        "wave": "v2"
+      },
+      {
+        "source": 95,
+        "target": 98,
+        "label": "MLE/MAP integrates the log-likelihood over data",
+        "wave": "v2"
+      },
+      {
+        "source": 33,
+        "target": 98,
+        "label": "MAP optimization uses activation-style soft constraints",
+        "wave": "v2"
+      },
+      {
+        "source": 18,
+        "target": 99,
+        "label": "Bayesian posterior update is a matmul of prior \u00d7 likelihood",
+        "wave": "v2"
+      },
+      {
+        "source": 34,
+        "target": 99,
+        "label": "the posterior is normalized via softmax-style log-sum-exp",
+        "wave": "v2"
+      },
+      {
+        "source": 77,
+        "target": 100,
+        "label": "PCA / ICA is eigendecomposition of the data covariance matrix",
+        "wave": "v2"
+      },
+      {
+        "source": 95,
+        "target": 101,
+        "label": "kernel density estimation integrates a kernel over samples",
+        "wave": "v2"
+      },
+      {
+        "source": 76,
+        "target": 102,
+        "label": "natural gradient inverts the Fisher information matrix",
+        "wave": "v2"
+      },
+      {
+        "source": 59,
+        "target": 103,
+        "label": "generating-function coefficient extraction is symbolic term rewriting",
+        "wave": "v2"
+      },
+      {
+        "source": 62,
+        "target": 104,
+        "label": "M\u00f6bius inversion is a poset-shaped M\u00f6bius/zeta transform",
+        "wave": "v2"
+      },
+      {
+        "source": 44,
+        "target": 105,
+        "label": "matroid independence oracle uses constraint propagation on rank",
+        "wave": "v2"
+      },
+      {
+        "source": 59,
+        "target": 106,
+        "label": "beta reduction is term rewriting with the substitution rule",
+        "wave": "v2"
+      },
+      {
+        "source": 45,
+        "target": 107,
+        "label": "type inference unifies type variables across an expression tree",
+        "wave": "v2"
+      },
+      {
+        "source": 44,
+        "target": 107,
+        "label": "Hindley-Milner inference propagates type constraints",
+        "wave": "v2"
+      },
+      {
+        "source": 37,
+        "target": 108,
+        "label": "Brownian increment draws a Gaussian sample from RNG",
+        "wave": "v2"
+      },
+      {
+        "source": 18,
+        "target": 109,
+        "label": "Kalman predict-update is a sequence of matrix multiplications",
+        "wave": "v2"
+      },
+      {
+        "source": 76,
+        "target": 109,
+        "label": "the covariance update step uses Cholesky / matrix decomposition",
+        "wave": "v2"
+      },
+      {
+        "source": 38,
+        "target": 110,
+        "label": "particle filter resamples particles via Monte Carlo accept/reject",
+        "wave": "v2"
+      },
+      {
+        "source": 37,
+        "target": 110,
+        "label": "particle weights are perturbed by RNG draws",
+        "wave": "v2"
+      },
+      {
+        "source": 59,
+        "target": 111,
+        "label": "knot invariants (Jones, HOMFLY) compute via skein-relation rewriting",
+        "wave": "v2"
+      },
+      {
+        "source": 76,
+        "target": 112,
+        "label": "homology computation reduces a boundary matrix via Smith normal form",
+        "wave": "v2"
+      },
+      {
+        "source": 18,
+        "target": 113,
+        "label": "Clebsch-Gordan decomposition is a structured tensor product",
+        "wave": "v2"
+      },
+      {
+        "source": 63,
+        "target": 113,
+        "label": "C-G coefficients live in the non-abelian group Fourier framework",
+        "wave": "v2"
+      },
+      {
+        "source": 21,
+        "target": 114,
+        "label": "character of a representation is the trace (a reduction)",
+        "wave": "v2"
+      },
+      {
+        "source": 10,
+        "target": 115,
+        "label": "full Clifford product extends geometric algebra to all multivector grades",
+        "wave": "v2"
+      },
+      {
+        "source": 58,
+        "target": 116,
+        "label": "branch and bound is SAT-style search with cost-pruning",
+        "wave": "v2"
+      },
+      {
+        "source": 37,
+        "target": 117,
+        "label": "evolutionary selection draws from RNG for crossover and mutation",
+        "wave": "v2"
+      },
+      {
+        "source": 6,
+        "target": 118,
+        "label": "convex hull algorithms (Graham scan, Andrew monotone chain) start with sort",
+        "wave": "v2"
+      },
+      {
+        "source": 118,
+        "target": 119,
+        "label": "Voronoi/Delaunay can be lifted from convex hull in one higher dimension",
+        "wave": "v2"
+      },
+      {
+        "source": 119,
+        "target": 120,
+        "label": "point location queries traverse a Voronoi or trapezoidal subdivision",
+        "wave": "v2"
+      },
+      {
+        "source": 5,
+        "target": 121,
+        "label": "Boolean CSG resolves edge intersections via comparison + segmentation",
+        "wave": "v2"
+      },
+      {
+        "source": 70,
+        "target": 122,
+        "label": "Nash equilibrium computation reduces to LP / Lemke-Howson pivots",
+        "wave": "v2"
+      },
+      {
+        "source": 5,
+        "target": 123,
+        "label": "minimax / alpha-beta is comparison-driven game-tree pruning",
+        "wave": "v2"
+      },
+      {
+        "source": 122,
+        "target": 124,
+        "label": "VCG-style mechanism design solves a Nash subproblem at each node",
+        "wave": "v2"
+      },
+      {
+        "source": 15,
+        "target": 125,
+        "label": "Miller-Rabin primality test uses modular exponentiation",
+        "wave": "v2"
+      },
+      {
+        "source": 15,
+        "target": 126,
+        "label": "modular exponentiation underlies sieve and Pollard factoring",
+        "wave": "v2"
+      },
+      {
+        "source": 1,
+        "target": 127,
+        "label": "Euclidean GCD is a chain of integer divisions",
+        "wave": "v2"
+      },
+      {
+        "source": 127,
+        "target": 128,
+        "label": "continued fractions are produced by iterating GCD",
+        "wave": "v2"
+      },
+      {
+        "source": 4,
+        "target": 129,
+        "label": "parallel transport is FMA over Christoffel symbols along a path",
+        "wave": "v2"
+      },
+      {
+        "source": 94,
+        "target": 129,
+        "label": "the connection coefficients are partial derivatives of the metric",
+        "wave": "v2"
+      },
+      {
+        "source": 145,
+        "target": 130,
+        "label": "geodesic equation is a second-order ODE on the manifold",
+        "wave": "v2"
+      },
+      {
+        "source": 129,
+        "target": 130,
+        "label": "geodesic = parallel transport of velocity along itself",
+        "wave": "v2"
+      },
+      {
+        "source": 94,
+        "target": 131,
+        "label": "curvature tensor is built from second derivatives of the metric",
+        "wave": "v2"
+      },
+      {
+        "source": 130,
+        "target": 132,
+        "label": "exponential map shoots a geodesic from a tangent vector",
+        "wave": "v2"
+      },
+      {
+        "source": 42,
+        "target": 133,
+        "label": "parsing runs a finite-automaton step at each input symbol",
+        "wave": "v2"
+      },
+      {
+        "source": 44,
+        "target": 134,
+        "label": "NFA\u2192DFA subset construction is constraint propagation over reachable states",
+        "wave": "v2"
+      },
+      {
+        "source": 42,
+        "target": 135,
+        "label": "language reversal swaps the automaton's source and accept states",
+        "wave": "v2"
+      },
+      {
+        "source": 65,
+        "target": 136,
+        "label": "sparse recovery (BPDN) uses the proximal operator on the L1 norm",
+        "wave": "v2"
+      },
+      {
+        "source": 18,
+        "target": 137,
+        "label": "RIP check verifies a norm-preservation property of a measurement matrix",
+        "wave": "v2"
+      },
+      {
+        "source": 59,
+        "target": 138,
+        "label": "Buchberger / F4 reduction is symbolic term rewriting on polynomials",
+        "wave": "v2"
+      },
+      {
+        "source": 138,
+        "target": 139,
+        "label": "variety intersection eliminates variables via Gr\u00f6bner reduction",
+        "wave": "v2"
+      },
+      {
+        "source": 112,
+        "target": 140,
+        "label": "sheaf cohomology computes homology of the \u010cech complex",
+        "wave": "v2"
+      },
+      {
+        "source": 21,
+        "target": 141,
+        "label": "the partition function Z = \u03a3 exp(-\u03b2H) is a reduction over states",
+        "wave": "v2"
+      },
+      {
+        "source": 59,
+        "target": 142,
+        "label": "the operator product expansion is symbolic series manipulation",
+        "wave": "v2"
+      },
+      {
+        "source": 89,
+        "target": 143,
+        "label": "TQFT cobordism composition is functor application from Bord to Vect",
+        "wave": "v2"
+      },
+      {
+        "source": 59,
+        "target": 144,
+        "label": "Feynman diagram generation is symbolic rewriting of interaction vertices",
+        "wave": "v2"
+      },
+      {
+        "source": 95,
+        "target": 144,
+        "label": "each diagram contributes a loop integral",
+        "wave": "v2"
+      },
+      {
+        "source": 4,
+        "target": 145,
+        "label": "Runge-Kutta / Verlet integration is a structured FMA stencil",
+        "wave": "v2"
+      },
+      {
+        "source": 94,
+        "target": 145,
+        "label": "ODE integration computes derivatives at each step",
+        "wave": "v2"
+      },
+      {
+        "source": 145,
+        "target": 146,
+        "label": "Lyapunov exponent integrates a tangent ODE alongside the main flow",
+        "wave": "v2"
+      },
+      {
+        "source": 145,
+        "target": 147,
+        "label": "Poincar\u00e9 section samples crossings of a flow",
+        "wave": "v2"
+      },
+      {
+        "source": 145,
+        "target": 148,
+        "label": "bifurcation detection sweeps a parameter while integrating the flow",
+        "wave": "v2"
+      },
+      {
+        "source": 77,
+        "target": 148,
+        "label": "linear stability analysis uses eigendecomposition of the Jacobian",
+        "wave": "v2"
+      },
+      {
+        "source": 145,
+        "target": 149,
+        "label": "attractor characterization analyzes the long-time orbit of an integrator",
+        "wave": "v2"
+      },
+      {
+        "source": 95,
+        "target": 150,
+        "label": "Lebesgue integration generalizes the Riemann sum reduction",
+        "wave": "v2"
+      },
+      {
+        "source": 150,
+        "target": 151,
+        "label": "Radon-Nikodym derivative is the density of one Lebesgue measure w.r.t. another",
+        "wave": "v2"
+      },
+      {
+        "source": 150,
+        "target": 152,
+        "label": "conditional expectation is integration restricted to a sub-\u03c3-algebra",
+        "wave": "v2"
+      },
+      {
+        "source": 77,
+        "target": 153,
+        "label": "spectral decomposition of an operator is its eigendecomposition",
+        "wave": "v2"
+      },
+      {
+        "source": 153,
+        "target": 154,
+        "label": "functional calculus applies a function to operator eigenvalues",
+        "wave": "v2"
+      },
+      {
+        "source": 11,
+        "target": 155,
+        "label": "QEC syndrome extraction multiplies stabilizer generators in GF(2)",
+        "wave": "v2"
+      },
+      {
+        "source": 11,
+        "target": 156,
+        "label": "Pauli correction is a GF(2)-linear operation",
+        "wave": "v2"
+      },
+      {
+        "source": 155,
+        "target": 157,
+        "label": "logical qubit encoding precomputes the syndrome map",
+        "wave": "v2"
+      },
+      {
+        "source": 94,
+        "target": 158,
+        "label": "Black-Scholes is a parabolic PDE in price and time",
+        "wave": "v2"
+      },
+      {
+        "source": 95,
+        "target": 158,
+        "label": "the BS solver integrates over time steps",
+        "wave": "v2"
+      },
+      {
+        "source": 94,
+        "target": 159,
+        "label": "the Greeks are partial derivatives of the option price",
+        "wave": "v2"
+      },
+      {
+        "source": 94,
+        "target": 160,
+        "label": "reaction-diffusion is a PDE with diffusion (Laplacian) and reaction terms",
+        "wave": "v2"
+      },
+      {
+        "source": 29,
+        "target": 161,
+        "label": "sequence alignment dynamic programming runs in the tropical (max,+) semiring",
+        "wave": "v2"
+      },
+      {
+        "source": 161,
+        "target": 162,
+        "label": "phylogenetic tree search optimizes alignment across taxa",
+        "wave": "v2"
+      },
+      {
+        "source": 38,
+        "target": 162,
+        "label": "Bayesian phylogenetics samples trees via Monte Carlo",
+        "wave": "v2"
+      },
+      {
+        "source": 18,
+        "target": 163,
+        "label": "FEM stiffness assembly is a sparse matmul over element basis functions",
+        "wave": "v2"
+      },
+      {
+        "source": 95,
+        "target": 163,
+        "label": "element integrals use quadrature",
+        "wave": "v2"
+      },
+      {
+        "source": 21,
+        "target": 164,
+        "label": "multigrid restriction is a weighted reduction onto the coarse grid",
+        "wave": "v2"
+      },
+      {
+        "source": 4,
+        "target": 165,
+        "label": "multigrid prolongation is a weighted FMA interpolation onto the fine grid",
+        "wave": "v2"
+      },
+      {
+        "source": 94,
+        "target": 166,
+        "label": "the right-hand side of a PDE step computes spatial derivatives",
+        "wave": "v2"
+      },
+      {
+        "source": 18,
+        "target": 166,
+        "label": "implicit PDE steps solve a linear system (matmul-based)",
+        "wave": "v2"
+      },
+      {
+        "source": 23,
+        "target": 167,
+        "label": "spectral methods diagonalize a PDE in Fourier space",
+        "wave": "v2"
+      },
+      {
+        "source": 63,
+        "target": 168,
+        "label": "spherical harmonics is the Fourier transform on SO(3)",
+        "wave": "v2"
+      },
+      {
+        "source": 77,
+        "target": 169,
+        "label": "graph Fourier basis = eigenvectors of the graph Laplacian",
+        "wave": "v2"
+      },
+      {
+        "source": 40,
+        "target": 170,
+        "label": "sparse format conversion is structured scatter/gather",
+        "wave": "v2"
+      },
+      {
+        "source": 76,
+        "target": 171,
+        "label": "incomplete factorization truncates a sparse LU",
+        "wave": "v2"
+      },
+      {
+        "source": 6,
+        "target": 172,
+        "label": "fill-in reordering sorts vertices by a heuristic minimum-degree score",
+        "wave": "v2"
+      },
+      {
+        "source": 29,
+        "target": 173,
+        "label": "max-flow / min-cut runs in the tropical (min,+) semiring",
+        "wave": "v2"
+      },
+      {
+        "source": 44,
+        "target": 174,
+        "label": "graph coloring is constraint propagation over color domains",
+        "wave": "v2"
+      },
+      {
+        "source": 169,
+        "target": 175,
+        "label": "spectral graph partitioning uses the Fiedler vector from the graph Fourier basis",
+        "wave": "v2"
+      },
+      {
+        "source": 65,
+        "target": 176,
+        "label": "ADMM iterates the proximal operator on each subproblem",
+        "wave": "v2"
+      },
+      {
+        "source": 76,
+        "target": 177,
+        "label": "interior point methods solve KKT systems via matrix factorization",
+        "wave": "v2"
+      },
+      {
+        "source": 67,
+        "target": 178,
+        "label": "polar successive-cancellation decoding inherits from generic syndrome decoding",
+        "wave": "v2"
+      },
+      {
+        "source": 32,
+        "target": 179,
+        "label": "LDPC belief propagation is sum-product on a Tanner graph",
+        "wave": "v2"
+      },
+      {
+        "source": 11,
+        "target": 180,
+        "label": "ZK proofs operate over polynomial commitments in finite fields",
+        "wave": "v2"
+      },
+      {
+        "source": 16,
+        "target": 180,
+        "label": "Groth16-style ZK proofs use elliptic-curve operations",
+        "wave": "v2"
+      },
+      {
+        "source": 36,
+        "target": 180,
+        "label": "Fiat-Shamir randomness comes from a hash",
+        "wave": "v2"
+      },
+      {
+        "source": 16,
+        "target": 181,
+        "label": "ZK verification uses elliptic-curve scalar multiplications",
+        "wave": "v2"
+      },
+      {
+        "source": 71,
+        "target": 181,
+        "label": "Groth16 verification uses bilinear pairing",
+        "wave": "v2"
+      },
+      {
+        "source": 11,
+        "target": 182,
+        "label": "MPC rounds compute over secret-shared finite-field elements",
+        "wave": "v2"
+      },
+      {
+        "source": 36,
+        "target": 182,
+        "label": "MPC round commitments use a hash",
+        "wave": "v2"
+      },
+      {
+        "source": 94,
+        "target": 183,
+        "label": "LMS adaptive filter step is a gradient update on filter weights",
+        "wave": "v2"
+      },
+      {
+        "source": 18,
+        "target": 183,
+        "label": "the filter output is a vector inner product (matmul row)",
+        "wave": "v2"
+      },
+      {
+        "source": 18,
+        "target": 184,
+        "label": "beamforming is a weighted matmul of array signals",
+        "wave": "v2"
+      },
+      {
+        "source": 23,
+        "target": 184,
+        "label": "frequency-domain beamforming uses FFT",
+        "wave": "v2"
+      },
+      {
+        "source": 23,
+        "target": 185,
+        "label": "OFDM modulation is an IFFT; demodulation is an FFT",
+        "wave": "v2"
+      },
+      {
+        "source": 76,
+        "target": 186,
+        "label": "Riccati equation solving uses Schur or matrix factorization",
+        "wave": "v2"
+      },
+      {
+        "source": 18,
+        "target": 186,
+        "label": "the Riccati operator is a matmul-heavy update",
+        "wave": "v2"
+      },
+      {
+        "source": 65,
+        "target": 187,
+        "label": "MPC step solves a horizon QP via proximal updates",
+        "wave": "v2"
+      },
+      {
+        "source": 76,
+        "target": 187,
+        "label": "the QP solver factorizes a Hessian-like matrix",
+        "wave": "v2"
+      },
+      {
+        "source": 4,
+        "target": 188,
+        "label": "PID = proportional + integral + derivative, all FMA",
+        "wave": "v2"
+      },
+      {
+        "source": 21,
+        "target": 189,
+        "label": "KL divergence sums log-ratios (a reduction)",
+        "wave": "v2"
+      },
+      {
+        "source": 34,
+        "target": 189,
+        "label": "the log-ratio comes from a softmax-style log",
+        "wave": "v2"
+      },
+      {
+        "source": 21,
+        "target": 190,
+        "label": "Blahut-Arimoto channel-capacity iteration is a normalization + reduction",
+        "wave": "v2"
+      },
+      {
+        "source": 4,
+        "target": 191,
+        "label": "polynomial interpolation evaluates Lagrange basis via FMA",
+        "wave": "v2"
+      },
+      {
+        "source": 4,
+        "target": 192,
+        "label": "spline interpolation is piecewise polynomial FMA",
+        "wave": "v2"
+      },
+      {
+        "source": 55,
+        "target": 192,
+        "label": "B-spline / NURBS evaluation is the basis for spline interpolation",
+        "wave": "v2"
+      },
+      {
+        "source": 76,
+        "target": 193,
+        "label": "Pad\u00e9 approximation solves a linear system for rational coefficients",
+        "wave": "v2"
+      },
+      {
+        "source": 58,
+        "target": 194,
+        "label": "model checking explores reachable states with SAT-style solvers",
+        "wave": "v2"
+      },
+      {
+        "source": 44,
+        "target": 194,
+        "label": "BDD-based model checking propagates Boolean constraints",
+        "wave": "v2"
+      },
+      {
+        "source": 59,
+        "target": 195,
+        "label": "proof search rewrites terms via resolution / superposition",
+        "wave": "v2"
+      },
+      {
+        "source": 45,
+        "target": 195,
+        "label": "unification is the matching kernel of resolution",
+        "wave": "v2"
+      },
+      {
+        "source": 44,
+        "target": 196,
+        "label": "fixed-point computation iterates constraint propagation until convergence",
+        "wave": "v2"
+      },
+      {
+        "source": 19,
+        "target": 221,
+        "label": "Dirac operator on a lattice is a sparse matrix-vector product on spinors",
+        "wave": "v2"
+      },
+      {
+        "source": 21,
+        "target": 222,
+        "label": "Dixmier trace is a singular reduction (regularized sum) over operator spectrum",
+        "wave": "v2"
+      },
+      {
+        "source": 112,
+        "target": 223,
+        "label": "cyclic cohomology is computed by reducing the cyclic complex",
+        "wave": "v2"
+      },
+      {
+        "source": 1,
+        "target": 224,
+        "label": "p-adic arithmetic is integer arithmetic with carries propagating left",
+        "wave": "v2"
+      },
+      {
+        "source": 224,
+        "target": 225,
+        "label": "Hensel lifting iterates p-adic Newton at increasing precision",
+        "wave": "v2"
+      },
+      {
+        "source": 89,
+        "target": 226,
+        "label": "subobject classifier evaluation is functor application onto \u03a9",
+        "wave": "v2"
+      },
+      {
+        "source": 138,
+        "target": 227,
+        "label": "Serre's intersection multiplicity formula uses Tor (computed via Gr\u00f6bner)",
+        "wave": "v2"
+      },
+      {
+        "source": 138,
+        "target": 228,
+        "label": "Chow ring product is intersection product mod rational equivalence",
+        "wave": "v2"
+      },
+      {
+        "source": 39,
+        "target": 229,
+        "label": "Hybrid Monte Carlo runs Metropolis (MCMC) on top of MD trajectories",
+        "wave": "v2"
+      },
+      {
+        "source": 145,
+        "target": 229,
+        "label": "the molecular-dynamics phase of HMC is leapfrog ODE integration",
+        "wave": "v2"
+      },
+      {
+        "source": 38,
+        "target": 229,
+        "label": "the accept/reject phase is Monte Carlo",
+        "wave": "v2"
+      },
+      {
+        "source": 18,
+        "target": 230,
+        "label": "Wilson loop is an ordered product of SU(3) link variables (matmul chain)",
+        "wave": "v2"
+      },
+      {
+        "source": 21,
+        "target": 230,
+        "label": "the trace at the end of the loop is a reduction",
+        "wave": "v2"
+      },
+      {
+        "source": 19,
+        "target": 231,
+        "label": "lattice Dirac operator is sparse and complex",
+        "wave": "v2"
+      },
+      {
+        "source": 78,
+        "target": 231,
+        "label": "the standard solver is conjugate gradient \u2014 a Krylov subspace method",
+        "wave": "v2"
+      },
+      {
+        "source": 29,
+        "target": 232,
+        "label": "tropicalization rewrites polynomials in (min,+) semiring algebra",
+        "wave": "v2"
+      },
+      {
+        "source": 129,
+        "target": 233,
+        "label": "monodromy = parallel transport composed around a closed loop",
+        "wave": "v2"
+      },
+      {
+        "source": 95,
+        "target": 234,
+        "label": "residue extraction integrates around a pole",
+        "wave": "v2"
+      },
+      {
+        "source": 59,
+        "target": 235,
+        "label": "analytic continuation is symbolic Pad\u00e9 / series manipulation",
+        "wave": "v2"
+      },
+      {
+        "source": 94,
+        "target": 235,
+        "label": "differentiation provides Taylor coefficients for continuation",
+        "wave": "v2"
+      },
+      {
+        "source": 112,
+        "target": 236,
+        "label": "Steenrod squares are natural operations on cohomology",
+        "wave": "v2"
+      },
+      {
+        "source": 18,
+        "target": 237,
+        "label": "Moyal star product is a deformed matrix multiplication",
+        "wave": "v2"
+      },
+      {
+        "source": 166,
+        "target": 238,
+        "label": "RG block-spin step coarse-grains a lattice via PDE-style averaging",
+        "wave": "v2"
+      },
+      {
+        "source": 21,
+        "target": 238,
+        "label": "integrating out short-distance modes is a reduction",
+        "wave": "v2"
+      },
+      {
+        "source": 59,
+        "target": 239,
+        "label": "perturbative expansion is symbolic series generation",
+        "wave": "v2"
+      },
+      {
+        "source": 144,
+        "target": 239,
+        "label": "Feynman diagrams are the term-generating mechanism in QFT perturbation",
+        "wave": "v2"
+      },
+      {
+        "source": 67,
+        "target": 240,
+        "label": "Reed-Solomon decoding via Berlekamp-Massey extends generic syndrome decode",
+        "wave": "v2"
+      },
+      {
+        "source": 11,
+        "target": 240,
+        "label": "RS arithmetic is GF(2^m)",
+        "wave": "v2"
+      },
+      {
+        "source": 67,
+        "target": 241,
+        "label": "BCH decoding is syndrome decode in a polynomial ring",
+        "wave": "v2"
+      },
+      {
+        "source": 11,
+        "target": 241,
+        "label": "BCH operates over GF(2^m)",
+        "wave": "v2"
+      },
+      {
+        "source": 11,
+        "target": 242,
+        "label": "Reed-Muller decoding uses GF(2) majority logic",
+        "wave": "v2"
+      },
+      {
+        "source": 32,
+        "target": 243,
+        "label": "BCJR turbo decoding is sum-product on a trellis factor graph",
+        "wave": "v2"
+      },
+      {
+        "source": 32,
+        "target": 244,
+        "label": "fountain code decoding is belief propagation on a rateless code graph",
+        "wave": "v2"
+      },
+      {
+        "source": 37,
+        "target": 245,
+        "label": "discrete Gaussian sampling draws from RNG via rejection",
+        "wave": "v2"
+      },
+      {
+        "source": 17,
+        "target": 245,
+        "label": "the lattice basis comes from prior LLL/BKZ reduction",
+        "wave": "v2"
+      },
+      {
+        "source": 16,
+        "target": 246,
+        "label": "V\u00e9lu's isogeny formula operates on elliptic curve points",
+        "wave": "v2"
+      },
+      {
+        "source": 11,
+        "target": 247,
+        "label": "Poseidon/MiMC sponge S-boxes are GF(p) operations",
+        "wave": "v2"
+      },
+      {
+        "source": 36,
+        "target": 247,
+        "label": "the absorb / squeeze structure is hash-shaped",
+        "wave": "v2"
+      },
+      {
+        "source": 4,
+        "target": 248,
+        "label": "Shamir Lagrange interpolation is FMA in GF(p)",
+        "wave": "v2"
+      },
+      {
+        "source": 15,
+        "target": 248,
+        "label": "polynomial inversion uses modular exponentiation",
+        "wave": "v2"
+      },
+      {
+        "source": 16,
+        "target": 249,
+        "label": "threshold signature partials evaluate at curve points",
+        "wave": "v2"
+      },
+      {
+        "source": 15,
+        "target": 250,
+        "label": "VDF iterates modular exponentiation in a class group",
+        "wave": "v2"
+      },
+      {
+        "source": 37,
+        "target": 251,
+        "label": "bootstrap resampling draws indices from RNG",
+        "wave": "v2"
+      },
+      {
+        "source": 38,
+        "target": 251,
+        "label": "the resample-with-replacement loop is Monte Carlo",
+        "wave": "v2"
+      },
+      {
+        "source": 37,
+        "target": 252,
+        "label": "permutation tests draw shuffled labels from RNG",
+        "wave": "v2"
+      },
+      {
+        "source": 94,
+        "target": 253,
+        "label": "robust M-estimators take gradients of Huber/Tukey losses",
+        "wave": "v2"
+      },
+      {
+        "source": 65,
+        "target": 253,
+        "label": "IRLS is alternating proximal updates",
+        "wave": "v2"
+      },
+      {
+        "source": 70,
+        "target": 254,
+        "label": "quantile regression is solved via the LP simplex method",
+        "wave": "v2"
+      },
+      {
+        "source": 37,
+        "target": 255,
+        "label": "RANSAC randomly samples minimal inlier subsets",
+        "wave": "v2"
+      },
+      {
+        "source": 38,
+        "target": 255,
+        "label": "the consensus phase is Monte Carlo accept/reject",
+        "wave": "v2"
+      },
+      {
+        "source": 70,
+        "target": 256,
+        "label": "Gomory cutting planes augment the LP simplex",
+        "wave": "v2"
+      },
+      {
+        "source": 70,
+        "target": 257,
+        "label": "column generation iterates an LP master with a pricing subproblem",
+        "wave": "v2"
+      },
+      {
+        "source": 39,
+        "target": 258,
+        "label": "simulated annealing is Metropolis (MCMC) with a temperature schedule",
+        "wave": "v2"
+      },
+      {
+        "source": 37,
+        "target": 258,
+        "label": "the proposal step draws from RNG",
+        "wave": "v2"
+      },
+      {
+        "source": 5,
+        "target": 259,
+        "label": "tabu search compares moves against a memory of recently-tried ones",
+        "wave": "v2"
+      },
+      {
+        "source": 44,
+        "target": 259,
+        "label": "the tabu list is a constraint propagated forward",
+        "wave": "v2"
+      },
+      {
+        "source": 65,
+        "target": 260,
+        "label": "Lagrangian relaxation alternates dual ascent with proximal updates",
+        "wave": "v2"
+      },
+      {
+        "source": 76,
+        "target": 261,
+        "label": "BFGS / L-BFGS approximates the Hessian via rank-2 matrix updates",
+        "wave": "v2"
+      },
+      {
+        "source": 43,
+        "target": 262,
+        "label": "Hungarian assignment is augmenting-path search on a bipartite join",
+        "wave": "v2"
+      },
+      {
+        "source": 15,
+        "target": 263,
+        "label": "AKS primality runs a polynomial-time modular exponentiation",
+        "wave": "v2"
+      },
+      {
+        "source": 59,
+        "target": 263,
+        "label": "the polynomial congruence check is symbolic",
+        "wave": "v2"
+      },
+      {
+        "source": 36,
+        "target": 264,
+        "label": "BSGS uses a hash table for the baby-step lookups",
+        "wave": "v2"
+      },
+      {
+        "source": 15,
+        "target": 264,
+        "label": "both phases are modular exponentiations",
+        "wave": "v2"
+      },
+      {
+        "source": 15,
+        "target": 265,
+        "label": "Pollard rho iterates a pseudo-random function modulo n",
+        "wave": "v2"
+      },
+      {
+        "source": 18,
+        "target": 266,
+        "label": "index calculus solves a linear system over Z/p",
+        "wave": "v2"
+      },
+      {
+        "source": 15,
+        "target": 266,
+        "label": "the relation collection uses modular exponentiation",
+        "wave": "v2"
+      },
+      {
+        "source": 15,
+        "target": 267,
+        "label": "Lucas-Lehmer iterates squaring mod a Mersenne prime (FFT-based mul)",
+        "wave": "v2"
+      },
+      {
+        "source": 62,
+        "target": 268,
+        "label": "Burnside enumeration averages |Fix(g)| over the group \u2014 a M\u00f6bius-like sum",
+        "wave": "v2"
+      },
+      {
+        "source": 21,
+        "target": 268,
+        "label": "the orbit count is a reduction",
+        "wave": "v2"
+      },
+      {
+        "source": 62,
+        "target": 269,
+        "label": "P\u00f3lya enumeration evaluates a cycle index polynomial via M\u00f6bius/zeta",
+        "wave": "v2"
+      },
+      {
+        "source": 18,
+        "target": 270,
+        "label": "Ryser's permanent algorithm is a structured matmul-and-add",
+        "wave": "v2"
+      },
+      {
+        "source": 21,
+        "target": 270,
+        "label": "the inclusion-exclusion sum is a reduction",
+        "wave": "v2"
+      },
+      {
+        "source": 6,
+        "target": 271,
+        "label": "RSK insertion / bumping uses sort-style comparison ladders",
+        "wave": "v2"
+      },
+      {
+        "source": 163,
+        "target": 272,
+        "label": "discontinuous Galerkin extends FEM with element-local basis",
+        "wave": "v2"
+      },
+      {
+        "source": 95,
+        "target": 273,
+        "label": "boundary element method integrates a kernel over a surface mesh",
+        "wave": "v2"
+      },
+      {
+        "source": 18,
+        "target": 273,
+        "label": "the BEM linear system is dense (or hierarchical)",
+        "wave": "v2"
+      },
+      {
+        "source": 4,
+        "target": 274,
+        "label": "lattice Boltzmann's stream-and-collide step is FMA-heavy",
+        "wave": "v2"
+      },
+      {
+        "source": 21,
+        "target": 274,
+        "label": "the macroscopic moments are reductions",
+        "wave": "v2"
+      },
+      {
+        "source": 166,
+        "target": 274,
+        "label": "LB approximates a continuum PDE in the kinetic limit",
+        "wave": "v2"
+      },
+      {
+        "source": 4,
+        "target": 275,
+        "label": "SPH kernel-weighted accumulation is FMA-based",
+        "wave": "v2"
+      },
+      {
+        "source": 21,
+        "target": 275,
+        "label": "particle interactions reduce neighbor contributions",
+        "wave": "v2"
+      },
+      {
+        "source": 166,
+        "target": 276,
+        "label": "immersed boundary couples Lagrangian solid forces into an Eulerian PDE",
+        "wave": "v2"
+      },
+      {
+        "source": 163,
+        "target": 276,
+        "label": "the fluid step uses an FEM-style assembly",
+        "wave": "v2"
+      },
+      {
+        "source": 25,
+        "target": 277,
+        "label": "wavelet packet decomposition is a tree of wavelet transforms",
+        "wave": "v2"
+      },
+      {
+        "source": 23,
+        "target": 278,
+        "label": "chirplet transform extends FFT with linear-frequency-modulated atoms",
+        "wave": "v2"
+      },
+      {
+        "source": 77,
+        "target": 279,
+        "label": "Slepian / prolate spheroidal basis is computed via eigendecomposition",
+        "wave": "v2"
+      },
+      {
+        "source": 43,
+        "target": 280,
+        "label": "Gale-Shapley stable matching is a sequence of joins between proposing sets",
+        "wave": "v2"
+      },
+      {
+        "source": 43,
+        "target": 281,
+        "label": "auction algorithm runs distributed bid joins",
+        "wave": "v2"
+      },
+      {
+        "source": 43,
+        "target": 282,
+        "label": "Hopcroft-Karp augments matchings via BFS+DFS over a bipartite join",
+        "wave": "v2"
+      },
+      {
+        "source": 29,
+        "target": 283,
+        "label": "Stoer-Wagner min cut runs in the tropical semiring",
+        "wave": "v2"
+      },
+      {
+        "source": 4,
+        "target": 3,
+        "label": "float arithmetic is FMA with rounding \u2014 same datapath without the fuse",
+        "wave": "v2"
+      },
+      {
+        "source": 3,
+        "target": 7,
+        "label": "quantize/dequantize converts between float and integer representations",
+        "wave": "v2"
+      },
+      {
+        "source": 3,
+        "target": 8,
+        "label": "stochastic rounding is float rounding with an entropy injection",
+        "wave": "v2"
+      },
+      {
+        "source": 37,
+        "target": 8,
+        "label": "the stochastic bit comes from RNG",
+        "wave": "v2"
+      },
+      {
+        "source": 3,
+        "target": 9,
+        "label": "interval arithmetic pairs two directed-rounding float operations",
+        "wave": "v2"
+      },
+      {
+        "source": 23,
+        "target": 28,
+        "label": "multipole expansion uses FFT for the far-field translation",
+        "wave": "v2"
+      },
+      {
+        "source": 21,
+        "target": 28,
+        "label": "the near-field is a local reduction",
+        "wave": "v2"
+      },
+      {
+        "source": 41,
+        "target": 99,
+        "label": "embedding lookup feeds the prior/likelihood tables in Bayesian update",
+        "wave": "v2"
+      },
+      {
+        "source": 47,
+        "target": 46,
+        "label": "binary HD bind/bundle/permute extends FHRR with majority vote",
+        "wave": "v2"
+      },
+      {
+        "source": 95,
+        "target": 50,
+        "label": "LIF membrane integration is a leaky quadrature of input current",
+        "wave": "v2"
+      },
+      {
+        "source": 5,
+        "target": 50,
+        "label": "the spike threshold is a comparison",
+        "wave": "v2"
+      },
+      {
+        "source": 50,
+        "target": 51,
+        "label": "STDP reads pre/post spike times from LIF neurons",
+        "wave": "v2"
+      },
+      {
+        "source": 18,
+        "target": 52,
+        "label": "analog crossbar MAC is a physical matmul (Ohm's law)",
+        "wave": "v2"
+      },
+      {
+        "source": 53,
+        "target": 18,
+        "label": "photonic MZI implements unitary matrix transforms optically",
+        "wave": "v2"
+      },
+      {
+        "source": 54,
+        "target": 52,
+        "label": "sigma-delta feeds an analog crossbar with 1-bit oversampled signals",
+        "wave": "v2"
+      },
+      {
+        "source": 37,
+        "target": 56,
+        "label": "Gillespie draws two random samples per step from RNG",
+        "wave": "v2"
+      },
+      {
+        "source": 2,
+        "target": 57,
+        "label": "reversible arithmetic (Toffoli/Fredkin) is built from reversible Boolean gates",
+        "wave": "v2"
+      },
+      {
+        "source": 59,
+        "target": 60,
+        "label": "strand displacement is a molecular rewriting system",
+        "wave": "v2"
+      },
+      {
+        "source": 145,
+        "target": 64,
+        "label": "symplectic integrator is an area-preserving ODE step",
+        "wave": "v2"
+      },
+      {
+        "source": 29,
+        "target": 68,
+        "label": "fuzzy semiring (max,min) has the same algebraic structure as tropical",
+        "wave": "v2"
+      },
+      {
+        "source": 69,
+        "target": 67,
+        "label": "entropy coding works hand-in-hand with syndrome decoding in channel coding",
+        "wave": "v2"
+      }
+    ],
+    "bennett_decomposition": [
+      {
+        "target": 18,
+        "l0_phase": "broadcast multiply (elementwise)",
+        "l2_phase": "reduction along k (#21)",
+        "wave": "v1"
+      },
+      {
+        "target": 20,
+        "l0_phase": "QK^T products + V weighting",
+        "l2_phase": "softmax (#34) + accumulation (#21)",
+        "wave": "v1"
+      },
+      {
+        "target": 26,
+        "l0_phase": "window extraction (scatter/gather)",
+        "l2_phase": "max/avg selection (reduction)",
+        "wave": "v1"
+      },
+      {
+        "target": 24,
+        "l0_phase": "circular: FFT+mul+iFFT (all L0)",
+        "l2_phase": "linear: truncation",
+        "wave": "v1"
+      },
+      {
+        "target": 36,
+        "l0_phase": "mixing permutation (bijective rounds)",
+        "l2_phase": "compression/truncation",
+        "wave": "v1"
+      },
+      {
+        "target": 6,
+        "l0_phase": "comparison network (generates perm)",
+        "l2_phase": "apply perm + discard original order",
+        "wave": "v1"
+      },
+      {
+        "target": 34,
+        "l0_phase": "exponentiation (bijective per-element)",
+        "l2_phase": "normalization (erases scale)",
+        "wave": "v1"
+      },
+      {
+        "target": 35,
+        "l0_phase": "centering/scaling (with stored mean/var)",
+        "l2_phase": "discarding mean and variance",
+        "wave": "v1"
+      },
+      {
+        "target": 15,
+        "l0_phase": "square-and-multiply (reversible with ancilla)",
+        "l2_phase": "modular reduction at each step",
+        "wave": "v1"
+      },
+      {
+        "target": 43,
+        "l0_phase": "cartesian product (all row pairs)",
+        "l2_phase": "predicate filter (discard non-matching)",
+        "wave": "v1"
+      },
+      {
+        "target": 76,
+        "l0_phase": "Givens / Householder rotations (unitary, L\u2080)",
+        "l2_phase": "diagonal extraction / sign fixing (L\u2082)",
+        "wave": "v2"
+      },
+      {
+        "target": 77,
+        "l0_phase": "QR-iteration unitary similarity transforms (L\u2080)",
+        "l2_phase": "convergence test + eigenvalue extraction (L\u2082)",
+        "wave": "v2"
+      },
+      {
+        "target": 78,
+        "l0_phase": "matrix-vector products and orthogonalization (mostly L\u2080)",
+        "l2_phase": "Lanczos / Arnoldi residual normalization (L\u2082)",
+        "wave": "v2"
+      },
+      {
+        "target": 79,
+        "l0_phase": "DCT butterfly is unitary (L\u2080)",
+        "l2_phase": "floating-point rounding at each FMA (L\u2082)",
+        "wave": "v2"
+      },
+      {
+        "target": 80,
+        "l0_phase": "Hilbert transform = FFT + phase shift + iFFT, all unitary (L\u2080)",
+        "l2_phase": "rounding at each butterfly (L\u2082)",
+        "wave": "v2"
+      },
+      {
+        "target": 109,
+        "l0_phase": "predict step is a linear (reversible) update (L\u2080)",
+        "l2_phase": "innovation covariance is reduced via Kalman gain (L\u2082)",
+        "wave": "v2"
+      },
+      {
+        "target": 118,
+        "l0_phase": "comparison network generating the convex-hull permutation (L\u2080)",
+        "l2_phase": "discarding interior points (L\u2082)",
+        "wave": "v2"
+      },
+      {
+        "target": 132,
+        "l0_phase": "shooting a geodesic from a tangent vector is locally bijective (L\u2080)",
+        "l2_phase": "manifold projection at the endpoint (L\u2082)",
+        "wave": "v2"
+      },
+      {
+        "target": 135,
+        "l0_phase": "language reversal is a self-inverse permutation (L\u2080)",
+        "l2_phase": "no L\u2082 phase \u2014 pure L\u2080",
+        "wave": "v2"
+      },
+      {
+        "target": 170,
+        "l0_phase": "sparse format conversion permutes indices (L\u2080)",
+        "l2_phase": "no L\u2082 phase \u2014 pure L\u2080",
+        "wave": "v2"
+      },
+      {
+        "target": 185,
+        "l0_phase": "OFDM IFFT/FFT subcarrier mapping (L\u2080)",
+        "l2_phase": "ADC quantization at the receiver (L\u2082)",
+        "wave": "v2"
+      },
+      {
+        "target": 229,
+        "l0_phase": "leapfrog MD trajectory is symplectic (L\u2080)",
+        "l2_phase": "Metropolis accept/reject (L\u2082)",
+        "wave": "v2"
+      },
+      {
+        "target": 231,
+        "l0_phase": "CG matrix-vector products are linear (mostly L\u2080)",
+        "l2_phase": "residual norm reduction at each step (L\u2082)",
+        "wave": "v2"
+      },
+      {
+        "target": 271,
+        "l0_phase": "RSK insertion / bumping is a bijection between permutations and SYT pairs (L\u2080)",
+        "l2_phase": "no L\u2082 phase \u2014 RSK is purely bijective",
+        "wave": "v2"
+      },
+      {
+        "target": 277,
+        "l0_phase": "wavelet packet QMF tree is unitary (L\u2080)",
+        "l2_phase": "rounding at each filter tap (L\u2082)",
+        "wave": "v2"
+      },
+      {
+        "target": 279,
+        "l0_phase": "Slepian basis projection is unitary (L\u2080)",
+        "l2_phase": "rounding at each inner product (L\u2082)",
+        "wave": "v2"
+      }
+    ],
+    "thermodynamic_inheritance": [
+      {
+        "parent": 21,
+        "child": 18,
+        "note": "matmul inherits C2 from reduction",
+        "wave": "v1"
+      },
+      {
+        "parent": 34,
+        "child": 20,
+        "note": "attention inherits C2 from softmax",
+        "wave": "v1"
+      },
+      {
+        "parent": 21,
+        "child": 20,
+        "note": "attention inherits C2-max from accumulation",
+        "wave": "v1"
+      },
+      {
+        "parent": 21,
+        "child": 26,
+        "note": "pooling inherits C2-max from reduction",
+        "wave": "v1"
+      },
+      {
+        "parent": 30,
+        "child": 32,
+        "note": "sum-product inherits C2 from logsumexp",
+        "wave": "v1"
+      },
+      {
+        "parent": 38,
+        "child": 39,
+        "note": "MCMC inherits C2 from accept/reject",
+        "wave": "v1"
+      },
+      {
+        "parent": 21,
+        "child": 100,
+        "note": "PCA inherits L\u2082max from the covariance reduction",
+        "wave": "v2"
+      },
+      {
+        "parent": 21,
+        "child": 141,
+        "note": "partition function inherits L\u2082max from the state-sum reduction",
+        "wave": "v2"
+      },
+      {
+        "parent": 34,
+        "child": 99,
+        "note": "Bayesian posterior inherits L\u2082 from softmax normalization",
+        "wave": "v2"
+      },
+      {
+        "parent": 21,
+        "child": 189,
+        "note": "KL divergence inherits L\u2082max from the log-ratio reduction",
+        "wave": "v2"
+      },
+      {
+        "parent": 21,
+        "child": 190,
+        "note": "channel capacity inherits L\u2082max from Blahut-Arimoto reduction",
+        "wave": "v2"
+      },
+      {
+        "parent": 76,
+        "child": 109,
+        "note": "Kalman filter inherits L\u2082 from matrix decomposition",
+        "wave": "v2"
+      },
+      {
+        "parent": 76,
+        "child": 177,
+        "note": "interior point inherits L\u2082 from KKT factorization",
+        "wave": "v2"
+      },
+      {
+        "parent": 76,
+        "child": 186,
+        "note": "LQR Riccati inherits L\u2082 from matrix decomposition",
+        "wave": "v2"
+      },
+      {
+        "parent": 38,
+        "child": 110,
+        "note": "particle filter inherits L\u2082 from accept/reject",
+        "wave": "v2"
+      },
+      {
+        "parent": 39,
+        "child": 229,
+        "note": "HMC inherits L\u2082 from Metropolis acceptance",
+        "wave": "v2"
+      },
+      {
+        "parent": 21,
+        "child": 230,
+        "note": "Wilson loop inherits L\u2082max from the trace reduction",
+        "wave": "v2"
+      },
+      {
+        "parent": 78,
+        "child": 231,
+        "note": "fermion matrix inversion inherits L\u2082 from Krylov residuals",
+        "wave": "v2"
+      },
+      {
+        "parent": 21,
+        "child": 270,
+        "note": "permanent inherits L\u2082max from the inclusion-exclusion reduction",
+        "wave": "v2"
+      },
+      {
+        "parent": 21,
+        "child": 274,
+        "note": "lattice Boltzmann moments inherit L\u2082max from neighbor reduction",
+        "wave": "v2"
+      }
+    ]
+  }
+}

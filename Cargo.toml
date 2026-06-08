@@ -1,0 +1,45 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/tei-stack",
+    "crates/tei-ir",
+    "crates/tei-substrate-traits",
+    "crates/tei-d-baseline",
+    "crates/tei-d-photonic",
+    "crates/tei-d-in-memory",
+    "crates/tei-cost-surface",
+    "bin/tei-serve",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+license = "Apache-2.0"
+repository = "https://github.com/openie-dev/tei-fabric"
+authors = ["Thermodynamic Edge Intelligence Corp."]
+
+[workspace.dependencies]
+# Workspace crates
+tei-stack = { path = "crates/tei-stack" }
+tei-ir = { path = "crates/tei-ir" }
+tei-substrate-traits = { path = "crates/tei-substrate-traits" }
+tei-d-baseline = { path = "crates/tei-d-baseline" }
+tei-d-photonic = { path = "crates/tei-d-photonic" }
+tei-d-in-memory = { path = "crates/tei-d-in-memory" }
+tei-cost-surface = { path = "crates/tei-cost-surface" }
+
+# External
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { version = "1", features = ["full"] }
+axum = { version = "0.8", features = ["macros"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

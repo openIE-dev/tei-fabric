@@ -1,0 +1,13 @@
+[package]
+name = "tei-d-photonic"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Photonic substrate dialect — MZI mesh / silicon-photonic MAC physics."
+
+[dependencies]
+tei-stack.workspace = true
+tei-ir.workspace = true
+tei-substrate-traits.workspace = true

@@ -1,0 +1,13 @@
+[package]
+name = "tei-d-in-memory"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "In-memory substrate dialect — RRAM / memristor crossbar MVM physics."
+
+[dependencies]
+tei-stack.workspace = true
+tei-ir.workspace = true
+tei-substrate-traits.workspace = true

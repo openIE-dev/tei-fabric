@@ -1,0 +1,17 @@
+[package]
+name = "tei-cost-surface"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Dispatcher — picks the lowest-joule substrate per primitive, across the registered substrate set."
+
+[dependencies]
+tei-stack.workspace = true
+tei-ir.workspace = true
+tei-substrate-traits.workspace = true
+tei-d-baseline.workspace = true
+tei-d-photonic.workspace = true
+tei-d-in-memory.workspace = true
+serde.workspace = true

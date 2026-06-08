@@ -1,0 +1,27 @@
+[package]
+name = "tei-serve"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Axum HTTP API for tei-fabric — exposes the cost-surface dispatcher over JSON."
+
+[[bin]]
+name = "tei-serve"
+path = "src/main.rs"
+
+[dependencies]
+tei-stack.workspace = true
+tei-ir.workspace = true
+tei-substrate-traits.workspace = true
+tei-cost-surface.workspace = true
+
+tokio.workspace = true
+axum.workspace = true
+tower-http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

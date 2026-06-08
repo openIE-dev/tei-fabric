@@ -1,0 +1,13 @@
+[package]
+name = "tei-substrate-traits"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The Substrate trait — contract every TEI dialect implements."
+
+[dependencies]
+tei-stack.workspace = true
+tei-ir.workspace = true
+serde.workspace = true

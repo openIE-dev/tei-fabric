@@ -1,0 +1,17 @@
+/target
+**/*.rs.bk
+*.swp
+.DS_Store
+
+# web app
+web/node_modules
+web/dist
+web/.astro
+web/.env*
+
+# editor
+.idea/
+.vscode/
+
+# local
+.env
