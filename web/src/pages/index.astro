@@ -7,117 +7,75 @@ import Layout from '../layouts/Layout.astro';
 <section class="max-w-5xl mx-auto px-6 pt-20 pb-12">
   <p class="section-label mb-5">Cost-surface dispatcher</p>
   <h1 class="font-display text-5xl md:text-6xl font-bold text-brand-white leading-[1.05] tracking-tight mb-6">
-    Pick a workload. <span class="text-brand-amber italic">See the substrate.</span>
+    A workload, <span class="text-brand-amber italic">routed</span>.
   </h1>
   <p class="text-brand-light text-lg md:text-xl max-w-3xl leading-relaxed">
-    tei-fabric reads the Periodic Stack of Computation and dispatches each primitive to the substrate whose physics performs it at the lowest joule cost. Per-physics models, citations on every constant.
+    tei-fabric reads the Periodic Stack of Computation and dispatches each primitive in a workload to the substrate whose physics performs it at the lowest joule cost. Build a multi-primitive workload below; the dispatcher reports the per-substrate roll-up.
   </p>
 </section>
 
 <!-- ═══ DEMO ═══ -->
 <section class="max-w-7xl mx-auto px-6 pb-24">
-  <div class="grid lg:grid-cols-[420px_1fr] gap-6">
+  <div class="grid lg:grid-cols-[460px_1fr] gap-6">
 
     <!-- ─── FORM ─── -->
-    <div class="glass-card p-6 self-start">
-      <p class="section-label mb-5">Workload</p>
+    <div class="space-y-5 self-start">
 
-      <label class="block font-mono text-[11px] text-brand-gray uppercase tracking-wider mb-2">Preset</label>
-      <select id="preset" class="mb-5">
-        <option value="attention" selected>Transformer attention (matmul · 512×768×2048)</option>
-        <option value="small">Small matmul (32×32×32)</option>
-        <option value="resnet">ResNet50 conv block (matmul-equivalent)</option>
-        <option value="maxcut">Max-Cut · simulated annealing (256 nodes · 4k sweeps)</option>
-        <option value="ising">Ising-EBM Gibbs sampling (1024 p-bits · 10k sweeps)</option>
-        <option value="bayes">Bayesian posterior chain (128 vars · 5k samples)</option>
-        <option value="dct">DCT · 1024 × 1024 (pure-L₀ transform)</option>
-        <option value="hilbert">Hilbert transform · 1024 × 1024 (pure-L₀)</option>
-        <option value="kalman">Kalman filter step · 64-state</option>
-      </select>
-
-      <label class="block font-mono text-[11px] text-brand-gray uppercase tracking-wider mb-2">Primitive</label>
-      <select id="primitive" class="mb-5">
-        <option value="18" selected>18 · Dense MatMul</option>
-        <option value="19">19 · SpMM / SpMV</option>
-        <option value="20">20 · Attention</option>
-        <option value="24">24 · Convolution</option>
-        <option value="48">48 · Tensor network contraction</option>
-        <option value="76">76 · Matrix decomposition</option>
-        <option value="77">77 · Eigendecomposition</option>
-        <option value="79">79 · DCT (pure-L₀)</option>
-        <option value="80">80 · Hilbert transform (pure-L₀)</option>
-        <option value="109">109 · Kalman filter step</option>
-        <option value="39">39 · MCMC / Langevin step</option>
-        <option value="258">258 · Simulated annealing</option>
-        <option value="99">99 · Bayesian posterior</option>
-        <option value="38">38 · Monte Carlo accept/reject</option>
-      </select>
-
-      <!-- Matmul-class fields -->
-      <div id="matmul-fields">
-        <div class="grid grid-cols-3 gap-3 mb-5">
-          <div>
-            <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">m</label>
-            <input id="m" type="number" value="512" min="1" />
-          </div>
-          <div>
-            <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">k</label>
-            <input id="k" type="number" value="768" min="1" />
-          </div>
-          <div>
-            <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">n</label>
-            <input id="n" type="number" value="2048" min="1" />
-          </div>
-        </div>
+      <!-- preset -->
+      <div class="glass-card p-6">
+        <p class="section-label mb-4">Workload preset</p>
+        <select id="preset" class="mb-1">
+          <option value="" disabled selected>— pick a preset to populate —</option>
+          <optgroup label="Single op">
+            <option value="attention-matmul">Attention QKV projection (1 matmul, 512×768×2048)</option>
+            <option value="small-matmul">Small matmul (32³)</option>
+            <option value="dct">DCT 1024² (pure-L₀ transform)</option>
+            <option value="hilbert">Hilbert transform 1024²</option>
+            <option value="kalman">Kalman filter step (64-state)</option>
+            <option value="maxcut">Max-Cut SA (256 vars · 4k sweeps)</option>
+            <option value="ising">Ising-EBM Gibbs (1024 p-bits · 10k sweeps)</option>
+            <option value="bayes">Bayesian posterior chain (128 vars · 5k samples)</option>
+          </optgroup>
+          <optgroup label="Multi-primitive blocks">
+            <option value="attention-block">One attention block (QKV + QKᵀ + softmax + V + out)</option>
+            <option value="transformer-layer">One transformer layer (attention + MLP)</option>
+            <option value="transformer-12L">Transformer ×12 layers (full forward)</option>
+            <option value="diffusion-step">Diffusion sampler step (UNet matmuls + MCMC denoise)</option>
+            <option value="resnet-stage">ResNet stage (3 conv layers + pooling)</option>
+          </optgroup>
+        </select>
       </div>
 
-      <!-- Sampling-class fields -->
-      <div id="sampling-fields" style="display: none;">
+      <!-- invocations -->
+      <div class="glass-card p-6">
+        <div class="flex items-baseline justify-between mb-4">
+          <p class="section-label">Invocations</p>
+          <button id="add-invocation" class="font-mono text-[11px] text-brand-cyan border border-brand-cyan/30 px-2.5 py-1 rounded hover:bg-brand-cyan/10 cursor-pointer">+ ADD</button>
+        </div>
+        <div id="invocations" class="space-y-3"></div>
+        <p id="invocation-empty" class="text-brand-gray text-sm text-center py-3" style="display: none;">
+          No invocations. Pick a preset above or click <strong class="text-brand-cyan">+ ADD</strong>.
+        </p>
+      </div>
+
+      <!-- constraints + dispatch -->
+      <div class="glass-card p-6">
+        <p class="section-label mb-4">Constraints</p>
         <div class="grid grid-cols-2 gap-3 mb-5">
           <div>
-            <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Variables</label>
-            <input id="variables" type="number" value="1024" min="1" />
+            <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Cycles / sec</label>
+            <input id="cps" type="number" value="30" min="1" />
           </div>
           <div>
-            <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Sweeps</label>
-            <input id="sweeps" type="number" value="10000" min="1" />
+            <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Budget (W)</label>
+            <input id="budget" type="number" step="0.1" value="5" min="0.1" />
           </div>
         </div>
+        <button id="dispatch-btn" class="primary w-full">DISPATCH →</button>
+        <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mt-4 text-center">
+          API: <span id="api-base">http://localhost:9651</span>
+        </p>
       </div>
-
-      <div class="grid grid-cols-2 gap-3 mb-5">
-        <div>
-          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Batch</label>
-          <input id="batch" type="number" value="1" min="1" />
-        </div>
-        <div>
-          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Dtype</label>
-          <select id="dtype">
-            <option value="i4">INT4</option>
-            <option value="i8">INT8</option>
-            <option value="f16" selected>FP16</option>
-            <option value="bf16">BF16</option>
-            <option value="f32">FP32</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-2 gap-3 mb-5">
-        <div>
-          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Cycles / sec</label>
-          <input id="cps" type="number" value="30" min="1" />
-        </div>
-        <div>
-          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Budget (W)</label>
-          <input id="budget" type="number" step="0.1" value="5" min="0.1" />
-        </div>
-      </div>
-
-      <button id="dispatch-btn" class="primary w-full mt-2">DISPATCH →</button>
-
-      <p id="api-status" class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mt-4 text-center">
-        API: <span id="api-base">http://localhost:9651</span>
-      </p>
     </div>
 
     <!-- ─── RESULTS ─── -->
@@ -125,142 +83,395 @@ import Layout from '../layouts/Layout.astro';
       <div class="glass-card p-10 text-center">
         <p class="section-label mb-4">Awaiting dispatch</p>
         <p class="text-brand-light text-base leading-relaxed">
-          Configure a workload on the left and dispatch. The cost-surface runtime will price the primitive on every registered substrate and pick the lowest-joule fit that meets the fidelity bound.
+          Pick a preset to populate the workload, then DISPATCH. The cost-surface runtime will price each invocation across all five substrates and roll up the chosen plan.
         </p>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ═══ DISPATCH SCRIPT ═══ -->
+<!-- ═══════════════════════════════════════════════════════════════════
+     INVOCATION CARD CSS
+     ═══════════════════════════════════════════════════════════════════ -->
+<style is:global>
+  .inv-card {
+    background: rgba(8, 12, 20, 0.5);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 10px;
+    padding: 14px 16px 12px;
+    position: relative;
+  }
+  .inv-card .remove {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    background: transparent;
+    border: none;
+    color: var(--color-brand-gray);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 4px 6px;
+    border-radius: 4px;
+  }
+  .inv-card .remove:hover {
+    color: var(--color-brand-amber);
+    background: rgba(245, 158, 11, 0.1);
+  }
+  .inv-card .primitive-select {
+    margin-bottom: 10px;
+  }
+  .inv-card .field-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--color-brand-gray);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+    display: block;
+  }
+  .inv-card input, .inv-card select {
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+</style>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     DISPATCH + FORM SCRIPT
+     ═══════════════════════════════════════════════════════════════════ -->
 <script is:inline>
 const API_BASE = (() => {
-  // Convention: serve from same host on :9651 unless overridden via ?api=
   const url = new URL(window.location.href);
-  const override = url.searchParams.get('api');
-  if (override) return override;
-  return 'http://localhost:9651';
+  return url.searchParams.get('api') || 'http://localhost:9651';
 })();
 document.getElementById('api-base').textContent = API_BASE;
 
-const PRESETS = {
-  attention: { kind: 'matmul', primitive: 18, m: 512, k: 768, n: 2048, batch: 1, dtype: 'f16', cps: 30, budget: 5 },
-  small:     { kind: 'matmul', primitive: 18, m: 32,  k: 32,  n: 32,   batch: 1, dtype: 'f16', cps: 30, budget: 1 },
-  resnet:    { kind: 'matmul', primitive: 24, m: 56,  k: 576, n: 56,   batch: 1, dtype: 'f16', cps: 30, budget: 5 },
-  maxcut:    { kind: 'sampling', primitive: 258, variables: 256,  sweeps: 4000,  batch: 1, dtype: 'i8',  cps: 30, budget: 5 },
-  ising:     { kind: 'sampling', primitive: 39,  variables: 1024, sweeps: 10000, batch: 1, dtype: 'i8',  cps: 30, budget: 5 },
-  bayes:     { kind: 'sampling', primitive: 99,  variables: 128,  sweeps: 5000,  batch: 1, dtype: 'f16', cps: 30, budget: 5 },
-  dct:       { kind: 'matmul', primitive: 79, m: 1024, k: 1024, n: 1024, batch: 1, dtype: 'f16', cps: 30, budget: 5 },
-  hilbert:   { kind: 'matmul', primitive: 80, m: 1024, k: 1024, n: 1024, batch: 1, dtype: 'f16', cps: 30, budget: 5 },
-  kalman:    { kind: 'matmul', primitive: 109, m: 64,  k: 64,   n: 64,   batch: 1, dtype: 'f16', cps: 30, budget: 5 },
-};
+// ────────────────────────────────────────────────────────────────────
+// Catalog: primitive ID → metadata. Mirrors the Rust dialect filters so
+// the form can swap fields based on the kind of primitive selected.
+// ────────────────────────────────────────────────────────────────────
+const PRIMITIVES = [
+  // Matmul-class (LA / TR / TEN families with MAC structure)
+  { id: 18,  name: 'Dense MatMul',                 kind: 'matmul' },
+  { id: 19,  name: 'SpMM / SpMV',                  kind: 'matmul' },
+  { id: 20,  name: 'Attention (fused)',            kind: 'matmul' },
+  { id: 24,  name: 'Convolution',                  kind: 'matmul' },
+  { id: 48,  name: 'Tensor network contraction',   kind: 'matmul' },
+  { id: 76,  name: 'Matrix decomposition',         kind: 'matmul' },
+  { id: 77,  name: 'Eigendecomposition',           kind: 'matmul' },
+  // Linear transforms + elementwise (Bennett-decomposable → reversible-friendly)
+  { id: 79,  name: 'DCT (pure-L₀)',                kind: 'scalar' },
+  { id: 80,  name: 'Hilbert transform (pure-L₀)',  kind: 'scalar' },
+  { id: 34,  name: 'Softmax',                       kind: 'scalar' },
+  { id: 35,  name: 'Normalization',                 kind: 'scalar' },
+  { id: 26,  name: 'Pooling',                       kind: 'scalar' },
+  { id: 109, name: 'Kalman filter step',            kind: 'scalar' },
+  { id: 6,   name: 'Sort / rank',                   kind: 'scalar' },
+  { id: 36,  name: 'Hash',                          kind: 'scalar' },
+  // Sampling-class (L₁ — stochastic-friendly)
+  { id: 38,  name: 'Monte Carlo accept/reject',    kind: 'sampling' },
+  { id: 39,  name: 'MCMC / Langevin step',         kind: 'sampling' },
+  { id: 99,  name: 'Bayesian posterior',           kind: 'sampling' },
+  { id: 258, name: 'Simulated annealing',          kind: 'sampling' },
+  { id: 251, name: 'Bootstrap resampling',         kind: 'sampling' },
+  { id: 245, name: 'Discrete Gaussian sampling',   kind: 'sampling' },
+];
+const PRIM_BY_ID = Object.fromEntries(PRIMITIVES.map(p => [p.id, p]));
 
-const SAMPLING_PRIMITIVES = new Set([8, 38, 39, 99, 245, 251, 258, 274]);
+// ────────────────────────────────────────────────────────────────────
+// State + render
+// ────────────────────────────────────────────────────────────────────
+let state = { invocations: [] };
+let nextId = 1;
 
-function updateFormForKind(kind) {
-  document.getElementById('matmul-fields').style.display   = kind === 'matmul'   ? '' : 'none';
-  document.getElementById('sampling-fields').style.display = kind === 'sampling' ? '' : 'none';
+function makeInv(over) {
+  return {
+    id: nextId++,
+    primitive_id: 18,
+    count: 1,
+    label: '',
+    m: 512, k: 768, n: 2048,
+    variables: 1024, sweeps: 10000,
+    batch: 1, dtype: 'f16',
+    ...over,
+  };
 }
-
-function inferKindFromPrimitive(pid) {
-  return SAMPLING_PRIMITIVES.has(pid) ? 'sampling' : 'matmul';
-}
-
-document.getElementById('preset').addEventListener('change', (e) => {
-  const p = PRESETS[e.target.value];
-  if (!p) return;
-  for (const [k, v] of Object.entries(p)) {
-    if (k === 'kind') continue;
-    const el = document.getElementById(k);
-    if (el) el.value = String(v);
-  }
-  updateFormForKind(p.kind);
-});
-
-document.getElementById('primitive').addEventListener('change', (e) => {
-  updateFormForKind(inferKindFromPrimitive(parseInt(e.target.value, 10)));
-});
 
 function $(id) { return document.getElementById(id); }
+
+function primitiveOptionsHtml(selectedId) {
+  // Group by kind for readability
+  const groups = [
+    ['Matmul-class', PRIMITIVES.filter(p => p.kind === 'matmul')],
+    ['Scalar / transform',  PRIMITIVES.filter(p => p.kind === 'scalar')],
+    ['Sampling',     PRIMITIVES.filter(p => p.kind === 'sampling')],
+  ];
+  return groups.map(([label, prims]) => `
+    <optgroup label="${label}">
+      ${prims.map(p =>
+        `<option value="${p.id}" ${p.id === selectedId ? 'selected' : ''}>${p.id} · ${p.name}</option>`
+      ).join('')}
+    </optgroup>`).join('');
+}
+
+function renderInvocation(inv) {
+  const meta = PRIM_BY_ID[inv.primitive_id] || { kind: 'scalar' };
+  const matmulFields = `
+    <div class="grid grid-cols-3 gap-2 mb-2">
+      <div><span class="field-label">m</span>     <input type="number" data-key="m" value="${inv.m}" /></div>
+      <div><span class="field-label">k</span>     <input type="number" data-key="k" value="${inv.k}" /></div>
+      <div><span class="field-label">n</span>     <input type="number" data-key="n" value="${inv.n}" /></div>
+    </div>`;
+  const samplingFields = `
+    <div class="grid grid-cols-2 gap-2 mb-2">
+      <div><span class="field-label">Variables</span> <input type="number" data-key="variables" value="${inv.variables}" /></div>
+      <div><span class="field-label">Sweeps</span>    <input type="number" data-key="sweeps" value="${inv.sweeps}" /></div>
+    </div>`;
+  const profileFields = (meta.kind === 'sampling') ? samplingFields
+    : (meta.kind === 'matmul') ? matmulFields
+    : ''; // scalar — no shape inputs in v0
+
+  return `
+    <div class="inv-card" data-id="${inv.id}">
+      <button class="remove" data-action="remove" title="Remove">×</button>
+      <span class="field-label">Primitive</span>
+      <select class="primitive-select" data-key="primitive_id">
+        ${primitiveOptionsHtml(inv.primitive_id)}
+      </select>
+      ${profileFields}
+      <div class="grid grid-cols-[1fr_1.6fr] gap-2 mb-1">
+        <div>
+          <span class="field-label">Count</span>
+          <input type="number" data-key="count" value="${inv.count}" min="1" />
+        </div>
+        <div>
+          <span class="field-label">Label</span>
+          <input type="text" data-key="label" value="${inv.label}" placeholder="optional" />
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <span class="field-label">Batch</span>
+          <input type="number" data-key="batch" value="${inv.batch}" min="1" />
+        </div>
+        <div>
+          <span class="field-label">Dtype</span>
+          <select data-key="dtype">
+            ${['i4','i8','f16','bf16','f32'].map(d => `<option value="${d}" ${inv.dtype === d ? 'selected' : ''}>${d.toUpperCase()}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderInvocations() {
+  const root = $('invocations');
+  root.innerHTML = state.invocations.map(renderInvocation).join('');
+  $('invocation-empty').style.display = state.invocations.length === 0 ? '' : 'none';
+
+  // Wire change handlers per card
+  root.querySelectorAll('.inv-card').forEach(card => {
+    const id = parseInt(card.dataset.id, 10);
+    card.querySelector('[data-action="remove"]').addEventListener('click', () => {
+      state.invocations = state.invocations.filter(x => x.id !== id);
+      renderInvocations();
+    });
+    card.querySelectorAll('[data-key]').forEach(el => {
+      el.addEventListener('change', () => {
+        const inv = state.invocations.find(x => x.id === id);
+        if (!inv) return;
+        let v = el.value;
+        if (el.type === 'number') v = parseFloat(v);
+        if (el.dataset.key === 'primitive_id') v = parseInt(v, 10);
+        inv[el.dataset.key] = v;
+        // If the primitive's kind changed (matmul ↔ sampling ↔ scalar),
+        // re-render so the right fields show up.
+        if (el.dataset.key === 'primitive_id') renderInvocations();
+      });
+    });
+  });
+}
+
+function setInvocations(list) {
+  state.invocations = list.map(x => makeInv(x));
+  renderInvocations();
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Presets (build a list of invocations for each)
+// ────────────────────────────────────────────────────────────────────
+function preset(name) {
+  const M = (over) => Object.assign({ primitive_id: 18, count: 1, label: '', dtype: 'f16' }, over);
+  switch (name) {
+    case 'attention-matmul':
+      return [M({ label: 'QKV projection', m: 512, k: 768, n: 2048 })];
+    case 'small-matmul':
+      return [M({ label: 'Small matmul', m: 32, k: 32, n: 32, dtype: 'i8' })];
+    case 'dct':
+      return [M({ primitive_id: 79, label: 'DCT 1024²', m: 1024, k: 1024, n: 1024 })];
+    case 'hilbert':
+      return [M({ primitive_id: 80, label: 'Hilbert 1024²', m: 1024, k: 1024, n: 1024 })];
+    case 'kalman':
+      return [M({ primitive_id: 109, label: 'Kalman 64-state', m: 64, k: 64, n: 64 })];
+    case 'maxcut':
+      return [M({ primitive_id: 258, label: 'Max-Cut SA', variables: 256, sweeps: 4000, dtype: 'i8' })];
+    case 'ising':
+      return [M({ primitive_id: 39, label: 'Ising Gibbs', variables: 1024, sweeps: 10000, dtype: 'i8' })];
+    case 'bayes':
+      return [M({ primitive_id: 99, label: 'Bayesian posterior', variables: 128, sweeps: 5000 })];
+    case 'attention-block':
+      // GPT-style attention block, dim=768, heads merged, seq=512
+      return [
+        M({ label: 'WQ projection',  m: 512, k: 768, n: 768 }),
+        M({ label: 'WK projection',  m: 512, k: 768, n: 768 }),
+        M({ label: 'WV projection',  m: 512, k: 768, n: 768 }),
+        M({ label: 'QKᵀ (attention scores)', m: 512, k: 768, n: 512 }),
+        M({ primitive_id: 34, label: 'Softmax (per row)', m: 512, k: 1, n: 512, count: 1 }),
+        M({ label: 'Attn × V',       m: 512, k: 512, n: 768 }),
+        M({ label: 'Output projection', m: 512, k: 768, n: 768 }),
+      ];
+    case 'transformer-layer':
+      // attention block + MLP (4× hidden dim FFN)
+      return [
+        M({ label: 'WQ projection',  m: 512, k: 768, n: 768 }),
+        M({ label: 'WK projection',  m: 512, k: 768, n: 768 }),
+        M({ label: 'WV projection',  m: 512, k: 768, n: 768 }),
+        M({ label: 'QKᵀ',            m: 512, k: 768, n: 512 }),
+        M({ primitive_id: 34, label: 'Softmax', m: 512, k: 1, n: 512 }),
+        M({ label: 'Attn × V',       m: 512, k: 512, n: 768 }),
+        M({ label: 'Out projection', m: 512, k: 768, n: 768 }),
+        M({ primitive_id: 35, label: 'LayerNorm', m: 512, k: 1, n: 768 }),
+        M({ label: 'FFN up   (768 → 3072)',   m: 512, k: 768,  n: 3072 }),
+        M({ label: 'FFN down (3072 → 768)',   m: 512, k: 3072, n: 768  }),
+      ];
+    case 'transformer-12L':
+      // 12 layers — same as transformer-layer but count=12 for each invocation
+      return [
+        M({ label: 'WQ × 12L',  m: 512, k: 768, n: 768, count: 12 }),
+        M({ label: 'WK × 12L',  m: 512, k: 768, n: 768, count: 12 }),
+        M({ label: 'WV × 12L',  m: 512, k: 768, n: 768, count: 12 }),
+        M({ label: 'QKᵀ × 12L', m: 512, k: 768, n: 512, count: 12 }),
+        M({ primitive_id: 34, label: 'Softmax × 12L', m: 512, k: 1, n: 512, count: 12 }),
+        M({ label: 'Attn × V × 12L',       m: 512, k: 512, n: 768, count: 12 }),
+        M({ label: 'Out projection × 12L', m: 512, k: 768, n: 768, count: 12 }),
+        M({ primitive_id: 35, label: 'LayerNorm × 24L', m: 512, k: 1, n: 768, count: 24 }),
+        M({ label: 'FFN up × 12L',   m: 512, k: 768,  n: 3072, count: 12 }),
+        M({ label: 'FFN down × 12L', m: 512, k: 3072, n: 768,  count: 12 }),
+      ];
+    case 'diffusion-step':
+      // One denoising step: UNet forward (a few matmuls) + an MCMC denoise op
+      return [
+        M({ label: 'UNet input proj',  m: 64, k: 4, n: 320 }),
+        M({ label: 'UNet middle block', m: 64, k: 320, n: 320 }),
+        M({ label: 'UNet output proj', m: 64, k: 320, n: 4 }),
+        M({ primitive_id: 39, label: 'MCMC denoise', variables: 256, sweeps: 4096 }),
+      ];
+    case 'resnet-stage':
+      return [
+        M({ primitive_id: 24, label: 'Conv 1 (64ch)',  m: 56, k: 64,  n: 56 }),
+        M({ primitive_id: 24, label: 'Conv 2 (128ch)', m: 28, k: 128, n: 28 }),
+        M({ primitive_id: 24, label: 'Conv 3 (256ch)', m: 14, k: 256, n: 14 }),
+        M({ primitive_id: 26, label: 'Pool',           m: 7,  k: 256, n: 7 }),
+      ];
+  }
+  return [];
+}
+
+$('preset').addEventListener('change', (e) => {
+  const list = preset(e.target.value);
+  if (list.length === 0) return;
+  setInvocations(list);
+});
+
+$('add-invocation').addEventListener('click', () => {
+  state.invocations.push(makeInv({ label: '' }));
+  renderInvocations();
+});
+
+// ────────────────────────────────────────────────────────────────────
+// Dispatch + result rendering
+// ────────────────────────────────────────────────────────────────────
 function fmtJoules(j) {
   if (j === 0) return '0 J';
-  const abs = Math.abs(j);
-  if (abs >= 1) return j.toExponential(3) + ' J';
-  if (abs >= 1e-3) return (j * 1e3).toFixed(3) + ' mJ';
-  if (abs >= 1e-6) return (j * 1e6).toFixed(3) + ' µJ';
-  if (abs >= 1e-9) return (j * 1e9).toFixed(3) + ' nJ';
-  if (abs >= 1e-12) return (j * 1e12).toFixed(3) + ' pJ';
-  if (abs >= 1e-15) return (j * 1e15).toFixed(3) + ' fJ';
+  const a = Math.abs(j);
+  if (a >= 1)      return j.toExponential(3) + ' J';
+  if (a >= 1e-3)  return (j * 1e3).toFixed(3) + ' mJ';
+  if (a >= 1e-6)  return (j * 1e6).toFixed(3) + ' µJ';
+  if (a >= 1e-9)  return (j * 1e9).toFixed(3) + ' nJ';
+  if (a >= 1e-12) return (j * 1e12).toFixed(3) + ' pJ';
+  if (a >= 1e-15) return (j * 1e15).toFixed(3) + ' fJ';
   return j.toExponential(3) + ' J';
-}
-function fmtTime(s) {
-  if (s === 0) return '0 s';
-  const abs = Math.abs(s);
-  if (abs >= 1) return s.toFixed(3) + ' s';
-  if (abs >= 1e-3) return (s * 1e3).toFixed(3) + ' ms';
-  if (abs >= 1e-6) return (s * 1e6).toFixed(3) + ' µs';
-  if (abs >= 1e-9) return (s * 1e9).toFixed(3) + ' ns';
-  return s.toExponential(3) + ' s';
 }
 function fmtPower(w) {
   if (w === 0) return '0 W';
-  const abs = Math.abs(w);
-  if (abs >= 1) return w.toFixed(3) + ' W';
-  if (abs >= 1e-3) return (w * 1e3).toFixed(3) + ' mW';
-  if (abs >= 1e-6) return (w * 1e6).toFixed(3) + ' µW';
-  if (abs >= 1e-9) return (w * 1e9).toFixed(3) + ' nW';
+  const a = Math.abs(w);
+  if (a >= 1)      return w.toFixed(3) + ' W';
+  if (a >= 1e-3)  return (w * 1e3).toFixed(3) + ' mW';
+  if (a >= 1e-6)  return (w * 1e6).toFixed(3) + ' µW';
+  if (a >= 1e-9)  return (w * 1e9).toFixed(3) + ' nW';
   return w.toExponential(3) + ' W';
 }
-
+function fmtTime(s) {
+  if (s === 0) return '0 s';
+  const a = Math.abs(s);
+  if (a >= 1)      return s.toFixed(3) + ' s';
+  if (a >= 1e-3)  return (s * 1e3).toFixed(3) + ' ms';
+  if (a >= 1e-6)  return (s * 1e6).toFixed(3) + ' µs';
+  if (a >= 1e-9)  return (s * 1e9).toFixed(3) + ' ns';
+  return s.toExponential(3) + ' s';
+}
 function colorForSubstrate(name) {
   switch (name) {
     case 'baseline':   return 'cyan';
     case 'photonic':   return 'violet';
-    case 'in-memory':  return '';      // amber (default fill)
+    case 'in-memory':  return '';      // amber default
     case 'stochastic': return 'gold';
     case 'reversible': return 'emerald';
     default:           return '';
   }
 }
 
+function buildInvocationPayload(inv) {
+  const meta = PRIM_BY_ID[inv.primitive_id] || { kind: 'scalar' };
+  let profile = { batch: inv.batch | 0, dtype: inv.dtype };
+  if (meta.kind === 'sampling') {
+    profile.shape = { dims: [inv.variables | 0] };
+    profile.sweeps = inv.sweeps | 0;
+    profile.variables = inv.variables | 0;
+  } else if (meta.kind === 'matmul') {
+    profile.shape = { dims: [inv.m | 0, inv.n | 0] };
+    profile.reduce_dim = inv.k | 0;
+  } else {
+    // scalar / transform — pass shape if user filled it (m×n×k) so substrates
+    // that interpret it as matmul-like get a sensible MAC count.
+    profile.shape = { dims: [inv.m | 0, inv.n | 0] };
+    profile.reduce_dim = inv.k | 0;
+  }
+  return {
+    primitive_id: inv.primitive_id,
+    count: inv.count | 0,
+    label: inv.label || '',
+    profile,
+  };
+}
+
 async function dispatch() {
+  if (state.invocations.length === 0) {
+    $('results').innerHTML = `
+      <div class="glass-card p-8" style="border-color: rgba(245,158,11,0.3);">
+        <p class="section-label mb-3" style="color: var(--color-brand-amber);">Empty workload</p>
+        <p class="text-brand-light text-sm">Pick a preset or click <strong>+ ADD</strong> to populate the invocation list.</p>
+      </div>`;
+    return;
+  }
+
   const btn = $('dispatch-btn');
   btn.disabled = true;
   btn.textContent = 'DISPATCHING…';
 
-  const pid = parseInt($('primitive').value, 10);
-  const kind = inferKindFromPrimitive(pid);
-
-  let profile, goal;
-  if (kind === 'sampling') {
-    const v = parseInt($('variables').value, 10);
-    const s = parseInt($('sweeps').value, 10);
-    profile = {
-      shape: { dims: [v] },
-      batch: parseInt($('batch').value, 10),
-      dtype: $('dtype').value,
-      sweeps: s,
-      variables: v,
-    };
-    goal = `${$('primitive').selectedOptions[0].textContent} · ${v} vars · ${s} sweeps`;
-  } else {
-    profile = {
-      shape: { dims: [parseInt($('m').value, 10), parseInt($('n').value, 10)] },
-      reduce_dim: parseInt($('k').value, 10),
-      batch: parseInt($('batch').value, 10),
-      dtype: $('dtype').value,
-    };
-    goal = `${$('primitive').selectedOptions[0].textContent} · ${$('m').value}×${$('k').value}×${$('n').value} @ ${$('dtype').value}`;
-  }
-
   const body = {
-    goal,
-    invocations: [{
-      primitive_id: pid,
-      count: 1,
-      label: $('preset').selectedOptions[0].textContent,
-      profile,
-    }],
+    goal: `${state.invocations.length} invocation${state.invocations.length === 1 ? '' : 's'}`,
+    invocations: state.invocations.map(buildInvocationPayload),
     constraints: {
       cycles_per_second: parseFloat($('cps').value),
       power_budget_w: parseFloat($('budget').value),
@@ -275,11 +486,10 @@ async function dispatch() {
       body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const plan = await res.json();
-    renderPlan(plan);
+    renderPlan(await res.json());
   } catch (e) {
     $('results').innerHTML = `
-      <div class="glass-card p-8" style="border-color: rgba(239, 68, 68, 0.3);">
+      <div class="glass-card p-8" style="border-color: rgba(239,68,68,0.3);">
         <p class="section-label mb-3" style="color: #ef4444;">Dispatch failed</p>
         <p class="text-brand-light font-mono text-sm">${e.message}</p>
         <p class="text-brand-gray text-sm mt-3">Is <code>tei-serve</code> running on ${API_BASE}? Start it with <code>cargo run -p tei-serve</code> from the workspace root.</p>
@@ -295,7 +505,7 @@ function renderPlan(plan) {
   const savings = plan.savings_factor;
   const within = plan.within_budget;
 
-  // ── headline: savings + budget gauge ─────────────────────────────────
+  // headline
   const headline = `
     <div class="glass-card p-8">
       <div class="grid md:grid-cols-3 gap-8">
@@ -305,11 +515,9 @@ function renderPlan(plan) {
           <p class="text-brand-gray text-xs font-mono mt-2 tracking-wider uppercase">vs CPU/GPU baseline</p>
         </div>
         <div>
-          <p class="section-label mb-3">Power @ ${plan.assignments.length ? '' : ''}${$('cps').value} Hz</p>
+          <p class="section-label mb-3">Power @ ${$('cps').value} Hz</p>
           <p class="font-display text-4xl font-bold text-brand-white">${fmtPower(plan.power_w)}</p>
-          <p class="text-brand-gray text-xs font-mono mt-2 tracking-wider uppercase">
-            baseline: ${fmtPower(plan.baseline_power_w)}
-          </p>
+          <p class="text-brand-gray text-xs font-mono mt-2 tracking-wider uppercase">baseline: ${fmtPower(plan.baseline_power_w)}</p>
         </div>
         <div>
           <p class="section-label mb-3">Budget</p>
@@ -319,22 +527,23 @@ function renderPlan(plan) {
       </div>
     </div>`;
 
-  // ── per-substrate aggregate ──────────────────────────────────────────
-  const maxJ = Math.max(...plan.per_substrate_joules.map(s => s.joules), plan.baseline_total_joules, 1e-30);
-  const aggBars = plan.per_substrate_joules
-    .map(s => {
-      const pct = (s.joules / maxJ * 100).toFixed(2);
-      const color = colorForSubstrate(s.substrate);
-      return `
-        <div>
-          <div class="flex items-baseline justify-between mb-1.5">
-            <span class="font-mono text-[12px] text-brand-light">${s.display}</span>
-            <span class="font-mono text-[11px] text-brand-amber">${fmtJoules(s.joules)} · ${s.op_count} op${s.op_count===1?'':'s'}</span>
-          </div>
-          <div class="bar-track"><div class="bar-fill ${color}" style="width: ${pct}%"></div></div>
-        </div>`;
-    }).join('');
-
+  // per-substrate aggregate bars
+  const maxJ = Math.max(
+    ...plan.per_substrate_joules.map(s => s.joules),
+    plan.baseline_total_joules,
+    1e-30,
+  );
+  const aggBars = plan.per_substrate_joules.map(s => {
+    const pct = (s.joules / maxJ * 100).toFixed(2);
+    return `
+      <div>
+        <div class="flex items-baseline justify-between mb-1.5">
+          <span class="font-mono text-[12px] text-brand-light">${s.display}</span>
+          <span class="font-mono text-[11px] text-brand-amber">${fmtJoules(s.joules)} · ${s.op_count} op${s.op_count === 1 ? '' : 's'}</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill ${colorForSubstrate(s.substrate)}" style="width: ${pct}%"></div></div>
+      </div>`;
+  }).join('');
   const baselinePct = (plan.baseline_total_joules / maxJ * 100).toFixed(2);
   const aggregate = `
     <div class="glass-card p-7">
@@ -351,18 +560,18 @@ function renderPlan(plan) {
       </div>
     </div>`;
 
-  // ── per-invocation breakdown ─────────────────────────────────────────
+  // per-invocation cards
   const invs = plan.assignments.map(a => {
     const considered = a.considered.map(o => {
       const supportedTag = o.supported
         ? `<span class="text-brand-amber">${fmtJoules(o.joules_total)}</span>`
         : `<span class="text-brand-gray">— not supported</span>`;
-      const chosen = o.substrate === a.chosen_substrate
+      const chosenBadge = o.substrate === a.chosen_substrate
         ? `<span class="font-mono text-[10px] text-brand-amber bg-brand-amber/10 border border-brand-amber/30 px-1.5 py-0.5 rounded">CHOSEN</span>`
         : '';
       return `
         <div class="flex items-baseline justify-between py-1.5 border-b border-brand-border last:border-b-0">
-          <span class="font-mono text-[12px] text-brand-light flex items-center gap-2">${o.display} ${chosen}</span>
+          <span class="font-mono text-[12px] text-brand-light flex items-center gap-2">${o.display} ${chosenBadge}</span>
           <span class="font-mono text-[11px]">${supportedTag}</span>
         </div>`;
     }).join('');
@@ -371,21 +580,21 @@ function renderPlan(plan) {
       <div class="glass-card p-7">
         <div class="flex items-baseline justify-between mb-2 flex-wrap gap-3">
           <div>
-            <p class="font-mono text-[10px] text-brand-amber tracking-wider uppercase mb-1">primitive ${a.primitive_id} · ${a.family} · ${a.thermo}</p>
-            <h3 class="font-display text-2xl font-bold text-brand-white">${a.primitive_name}</h3>
+            <p class="font-mono text-[10px] text-brand-amber tracking-wider uppercase mb-1">${a.primitive_id} · ${a.family} · ${a.thermo} · ×${a.count}</p>
+            <h3 class="font-display text-xl font-bold text-brand-white">${a.primitive_name}</h3>
           </div>
           <div class="text-right">
             <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider">Dispatched to</p>
-            <p class="font-display text-lg font-bold text-brand-amber italic">${a.chosen_display}</p>
+            <p class="font-display text-base font-bold text-brand-amber italic">${a.chosen_display}</p>
           </div>
         </div>
         ${a.label ? `<p class="text-brand-gray text-sm mb-3">${a.label}</p>` : ''}
-        <p class="text-brand-light text-sm mb-5"><span class="text-brand-amber">→</span> ${a.justification}</p>
+        <p class="text-brand-light text-sm mb-4"><span class="text-brand-amber">→</span> ${a.justification}</p>
 
-        <p class="section-label mb-3">Considered set</p>
+        <p class="section-label mb-2 text-[10px]">Considered set</p>
         <div>${considered}</div>
 
-        <div class="grid grid-cols-3 gap-4 mt-5 pt-5 border-t border-brand-border">
+        <div class="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-brand-border">
           <div>
             <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">J / op</p>
             <p class="font-mono text-sm text-brand-white">${fmtJoules(a.chosen_cost.joules_per_op)}</p>
@@ -395,7 +604,7 @@ function renderPlan(plan) {
             <p class="font-mono text-sm text-brand-white">${fmtTime(a.chosen_cost.seconds_per_op)}</p>
           </div>
           <div>
-            <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">Accuracy loss</p>
+            <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">Acc loss</p>
             <p class="font-mono text-sm text-brand-white">${(a.chosen_cost.accuracy_loss * 100).toFixed(2)}%</p>
           </div>
         </div>
@@ -407,9 +616,12 @@ function renderPlan(plan) {
 
 $('dispatch-btn').addEventListener('click', dispatch);
 
-// Kick off one dispatch on page load so the visitor sees a result immediately.
+// ────────────────────────────────────────────────────────────────────
+// Auto-load: populate with the transformer-layer preset and dispatch.
+// ────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
-  // Probe /health first to confirm the server is up.
+  $('preset').value = 'transformer-layer';
+  setInvocations(preset('transformer-layer'));
   fetch(`${API_BASE}/health`).then(r => r.ok && dispatch()).catch(() => {});
 });
 </script>
