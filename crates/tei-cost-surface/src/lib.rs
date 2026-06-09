@@ -12,14 +12,39 @@
 //!     would cost to run everything on the CPU/GPU baseline),
 //!   - the per-substrate aggregate energy.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tei_d_in_memory::InMemoryParams;
+use tei_d_photonic::PhotonicParams;
 use tei_ir::{Constraints, Invocation, Workload};
 use tei_stack::Stack;
 use tei_substrate_traits::{Cost, Substrate};
 
 pub mod presets;
 pub use presets::{Preset, enumerate_presets};
+
+/// Engineering parameters for substrates that expose tunable knobs.
+/// Optional — missing fields fall back to dialect defaults.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct SubstrateParams {
+    #[serde(default)]
+    pub photonic: PhotonicParams,
+    #[serde(default)]
+    pub in_memory: InMemoryParams,
+}
+
+/// Build the default substrate set with custom engineering parameters for
+/// the dialects that expose them. The non-parameterized dialects (baseline,
+/// stochastic, reversible) construct with their literature defaults.
+pub fn substrates_with_params(stack: Arc<Stack>, params: &SubstrateParams) -> Vec<Arc<dyn Substrate>> {
+    vec![
+        Arc::new(tei_d_baseline::Baseline) as Arc<dyn Substrate>,
+        Arc::new(tei_d_photonic::Photonic::with_params(params.photonic.clone())) as Arc<dyn Substrate>,
+        Arc::new(tei_d_in_memory::InMemory::with_params(params.in_memory.clone())) as Arc<dyn Substrate>,
+        Arc::new(tei_d_stochastic::Stochastic) as Arc<dyn Substrate>,
+        Arc::new(tei_d_reversible::Reversible::new(stack)) as Arc<dyn Substrate>,
+    ]
+}
 
 /// One invocation's resolved assignment.
 #[derive(Debug, Clone, Serialize)]
@@ -246,8 +271,8 @@ pub fn summarize(
 pub fn default_substrates(stack: Arc<Stack>) -> Vec<Arc<dyn Substrate>> {
     vec![
         Arc::new(tei_d_baseline::Baseline) as Arc<dyn Substrate>,
-        Arc::new(tei_d_photonic::Photonic) as Arc<dyn Substrate>,
-        Arc::new(tei_d_in_memory::InMemory) as Arc<dyn Substrate>,
+        Arc::new(tei_d_photonic::Photonic::default()) as Arc<dyn Substrate>,
+        Arc::new(tei_d_in_memory::InMemory::default()) as Arc<dyn Substrate>,
         Arc::new(tei_d_stochastic::Stochastic) as Arc<dyn Substrate>,
         Arc::new(tei_d_reversible::Reversible::new(stack)) as Arc<dyn Substrate>,
     ]

@@ -11,3 +11,4 @@ description = "In-memory substrate dialect — RRAM / memristor crossbar MVM phy
 tei-stack.workspace = true
 tei-ir.workspace = true
 tei-substrate-traits.workspace = true
+serde.workspace = true

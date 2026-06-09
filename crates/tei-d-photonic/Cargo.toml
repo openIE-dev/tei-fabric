@@ -11,3 +11,4 @@ description = "Photonic substrate dialect — MZI mesh / silicon-photonic MAC ph
 tei-stack.workspace = true
 tei-ir.workspace = true
 tei-substrate-traits.workspace = true
+serde.workspace = true

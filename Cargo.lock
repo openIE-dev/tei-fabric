@@ -877,6 +877,7 @@ dependencies = [
 name = "tei-d-in-memory"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "tei-ir",
  "tei-stack",
  "tei-substrate-traits",
@@ -886,6 +887,7 @@ dependencies = [
 name = "tei-d-photonic"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "tei-ir",
  "tei-stack",
  "tei-substrate-traits",

@@ -34,31 +34,50 @@
 //!   - Bandyopadhyay et al. 2022, *Optica* 9: 1364 (energy-resolved photonic NN).
 //!   - Murmann ADC survey (2020-2024, ISSCC) — ADC FoM trends.
 
+use serde::{Deserialize, Serialize};
 use tei_ir::OpProfile;
 use tei_stack::Primitive;
 use tei_substrate_traits::{Cost, Substrate};
 
-/// Per-bit modulator energy, joules. Calibrated to TFLN; silicon-ring would be
-/// ~10×. Source: Wang et al. 2018, *Nature* 562.
-const MODULATOR_J_PER_BIT: f64 = 1.0e-15;
+/// Tunable engineering parameters for the photonic substrate.
+///
+/// Defaults match the literature anchor — TFLN modulators at 1 fJ/bit + 8-bit
+/// ADC at 1 pJ/sample, lands ~30 fJ/MAC at the system level. Users can sweep
+/// these to ask "what if my modulator were 10× more efficient?" or "what
+/// would 8× wavelength multiplexing buy me?"
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PhotonicParams {
+    /// Number of WDM (wavelength-division-multiplexed) channels carrying
+    /// parallel multiplies. Doubling N halves wall-clock per MAC.
+    pub wdm_channels: u32,
+    /// Per-bit modulator energy. TFLN ≈ 1 fJ/bit, silicon ring ≈ 10 fJ/bit.
+    pub modulator_j_per_bit: f64,
+    /// Per-sample ADC energy at the column output. 1 pJ for 8-bit; grows
+    /// roughly 2× per added bit at the same FoM (Murmann).
+    pub adc_j_per_sample: f64,
+    /// Wall-plug → coherent-optical conversion efficiency. 10% telecom DFB,
+    /// up to 30-50% with VCSEL arrays.
+    pub laser_efficiency: f64,
+    /// Per-MAC optical-power floor at the laser output. Bounds the energy
+    /// delivered to the mesh per multiply before electrical conversion.
+    pub optical_j_per_mac: f64,
+}
 
-/// Per-sample ADC energy at 8-bit precision, joules. From Murmann's ADC survey
-/// (FoM around 10 fJ/conversion-step at modest SNR; ~1 pJ for an 8-bit conv).
-const ADC_J_PER_SAMPLE: f64 = 1.0e-12;
-
-/// Wall-plug to coherent-optical conversion efficiency. Telecom DFB / ECL.
-const LASER_EFFICIENCY: f64 = 0.10;
-
-/// Per-MAC optical-power overhead at the laser output, joules. Captures the
-/// energy delivered to the mesh per multiply, before electrical conversion.
-/// Calibrated such that combined photonic-MAC system energy lands at
-/// ~30 fJ/MAC for a 64-row reduction at 8-bit precision (matches the published
-/// Lightmatter/Lightelligence benchmark range).
-const PHOTONIC_J_PER_MAC_OPTICAL: f64 = 0.5e-15;
+impl Default for PhotonicParams {
+    fn default() -> Self {
+        Self {
+            wdm_channels: 1,
+            modulator_j_per_bit: 1.0e-15,
+            adc_j_per_sample:    1.0e-12,
+            laser_efficiency:    0.10,
+            optical_j_per_mac:   0.5e-15,
+        }
+    }
+}
 
 /// Wall-clock per MAC at the system level. Photonic meshes naturally run at
 /// the modulator rate (10s of GHz); at the system level the ADC pipeline
-/// throttles to ~5-10 GS/s. We model 5 GS/s sustained.
+/// throttles to ~5-10 GS/s per channel.
 const PHOTONIC_OPS_PER_SEC: f64 = 5.0e9;
 
 /// Photonic substrates introduce a small SNR-bounded fidelity loss because
@@ -85,9 +104,14 @@ fn primitive_is_photonic_native(p: &Primitive) -> bool {
 }
 
 /// Photonic substrate — MZI mesh and ring-resonator weight banks.
-pub struct Photonic;
+#[derive(Default)]
+pub struct Photonic {
+    pub params: PhotonicParams,
+}
 
 impl Photonic {
+    pub fn with_params(params: PhotonicParams) -> Self { Self { params } }
+
     /// First-principles cost for a matmul-class primitive.
     ///
     /// Given `m × k × n` dense matmul with batch `B`:
@@ -95,21 +119,23 @@ impl Photonic {
     ///   - modulator events: 2 · operand-bits (one per input bit per MAC, lower
     ///     bound — real meshes amortize broadcast across columns)
     ///   - ADC samples:      `B · m · n` (one per result element)
+    ///
+    /// WDM channels divide the optical + ADC throughput but the per-energy
+    /// totals are largely the same (more lasers + more ADCs at lower duty cycle).
     fn matmul_energy(&self, profile: &OpProfile) -> Cost {
+        let p = &self.params;
         let macs = profile.matmul_macs().unwrap_or(1);
         let result_elems = (profile.shape.elements() as u64) * (profile.batch as u64);
         let operand_bits = profile.dtype.bits() as u64;
 
-        let optical_j = (macs as f64) * PHOTONIC_J_PER_MAC_OPTICAL / LASER_EFFICIENCY;
-        let modulator_j = 2.0 * (macs as f64) * (operand_bits as f64) * MODULATOR_J_PER_BIT;
-        let adc_j = (result_elems as f64) * ADC_J_PER_SAMPLE;
+        let optical_j   = (macs as f64) * p.optical_j_per_mac / p.laser_efficiency.max(0.01);
+        let modulator_j = 2.0 * (macs as f64) * (operand_bits as f64) * p.modulator_j_per_bit;
+        let adc_j       = (result_elems as f64) * p.adc_j_per_sample;
 
-        // joules_per_op is the cost of ONE invocation of this primitive
-        // (i.e. the full matmul), not joules-per-MAC.
         let joules_per_op = optical_j + modulator_j + adc_j;
-        // ADC pipeline is the system-throughput bottleneck; one sample per
-        // result element, throttled at PHOTONIC_OPS_PER_SEC.
-        let seconds_per_op = result_elems as f64 / PHOTONIC_OPS_PER_SEC;
+        // WDM channels parallelize the ADC pipeline, shrinking wall-clock.
+        let wdm = (p.wdm_channels.max(1)) as f64;
+        let seconds_per_op = result_elems as f64 / (PHOTONIC_OPS_PER_SEC * wdm);
 
         Cost {
             joules_per_op,
@@ -118,8 +144,6 @@ impl Photonic {
         }
     }
 
-    /// Default cost when profile data is missing — back-of-envelope per-MAC
-    /// number.
     fn default_cost(&self) -> Cost {
         Cost {
             joules_per_op: 30e-15,

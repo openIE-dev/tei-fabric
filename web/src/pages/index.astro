@@ -73,6 +73,59 @@ import Layout from '../layouts/Layout.astro';
         </p>
       </div>
 
+      <!-- engineering parameters (substrate knobs) -->
+      <div class="glass-card p-6">
+        <details>
+          <summary class="cursor-pointer flex items-center justify-between mb-1">
+            <span class="section-label">Engineering parameters</span>
+            <span class="font-mono text-[10px] text-brand-gray uppercase tracking-wider">substrate knobs &middot; what-if</span>
+          </summary>
+          <p class="text-brand-gray text-xs leading-relaxed mt-4 mb-4">
+            Tune the physics behind the photonic + in-memory substrates and re-dispatch. Defaults match the published shipping anchors; changes flow into the next DISPATCH only.
+          </p>
+
+          <p class="font-mono text-[10px] text-brand-violet tracking-wider uppercase mb-2">Photonic (MZI mesh)</p>
+          <div class="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">WDM channels</label>
+              <input id="p-wdm" type="number" value="1" min="1" max="64" />
+            </div>
+            <div>
+              <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">Modulator (fJ/bit)</label>
+              <input id="p-mod" type="number" step="0.1" value="1.0" min="0.01" max="100" />
+            </div>
+            <div>
+              <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">Laser η (%)</label>
+              <input id="p-laser" type="number" value="10" min="1" max="80" />
+            </div>
+            <div>
+              <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">ADC (pJ/sample)</label>
+              <input id="p-adc" type="number" step="0.1" value="1.0" min="0.01" max="50" />
+            </div>
+          </div>
+
+          <p class="font-mono text-[10px] text-brand-amber tracking-wider uppercase mb-2">In-memory (RRAM crossbar)</p>
+          <div class="grid grid-cols-2 gap-3 mb-2">
+            <div>
+              <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">Crossbar size</label>
+              <input id="m-size" type="number" value="256" min="16" max="4096" />
+            </div>
+            <div>
+              <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">Device (fJ/MAC)</label>
+              <input id="m-dev" type="number" step="0.1" value="1.0" min="0.01" max="100" />
+            </div>
+            <div>
+              <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">ADC (pJ/sample)</label>
+              <input id="m-adc" type="number" step="0.1" value="1.0" min="0.01" max="50" />
+            </div>
+            <div>
+              <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">DAC (fJ/bit)</label>
+              <input id="m-dac" type="number" step="0.1" value="1.0" min="0.01" max="100" />
+            </div>
+          </div>
+        </details>
+      </div>
+
       <!-- constraints + dispatch -->
       <div class="glass-card p-6">
         <p class="section-label mb-4">Constraints</p>
@@ -655,6 +708,24 @@ function renderSankey(plan) {
 }
 
 
+function buildSubstrateParams() {
+  return {
+    photonic: {
+      wdm_channels:        parseInt($('p-wdm').value, 10)  || 1,
+      modulator_j_per_bit: (parseFloat($('p-mod').value)   || 1.0) * 1e-15,
+      adc_j_per_sample:    (parseFloat($('p-adc').value)   || 1.0) * 1e-12,
+      laser_efficiency:    (parseFloat($('p-laser').value) || 10)  / 100,
+      optical_j_per_mac:   0.5e-15,
+    },
+    in_memory: {
+      crossbar_size:    parseInt($('m-size').value, 10)    || 256,
+      device_j_per_mac: (parseFloat($('m-dev').value)  || 1.0) * 1e-15,
+      dac_j_per_bit:    (parseFloat($('m-dac').value)  || 1.0) * 1e-15,
+      adc_j_per_sample: (parseFloat($('m-adc').value)  || 1.0) * 1e-12,
+    },
+  };
+}
+
 function buildInvocationPayload(inv) {
   const meta = PRIM_BY_ID[inv.primitive_id] || { kind: 'scalar' };
   let profile = { batch: inv.batch | 0, dtype: inv.dtype };
@@ -705,6 +776,7 @@ async function dispatch() {
       power_budget_w: parseFloat($('budget').value),
       volume: 10000,
     },
+    substrate_params: buildSubstrateParams(),
   };
 
   // Reset the results panel with three placeholder regions.

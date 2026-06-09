@@ -18,13 +18,13 @@ use axum::{
     routing::{get, post},
 };
 use futures::stream::Stream;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
 use tei_cost_surface::{
-    DispatchPlan, Preset, default_substrates, dispatch, dispatch_invocation,
-    enumerate_presets, summarize,
+    DispatchPlan, Preset, SubstrateParams, default_substrates, dispatch, dispatch_invocation,
+    enumerate_presets, substrates_with_params, summarize,
 };
 use tei_ir::Workload;
 use tei_stack::{Stack, StackData};
@@ -81,18 +81,38 @@ async fn list_substrates(State(state): State<AppState>) -> Json<Vec<SubstrateInf
     Json(infos)
 }
 
+/// Dispatch request wraps a Workload + optional substrate engineering
+/// parameters. The substrate_params field is `#[serde(flatten)]`-free so
+/// the JSON shape is `{...workload..., "substrate_params": {...}}`.
+#[derive(Deserialize)]
+struct DispatchRequest {
+    #[serde(flatten)]
+    workload: Workload,
+    #[serde(default)]
+    substrate_params: Option<SubstrateParams>,
+}
+
 async fn post_dispatch(
     State(state): State<AppState>,
-    Json(workload): Json<Workload>,
+    Json(req): Json<DispatchRequest>,
 ) -> Result<Json<DispatchPlan>, (StatusCode, String)> {
-    let plan = dispatch(&state.stack, &workload, &state.substrates);
+    let substrates_owned;
+    let substrates_ref: &[Arc<dyn Substrate>] = if let Some(p) = &req.substrate_params {
+        substrates_owned = substrates_with_params(state.stack.clone(), p);
+        &substrates_owned
+    } else {
+        &state.substrates
+    };
+    let plan = dispatch(&state.stack, &req.workload, substrates_ref);
     Ok(Json(plan))
 }
 
 async fn post_dispatch_stream(
     State(state): State<AppState>,
-    Json(workload): Json<Workload>,
+    Json(req): Json<DispatchRequest>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let workload = req.workload;
+    let custom_params = req.substrate_params;
     // Per-invocation event pacing. 30ms × ~50 invocations = ~1.5s of visible
     // dispatch — enough for the UI to render incrementally. Override via env
     // for stress tests.
@@ -101,8 +121,12 @@ async fn post_dispatch_stream(
         .and_then(|s| s.parse().ok())
         .unwrap_or(30);
 
-    let substrates = state.substrates.clone();
     let stack = state.stack.clone();
+    let substrates: Arc<Vec<Arc<dyn Substrate>>> = if let Some(p) = custom_params.as_ref() {
+        Arc::new(substrates_with_params(stack.clone(), p))
+    } else {
+        state.substrates.clone()
+    };
 
     let stream = async_stream::stream! {
         let started_payload = serde_json::json!({

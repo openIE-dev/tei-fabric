@@ -35,24 +35,46 @@
 //!   - Sandia CrossSim v3.0 documentation (2024).
 //!   - Murmann ADC survey 2020-2024.
 
+use serde::{Deserialize, Serialize};
 use tei_ir::OpProfile;
 use tei_stack::Primitive;
 use tei_substrate_traits::{Cost, Substrate};
 
-/// Crossbar device-level energy per MAC, joules.
-/// Source: CrossSim default-device library; Le Gallo et al. 2023.
-const CROSSBAR_J_PER_MAC: f64 = 1.0e-15;
+/// Tunable engineering parameters for the in-memory substrate.
+///
+/// Defaults match published shipping accelerators (NeuRRAM / HERMES / Mythic)
+/// at a ~256×256 crossbar with 1 fJ/MAC device + 1 pJ/sample ADC. Crossbar
+/// size is the biggest knob: larger arrays amortize the per-column ADC fixed
+/// cost across more multiplies.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct InMemoryParams {
+    /// Rows × columns. A k × n matmul on a `size × size` crossbar pays
+    /// `⌈k/size⌉ · ⌈n/size⌉` array activations, each with one ADC sample
+    /// per output column.
+    pub crossbar_size: u32,
+    /// Per-MAC device-level energy. 1 fJ for production RRAM, ~0.1 fJ for
+    /// emerging devices.
+    pub device_j_per_mac: f64,
+    /// DAC energy per input row bit.
+    pub dac_j_per_bit: f64,
+    /// ADC energy per output sample. Scales roughly 2× per added bit.
+    pub adc_j_per_sample: f64,
+}
 
-/// DAC energy per row bit, joules.
-const DAC_J_PER_BIT: f64 = 1.0e-15;
-
-/// ADC energy per output sample at 8-bit precision, joules. Murmann survey.
-const ADC_J_PER_SAMPLE: f64 = 1.0e-12;
+impl Default for InMemoryParams {
+    fn default() -> Self {
+        Self {
+            crossbar_size:    256,
+            device_j_per_mac: 1.0e-15,
+            dac_j_per_bit:    1.0e-15,
+            adc_j_per_sample: 1.0e-12,
+        }
+    }
+}
 
 /// Typical sustained MAC rate per crossbar at the system level, ops/s.
 /// Crossbars themselves are essentially instantaneous; the ADC pipeline
-/// throttles end-to-end throughput. ~1 GS/s per column with parallel columns
-/// gives a ~10 GMAC/s system rate.
+/// throttles end-to-end throughput.
 const IN_MEMORY_OPS_PER_SEC: f64 = 1.0e10;
 
 /// In-memory crossbars have device variability (G ~5-10% device-to-device,
@@ -74,31 +96,39 @@ fn primitive_is_crossbar_native(p: &Primitive) -> bool {
 }
 
 /// In-memory crossbar substrate.
-pub struct InMemory;
+#[derive(Default)]
+pub struct InMemory {
+    pub params: InMemoryParams,
+}
 
 impl InMemory {
+    pub fn with_params(params: InMemoryParams) -> Self { Self { params } }
+
     fn matmul_energy(&self, profile: &OpProfile) -> Cost {
+        let p = &self.params;
         let macs = profile.matmul_macs().unwrap_or(1) as f64;
         let result_elems = (profile.shape.elements() as u64) * (profile.batch as u64);
         let result_elems_f = result_elems as f64;
         let operand_bits = profile.dtype.bits() as f64;
         let k = profile.reduce_dim.unwrap_or(64) as f64;
+        let size = p.crossbar_size.max(1) as f64;
 
         // Device-level MAC current × pulse duration.
-        let crossbar_j = macs * CROSSBAR_J_PER_MAC;
+        let crossbar_j = macs * p.device_j_per_mac;
 
         // DAC: one event per row per cycle. Total row events ≈ macs/k.
-        let dac_j = (macs / k) * operand_bits * DAC_J_PER_BIT;
+        let dac_j = (macs / k) * operand_bits * p.dac_j_per_bit;
 
-        // ADC: one sample per output element. Amortized across k within
-        // the matmul.
-        let adc_j = result_elems_f * ADC_J_PER_SAMPLE;
+        // ADC: one sample per output element per crossbar tile. A k × n
+        // matmul on a `size × size` array uses ⌈k/size⌉ × ⌈n/size⌉ tile
+        // activations; each tile generates one ADC sample per output column.
+        // So total ADC samples = result_elems × ⌈k/size⌉. Larger crossbars
+        // amortize the per-column ADC across more multiplies.
+        let k_tiles = (k / size).ceil().max(1.0);
+        let adc_j = result_elems_f * k_tiles * p.adc_j_per_sample;
 
-        // joules_per_op = joules per full matmul invocation.
         let joules_per_op = crossbar_j + dac_j + adc_j;
-        // ADC pipeline throttles end-to-end throughput; one sample per
-        // result element.
-        let seconds_per_op = result_elems_f / IN_MEMORY_OPS_PER_SEC;
+        let seconds_per_op = result_elems_f * k_tiles / IN_MEMORY_OPS_PER_SEC;
 
         Cost {
             joules_per_op,
