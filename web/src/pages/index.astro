@@ -654,16 +654,6 @@ function renderSankey(plan) {
     </div>`;
 }
 
-function colorForSubstrate(name) {
-  switch (name) {
-    case 'baseline':   return 'cyan';
-    case 'photonic':   return 'violet';
-    case 'in-memory':  return '';      // amber default
-    case 'stochastic': return 'gold';
-    case 'reversible': return 'emerald';
-    default:           return '';
-  }
-}
 
 function buildInvocationPayload(inv) {
   const meta = PRIM_BY_ID[inv.primitive_id] || { kind: 'scalar' };
@@ -689,6 +679,10 @@ function buildInvocationPayload(inv) {
   };
 }
 
+// Collected during a streaming dispatch so the Sankey + headline can be
+// re-rendered once `complete` arrives.
+let streamState = null;
+
 async function dispatch() {
   if (state.invocations.length === 0) {
     $('results').innerHTML = `
@@ -713,14 +707,41 @@ async function dispatch() {
     },
   };
 
+  // Reset the results panel with three placeholder regions.
+  streamState = { assignments: [], total: 0, processed: 0 };
+  $('results').innerHTML = `
+    <div id="r-header"></div>
+    <div id="r-sankey"></div>
+    <div id="r-progress" class="glass-card p-5">
+      <div class="flex items-baseline justify-between">
+        <p class="section-label">Dispatch progress</p>
+        <p class="font-mono text-xs text-brand-amber" id="progress-count">0 / ?</p>
+      </div>
+      <div class="bar-track mt-3"><div class="bar-fill" id="progress-bar" style="width: 0%"></div></div>
+    </div>
+    <div id="r-invocations" class="space-y-5"></div>`;
+
   try {
-    const res = await fetch(`${API_BASE}/api/dispatch`, {
+    const res = await fetch(`${API_BASE}/api/dispatch/stream`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    renderPlan(await res.json());
+    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf('\n\n')) >= 0) {
+        const block = buf.slice(0, idx).trim();
+        buf = buf.slice(idx + 2);
+        if (block) handleSseBlock(block);
+      }
+    }
   } catch (e) {
     $('results').innerHTML = `
       <div class="glass-card p-8" style="border-color: rgba(239,68,68,0.3);">
@@ -734,89 +755,153 @@ async function dispatch() {
   }
 }
 
-function renderPlan(plan) {
-  const root = $('results');
-  const savings = plan.savings_factor;
-  const within = plan.within_budget;
+function handleSseBlock(block) {
+  let evt = 'message';
+  let dataLines = [];
+  for (const line of block.split('\n')) {
+    if (line.startsWith('event:')) evt = line.slice(6).trim();
+    else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+  }
+  if (dataLines.length === 0) return;
+  let payload;
+  try { payload = JSON.parse(dataLines.join('')); }
+  catch { return; }
+  if (evt === 'started')    onStreamStarted(payload);
+  else if (evt === 'invocation') onStreamInvocation(payload);
+  else if (evt === 'skipped')    onStreamSkipped(payload);
+  else if (evt === 'complete')   onStreamComplete(payload);
+}
 
-  // headline
-  const headline = `
+function onStreamStarted(p) {
+  if (!streamState) return;
+  streamState.total = p.total_invocations || 0;
+  $('progress-count').textContent = `0 / ${streamState.total}`;
+}
+
+function onStreamInvocation(p) {
+  if (!streamState) return;
+  const a = p.assignment;
+  streamState.assignments.push(a);
+  streamState.processed += 1;
+  const pct = streamState.total > 0 ? (streamState.processed / streamState.total * 100).toFixed(1) : 100;
+  $('progress-count').textContent = `${streamState.processed} / ${streamState.total}`;
+  $('progress-bar').style.width = `${pct}%`;
+
+  // Append an invocation card. `firstElementChild` is consumed by
+  // appendChild, so we capture it first.
+  const wrap = document.createElement('div');
+  wrap.innerHTML = renderInvocationCard(a);
+  const child = wrap.firstElementChild;
+  if (child) {
+    child.style.animation = 'fadeInUp 0.25s ease';
+    const host = $('r-invocations');
+    if (host) host.appendChild(child);
+  }
+}
+
+function onStreamSkipped(_p) {
+  if (!streamState) return;
+  streamState.processed += 1;
+  const pct = streamState.total > 0 ? (streamState.processed / streamState.total * 100).toFixed(1) : 100;
+  $('progress-count').textContent = `${streamState.processed} / ${streamState.total}`;
+  $('progress-bar').style.width = `${pct}%`;
+}
+
+function onStreamComplete(summary) {
+  // Render the header + Sankey now that we have totals.
+  $('r-header').innerHTML = renderHeaderFromSummary(summary);
+  $('r-sankey').innerHTML  = renderSankeyFromAssignmentsAndSummary(
+    streamState ? streamState.assignments : [], summary);
+  // Collapse progress card.
+  const prog = $('r-progress');
+  if (prog) {
+    prog.style.opacity = '0.4';
+    $('progress-bar').style.width = '100%';
+  }
+}
+
+function renderHeaderFromSummary(s) {
+  const within = s.within_budget;
+  return `
     <div class="glass-card p-8">
       <div class="grid md:grid-cols-3 gap-8">
         <div>
           <p class="section-label mb-3">Joules saved</p>
-          <p class="font-display text-5xl font-bold text-brand-amber italic">${savings.toFixed(0)}<span class="text-3xl">×</span></p>
+          <p class="font-display text-5xl font-bold text-brand-amber italic">${s.savings_factor.toFixed(0)}<span class="text-3xl">×</span></p>
           <p class="text-brand-gray text-xs font-mono mt-2 tracking-wider uppercase">vs CPU/GPU baseline</p>
         </div>
         <div>
           <p class="section-label mb-3">Power @ ${$('cps').value} Hz</p>
-          <p class="font-display text-4xl font-bold text-brand-white">${fmtPower(plan.power_w)}</p>
-          <p class="text-brand-gray text-xs font-mono mt-2 tracking-wider uppercase">baseline: ${fmtPower(plan.baseline_power_w)}</p>
+          <p class="font-display text-4xl font-bold text-brand-white">${fmtPower(s.power_w)}</p>
+          <p class="text-brand-gray text-xs font-mono mt-2 tracking-wider uppercase">baseline: ${fmtPower(s.baseline_power_w)}</p>
         </div>
         <div>
           <p class="section-label mb-3">Budget</p>
           <p class="font-display text-4xl font-bold ${within ? 'text-brand-cyan' : 'text-brand-amber'}">${within ? 'WITHIN' : 'OVER'}</p>
-          <p class="text-brand-gray text-xs font-mono mt-2 tracking-wider uppercase">limit ${fmtPower(plan.power_budget_w)}</p>
+          <p class="text-brand-gray text-xs font-mono mt-2 tracking-wider uppercase">limit ${fmtPower(s.power_budget_w)}</p>
         </div>
       </div>
     </div>`;
+}
 
-  // Sankey: primitives (grouped by name) → chosen substrates, flow width ∝ joules.
-  const aggregate = renderSankey(plan);
+function renderSankeyFromAssignmentsAndSummary(assignments, summary) {
+  // Reuse the existing renderSankey() — fake a "plan" object that has the
+  // shape it expects (assignments + summary fields).
+  return renderSankey({
+    assignments,
+    per_substrate_joules: summary.per_substrate_joules,
+    total_joules:         summary.total_joules,
+    baseline_total_joules: summary.baseline_total_joules,
+  });
+}
 
-  // per-invocation cards
-  const invs = plan.assignments.map(a => {
-    const considered = a.considered.map(o => {
-      const supportedTag = o.supported
-        ? `<span class="text-brand-amber">${fmtJoules(o.joules_total)}</span>`
-        : `<span class="text-brand-gray">— not supported</span>`;
-      const chosenBadge = o.substrate === a.chosen_substrate
-        ? `<span class="font-mono text-[10px] text-brand-amber bg-brand-amber/10 border border-brand-amber/30 px-1.5 py-0.5 rounded">CHOSEN</span>`
-        : '';
-      return `
-        <div class="flex items-baseline justify-between py-1.5 border-b border-brand-border last:border-b-0">
-          <span class="font-mono text-[12px] text-brand-light flex items-center gap-2">${o.display} ${chosenBadge}</span>
-          <span class="font-mono text-[11px]">${supportedTag}</span>
-        </div>`;
-    }).join('');
-
+function renderInvocationCard(a) {
+  const considered = a.considered.map(o => {
+    const supportedTag = o.supported
+      ? `<span class="text-brand-amber">${fmtJoules(o.joules_total)}</span>`
+      : `<span class="text-brand-gray">— not supported</span>`;
+    const chosenBadge = o.substrate === a.chosen_substrate
+      ? `<span class="font-mono text-[10px] text-brand-amber bg-brand-amber/10 border border-brand-amber/30 px-1.5 py-0.5 rounded">CHOSEN</span>`
+      : '';
     return `
-      <div class="glass-card p-7">
-        <div class="flex items-baseline justify-between mb-2 flex-wrap gap-3">
-          <div>
-            <p class="font-mono text-[10px] text-brand-amber tracking-wider uppercase mb-1">${a.primitive_id} · ${a.family} · ${a.thermo} · ×${a.count}</p>
-            <h3 class="font-display text-xl font-bold text-brand-white">${a.primitive_name}</h3>
-          </div>
-          <div class="text-right">
-            <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider">Dispatched to</p>
-            <p class="font-display text-base font-bold text-brand-amber italic">${a.chosen_display}</p>
-          </div>
-        </div>
-        ${a.label ? `<p class="text-brand-gray text-sm mb-3">${a.label}</p>` : ''}
-        <p class="text-brand-light text-sm mb-4"><span class="text-brand-amber">→</span> ${a.justification}</p>
-
-        <p class="section-label mb-2 text-[10px]">Considered set</p>
-        <div>${considered}</div>
-
-        <div class="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-brand-border">
-          <div>
-            <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">J / op</p>
-            <p class="font-mono text-sm text-brand-white">${fmtJoules(a.chosen_cost.joules_per_op)}</p>
-          </div>
-          <div>
-            <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">s / op</p>
-            <p class="font-mono text-sm text-brand-white">${fmtTime(a.chosen_cost.seconds_per_op)}</p>
-          </div>
-          <div>
-            <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">Acc loss</p>
-            <p class="font-mono text-sm text-brand-white">${(a.chosen_cost.accuracy_loss * 100).toFixed(2)}%</p>
-          </div>
-        </div>
+      <div class="flex items-baseline justify-between py-1.5 border-b border-brand-border last:border-b-0">
+        <span class="font-mono text-[12px] text-brand-light flex items-center gap-2">${o.display} ${chosenBadge}</span>
+        <span class="font-mono text-[11px]">${supportedTag}</span>
       </div>`;
   }).join('');
-
-  root.innerHTML = headline + aggregate + invs;
+  return `
+    <div class="glass-card p-7">
+      <div class="flex items-baseline justify-between mb-2 flex-wrap gap-3">
+        <div>
+          <p class="font-mono text-[10px] text-brand-amber tracking-wider uppercase mb-1">${a.primitive_id} · ${a.family} · ${a.thermo} · ×${a.count}</p>
+          <h3 class="font-display text-xl font-bold text-brand-white">${a.primitive_name}</h3>
+        </div>
+        <div class="text-right">
+          <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider">Dispatched to</p>
+          <p class="font-display text-base font-bold text-brand-amber italic">${a.chosen_display}</p>
+        </div>
+      </div>
+      ${a.label ? `<p class="text-brand-gray text-sm mb-3">${a.label}</p>` : ''}
+      <p class="text-brand-light text-sm mb-4"><span class="text-brand-amber">→</span> ${a.justification}</p>
+      <p class="section-label mb-2 text-[10px]">Considered set</p>
+      <div>${considered}</div>
+      <div class="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-brand-border">
+        <div>
+          <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">J / op</p>
+          <p class="font-mono text-sm text-brand-white">${fmtJoules(a.chosen_cost.joules_per_op)}</p>
+        </div>
+        <div>
+          <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">s / op</p>
+          <p class="font-mono text-sm text-brand-white">${fmtTime(a.chosen_cost.seconds_per_op)}</p>
+        </div>
+        <div>
+          <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">Acc loss</p>
+          <p class="font-mono text-sm text-brand-white">${(a.chosen_cost.accuracy_loss * 100).toFixed(2)}%</p>
+        </div>
+      </div>
+    </div>`;
 }
+
 
 $('dispatch-btn').addEventListener('click', dispatch);
 

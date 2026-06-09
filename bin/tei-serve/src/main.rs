@@ -14,12 +14,18 @@ use axum::{
     body::Bytes,
     extract::{DefaultBodyLimit, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, sse::{Event, KeepAlive, Sse}},
     routing::{get, post},
 };
+use futures::stream::Stream;
 use serde::Serialize;
+use std::convert::Infallible;
 use std::sync::Arc;
-use tei_cost_surface::{DispatchPlan, Preset, default_substrates, dispatch, enumerate_presets};
+use std::time::Duration;
+use tei_cost_surface::{
+    DispatchPlan, Preset, default_substrates, dispatch, dispatch_invocation,
+    enumerate_presets, summarize,
+};
 use tei_ir::Workload;
 use tei_stack::{Stack, StackData};
 use tei_substrate_traits::Substrate;
@@ -83,6 +89,65 @@ async fn post_dispatch(
     Ok(Json(plan))
 }
 
+async fn post_dispatch_stream(
+    State(state): State<AppState>,
+    Json(workload): Json<Workload>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    // Per-invocation event pacing. 30ms × ~50 invocations = ~1.5s of visible
+    // dispatch — enough for the UI to render incrementally. Override via env
+    // for stress tests.
+    let pace_ms: u64 = std::env::var("DISPATCH_STREAM_PACE_MS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(30);
+
+    let substrates = state.substrates.clone();
+    let stack = state.stack.clone();
+
+    let stream = async_stream::stream! {
+        let started_payload = serde_json::json!({
+            "goal": workload.goal,
+            "total_invocations": workload.invocations.len(),
+            "constraints": workload.constraints,
+        });
+        yield Ok(Event::default().event("started").data(started_payload.to_string()));
+
+        let mut assignments = Vec::with_capacity(workload.invocations.len());
+        for (idx, inv) in workload.invocations.iter().enumerate() {
+            if let Some(a) = dispatch_invocation(&stack, inv, &substrates) {
+                let payload = serde_json::json!({
+                    "index": idx,
+                    "total": workload.invocations.len(),
+                    "assignment": &a,
+                });
+                yield Ok(Event::default()
+                    .event("invocation")
+                    .data(payload.to_string()));
+                assignments.push(a);
+            } else {
+                let payload = serde_json::json!({
+                    "index": idx,
+                    "total": workload.invocations.len(),
+                    "skipped_primitive_id": inv.primitive_id,
+                });
+                yield Ok(Event::default()
+                    .event("skipped")
+                    .data(payload.to_string()));
+            }
+            if pace_ms > 0 {
+                tokio::time::sleep(Duration::from_millis(pace_ms)).await;
+            }
+        }
+
+        let summary = summarize(&workload.goal, &workload.constraints, &substrates, &assignments);
+        yield Ok(Event::default()
+            .event("complete")
+            .data(serde_json::to_string(&summary).unwrap_or_default()));
+    };
+
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
 async fn post_import_onnx(
     State(_state): State<AppState>,
     body: Bytes,
@@ -139,6 +204,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/substrates", get(list_substrates))
         .route("/api/presets", get(list_presets))
         .route("/api/dispatch", post(post_dispatch))
+        .route("/api/dispatch/stream", post(post_dispatch_stream))
         .route("/api/import/onnx", post(post_import_onnx))
         // ONNX models can be hundreds of MB — lift the default 2 MB body limit.
         .layer(DefaultBodyLimit::max(512 * 1024 * 1024))
