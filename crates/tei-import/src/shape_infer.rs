@@ -150,11 +150,34 @@ fn pool_out(node: &proto::NodeProto, shapes: &HashMap<String, Vec<i64>>) -> Opti
 }
 
 /// MatMul: contract last axis of A with second-to-last of B.
+///
+/// `FusedMatMul` (the tf2onnx contrib op `com.microsoft.FusedMatMul` /
+/// `MatMul_With_Transpose...`) carries `transA` / `transB` attributes that
+/// implicitly transpose the last two axes of the corresponding input before
+/// the matmul. BERT attention is exported as `FusedMatMul(Q, K, transB=1)`
+/// so we must honor the flag — otherwise the rank-4 attention output
+/// resolves to the wrong shape and propagates incorrectly through softmax,
+/// DQL, and the second matmul of the attention head.
 fn matmul_out(node: &proto::NodeProto, shapes: &HashMap<String, Vec<i64>>) -> Option<Vec<i64>> {
     if node.input.len() < 2 { return None; }
-    let a = get(shapes, &node.input[0])?;
-    let b = get(shapes, &node.input[1])?;
-    if a.len() < 2 || b.len() < 2 { return None; }
+    let a_raw = get(shapes, &node.input[0])?.clone();
+    let mut b = get(shapes, &node.input[1])?.clone();
+    if a_raw.len() < 2 || b.len() < 2 { return None; }
+
+    let mut a = a_raw;
+    if node.op_type == "FusedMatMul" {
+        let trans_a = attr_int(node, "transA").unwrap_or(0) != 0;
+        let trans_b = attr_int(node, "transB").unwrap_or(0) != 0;
+        if trans_a {
+            let n = a.len();
+            a.swap(n - 2, n - 1);
+        }
+        if trans_b {
+            let n = b.len();
+            b.swap(n - 2, n - 1);
+        }
+    }
+
     let mut out: Vec<i64> = Vec::new();
     // Broadcast batch dims (everything except the last 2 of each).
     let a_batch = &a[..a.len() - 2];
@@ -487,6 +510,55 @@ fn try_fold_const(
     }
 }
 
+/// OneHot: `output[i_1, …, i_R, j]` is 1 if `indices[i_1, …, i_R] == j`.
+/// Input 0: indices (any rank R). Input 1: depth (scalar). Input 2: values [2].
+/// Output rank = R + 1; depth inserted at `axis` (default -1).
+fn onehot_out(
+    node: &proto::NodeProto,
+    shapes: &HashMap<String, Vec<i64>>,
+    consts: &HashMap<String, Vec<i64>>,
+) -> Option<Vec<i64>> {
+    let idx = shapes.get(&node.input[0])?.clone();
+    let depth_const = consts.get(&node.input[1])?;
+    if depth_const.is_empty() { return None; }
+    let d = depth_const[0];
+    let axis_attr = attr_int(node, "axis").unwrap_or(-1);
+    let pos = if axis_attr < 0 {
+        (idx.len() as i64 + axis_attr + 1) as usize
+    } else {
+        axis_attr as usize
+    }.min(idx.len());
+    let mut out = idx;
+    out.insert(pos, d);
+    Some(out)
+}
+
+/// Where(cond, x, y): output is broadcast of all three. We pick the highest-
+/// rank input as a proxy for the broadcast shape.
+fn where_out(node: &proto::NodeProto, shapes: &HashMap<String, Vec<i64>>) -> Option<Vec<i64>> {
+    let mut best: Option<Vec<i64>> = None;
+    for i in node.input.iter() {
+        if let Some(s) = shapes.get(i) {
+            best = Some(match &best {
+                Some(prev) if prev.len() >= s.len() => prev.clone(),
+                _ => s.clone(),
+            });
+        }
+    }
+    best
+}
+
+/// Range: output is a 1-D tensor of length `ceil((limit - start) / delta)`.
+fn range_out(node: &proto::NodeProto, consts: &HashMap<String, Vec<i64>>) -> Option<Vec<i64>> {
+    if node.input.len() < 3 { return None; }
+    let start = consts.get(&node.input[0]).and_then(|v| v.first().copied())?;
+    let limit = consts.get(&node.input[1]).and_then(|v| v.first().copied())?;
+    let delta = consts.get(&node.input[2]).and_then(|v| v.first().copied())?;
+    if delta == 0 { return None; }
+    let n = ((limit - start + delta - 1) / delta).max(0);
+    Some(vec![n])
+}
+
 /// Fixed-point shape + constant propagation.
 ///
 /// Repeatedly walks the graph in node order, filling in missing output
@@ -603,12 +675,51 @@ fn propagate_pass(
                     }
                 })
             }
-            // Quantization ops — identity shape for the main output.
-            // DynamicQuantizeLinear produces three outputs (quantized,
-            // scale, zero_point); the first is identity-shape.
-            "DynamicQuantizeLinear" | "QuantizeLinear" | "DequantizeLinear" => {
+            // Quantization ops — identity shape for the main output (output[0]).
+            // DynamicQuantizeLinear additionally produces scale (output[1])
+            // and zero_point (output[2]) as scalars; record them here so
+            // downstream MatMulInteger's zero-point inputs don't show up as
+            // unresolved in diagnostics. (Not strictly required for shape
+            // inference — matmul_out only reads inputs[0..2].)
+            "DynamicQuantizeLinear" => {
+                let s = get(shapes, &node.input[0]).cloned();
+                // Output 1 (scale) — scalar.
+                if let Some(name) = node.output.get(1).filter(|n| !n.is_empty()) {
+                    if !shapes.contains_key(name.as_str()) {
+                        shapes.insert(name.clone(), vec![]);
+                    }
+                }
+                // Output 2 (zero_point) — scalar.
+                if let Some(name) = node.output.get(2).filter(|n| !n.is_empty()) {
+                    if !shapes.contains_key(name.as_str()) {
+                        shapes.insert(name.clone(), vec![]);
+                    }
+                }
+                s
+            }
+            "QuantizeLinear" | "DequantizeLinear" => {
                 get(shapes, &node.input[0]).cloned()
             }
+            // Data-dependent ops — the user's "Where / Equal style"
+            // round-3 coverage. These appear in attention masks, mask
+            // construction, dynamic range generation, OneHot-based
+            // embedding lookups.
+            "OneHot" => onehot_out(node, shapes, &consts),
+            "Where" => where_out(node, shapes),
+            "Equal" | "Less" | "LessOrEqual" | "Greater" | "GreaterOrEqual"
+            | "Not" | "And" | "Or" | "Xor"
+                if !node.input.is_empty() => {
+                    // Boolean output — same shape as the first input (or
+                    // higher-rank if available).
+                    let a = node.input.first().and_then(|n| get(shapes, n)).cloned();
+                    let b = node.input.get(1).and_then(|n| get(shapes, n)).cloned();
+                    match (a, b) {
+                        (Some(a), Some(b)) if b.len() > a.len() => Some(b),
+                        (Some(a), _) => Some(a),
+                        (None, b) => b,
+                    }
+                }
+            "Range" => range_out(node, &consts),
             "Expand" => {
                 // Output is the second input (a shape tensor).
                 if node.input.len() >= 2 {

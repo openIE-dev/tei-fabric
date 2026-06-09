@@ -127,19 +127,29 @@ fn coerce_dims(dims: &[i64]) -> Option<Vec<usize>> {
     Some(out)
 }
 
-/// Look up shapes for the inputs of a MatMul / Gemm node and derive (m, k, n).
+/// Look up shapes for the inputs of a MatMul / Gemm / FusedMatMul node and
+/// derive `(m, k, n)` for the equivalent dense matmul. For FusedMatMul the
+/// `transA` / `transB` attrs swap the last two axes of the respective input
+/// before contracting (tf2onnx exports BERT attention as FusedMatMul with
+/// `transB=1`).
 fn resolve_matmul(
     node: &proto::NodeProto,
     shapes: &HashMap<String, Vec<i64>>,
 ) -> Option<(usize, usize, usize)> {
     if node.input.len() < 2 { return None; }
-    let a = shapes.get(&node.input[0])?;
-    let b = shapes.get(&node.input[1])?;
-    let a = coerce_dims(a)?;
-    let b = coerce_dims(b)?;
+    let mut a = coerce_dims(shapes.get(&node.input[0])?)?;
+    let mut b = coerce_dims(shapes.get(&node.input[1])?)?;
     if a.len() < 2 || b.len() < 2 { return None; }
-    // For higher-rank tensors, the matmul is the last two axes; batch
-    // dimensions multiply on top. Collapse the batch dims into m.
+
+    if node.op_type == "FusedMatMul" {
+        let trans_a = node.attribute.iter().find(|x| x.name == "transA").map(|x| x.i).unwrap_or(0) != 0;
+        let trans_b = node.attribute.iter().find(|x| x.name == "transB").map(|x| x.i).unwrap_or(0) != 0;
+        if trans_a { let n = a.len(); a.swap(n - 2, n - 1); }
+        if trans_b { let n = b.len(); b.swap(n - 2, n - 1); }
+    }
+
+    // Higher-rank tensors: matmul contracts the last two axes; batch dimensions
+    // multiply on top. Collapse the batch dims into m.
     let batch_a: usize = a[..a.len() - 2].iter().product::<usize>().max(1);
     let m = batch_a * a[a.len() - 2];
     let k_a = a[a.len() - 1];
@@ -317,4 +327,18 @@ pub fn parse_onnx(bytes: &[u8]) -> Result<ImportReport, ImportError> {
 pub fn parse_onnx_file(path: &str) -> Result<ImportReport, ImportError> {
     let bytes = std::fs::read(path)?;
     parse_onnx(&bytes)
+}
+
+/// Debug helper: parse + return both the import report AND the final
+/// shape-inference map. Used by `examples/diag.rs` to find the highest
+/// unresolved node in a chain.
+#[doc(hidden)]
+pub fn parse_onnx_with_shapes(bytes: &[u8]) -> Result<(ImportReport, HashMap<String, Vec<i64>>), ImportError> {
+    use prost::Message;
+    let model = proto::ModelProto::decode(bytes)?;
+    let graph = model.graph.clone().ok_or(ImportError::NoGraph)?;
+    let mut shapes = build_shape_map(&graph);
+    shape_infer::propagate(&graph, &mut shapes);
+    let report = parse_onnx(bytes)?;
+    Ok((report, shapes))
 }
