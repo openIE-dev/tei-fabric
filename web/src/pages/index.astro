@@ -487,6 +487,173 @@ function fmtTime(s) {
   if (a >= 1e-9)  return (s * 1e9).toFixed(3) + ' ns';
   return s.toExponential(3) + ' s';
 }
+// Substrate hex colors (mirrors the bar-fill gradients).
+const SUBSTRATE_HEX = {
+  'baseline':   '#0ea5e9',
+  'photonic':   '#a78bfa',
+  'in-memory':  '#f59e0b',
+  'stochastic': '#fbbf24',
+  'reversible': '#34d399',
+};
+
+// Build the Sankey SVG. Source nodes = unique primitive_name; target nodes =
+// chosen substrates (with non-zero ops). One flow per (primitive, substrate)
+// pair. Width ∝ joules.
+function renderSankey(plan) {
+  if (plan.assignments.length === 0) {
+    return `<div class="glass-card p-6"><p class="section-label">No invocations</p></div>`;
+  }
+
+  // Aggregate flows.
+  const flowMap = new Map(); // key: "primName::substrate" → { primName, substrate, joules, ops }
+  const srcTotals = new Map(); // primName → joules
+  const dstTotals = new Map(); // substrate → joules
+  for (const a of plan.assignments) {
+    const key = `${a.primitive_name}::${a.chosen_substrate}`;
+    const f = flowMap.get(key) || { primName: a.primitive_name, substrate: a.chosen_substrate, display: a.chosen_display, joules: 0, ops: 0 };
+    f.joules += a.chosen_joules_total;
+    f.ops += a.count;
+    flowMap.set(key, f);
+    srcTotals.set(a.primitive_name, (srcTotals.get(a.primitive_name) || 0) + a.chosen_joules_total);
+    dstTotals.set(a.chosen_substrate, (dstTotals.get(a.chosen_substrate) || 0) + a.chosen_joules_total);
+  }
+  const flows = Array.from(flowMap.values());
+
+  // Sort sources by joules desc, then by name.
+  const sources = Array.from(srcTotals.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([name, joules]) => ({ name, joules }));
+  const destinations = Array.from(dstTotals.entries())
+    .map(([sub, joules]) => {
+      const f = flows.find(f => f.substrate === sub);
+      return { substrate: sub, display: f.display, joules };
+    })
+    .sort((a, b) => b.joules - a.joules);
+
+  const totalJ = plan.total_joules || 1e-30;
+  // Layout constants.
+  const W = 1100;                   // viewBox width (responsive via CSS)
+  const H = Math.max(280, sources.length * 36, destinations.length * 56);
+  const PADX = 24;
+  const NODE_W = 14;
+  const GAP = 6;                    // gap between nodes in a column
+  const labelOff = 12;
+  const colSrcX = PADX + 130;       // x of left node bar
+  const colDstX = W - PADX - 130 - NODE_W;
+
+  // Compute per-node heights with a min so tiny flows are still visible.
+  const minNodePx = 4;
+  const heightSum = Math.max(0, H - GAP * (sources.length - 1));
+  const srcScale = sources.length === 0 ? 0 : (() => {
+    const totalSrc = sources.reduce((s, n) => s + n.joules, 0) || 1;
+    return heightSum / totalSrc;
+  })();
+  const dstHeightSum = Math.max(0, H - GAP * (destinations.length - 1));
+  const dstScale = destinations.length === 0 ? 0 : (() => {
+    const totalDst = destinations.reduce((s, n) => s + n.joules, 0) || 1;
+    return dstHeightSum / totalDst;
+  })();
+
+  // Lay out sources.
+  let yCursor = 0;
+  const srcLayout = new Map(); // name → { y0, h, joules, used }
+  for (const n of sources) {
+    const h = Math.max(minNodePx, n.joules * srcScale);
+    srcLayout.set(n.name, { y0: yCursor, h, joules: n.joules, used: 0 });
+    yCursor += h + GAP;
+  }
+  yCursor = 0;
+  const dstLayout = new Map();
+  for (const d of destinations) {
+    const h = Math.max(minNodePx, d.joules * dstScale);
+    dstLayout.set(d.substrate, { y0: yCursor, h, joules: d.joules, used: 0, display: d.display });
+    yCursor += h + GAP;
+  }
+
+  // Sort flows so the largest go first (visually cleaner).
+  flows.sort((a, b) => b.joules - a.joules);
+
+  // Build SVG.
+  const paths = flows.map(f => {
+    const src = srcLayout.get(f.primName);
+    const dst = dstLayout.get(f.substrate);
+    if (!src || !dst) return '';
+    const fhSrc = Math.max(2, src.h * (f.joules / Math.max(src.joules, 1e-30)));
+    const fhDst = Math.max(2, dst.h * (f.joules / Math.max(dst.joules, 1e-30)));
+    const y1 = src.y0 + src.used + fhSrc / 2;
+    const y2 = dst.y0 + dst.used + fhDst / 2;
+    src.used += fhSrc;
+    dst.used += fhDst;
+    const x1 = colSrcX + NODE_W;
+    const x2 = colDstX;
+    const cx1 = x1 + (x2 - x1) * 0.5;
+    const cx2 = x1 + (x2 - x1) * 0.5;
+    const color = SUBSTRATE_HEX[f.substrate] || '#94a3b8';
+    const thickness = Math.max(fhSrc, fhDst);
+    return `<path d="M ${x1},${y1} C ${cx1},${y1} ${cx2},${y2} ${x2},${y2}"
+                  stroke="${color}" stroke-opacity="0.55" stroke-width="${thickness}"
+                  fill="none" stroke-linecap="butt">
+              <title>${f.primName} → ${f.display}: ${fmtJoules(f.joules)} (${f.ops} ops)</title>
+            </path>`;
+  }).join('');
+
+  // Source nodes + labels.
+  const srcNodes = sources.map(n => {
+    const ly = srcLayout.get(n.name);
+    const label = n.name.length > 22 ? n.name.slice(0, 20) + '…' : n.name;
+    return `
+      <g>
+        <rect x="${colSrcX}" y="${ly.y0}" width="${NODE_W}" height="${ly.h}" fill="#1e3a5f" rx="2" />
+        <text x="${colSrcX - labelOff}" y="${ly.y0 + ly.h / 2 + 4}" text-anchor="end"
+              font-family="var(--font-mono)" font-size="11" fill="#cbd5e1">${label}</text>
+        <text x="${colSrcX - labelOff}" y="${ly.y0 + ly.h / 2 + 16}" text-anchor="end"
+              font-family="var(--font-mono)" font-size="9" fill="#64748b">${fmtJoules(n.joules)}</text>
+        <title>${n.name}: ${fmtJoules(n.joules)}</title>
+      </g>`;
+  }).join('');
+
+  // Destination nodes + labels.
+  const dstNodes = destinations.map(d => {
+    const ly = dstLayout.get(d.substrate);
+    const color = SUBSTRATE_HEX[d.substrate] || '#94a3b8';
+    return `
+      <g>
+        <rect x="${colDstX}" y="${ly.y0}" width="${NODE_W}" height="${ly.h}" fill="${color}" rx="2" />
+        <text x="${colDstX + NODE_W + labelOff}" y="${ly.y0 + ly.h / 2 + 4}" text-anchor="start"
+              font-family="var(--font-mono)" font-size="12" fill="#cbd5e1">${d.display}</text>
+        <text x="${colDstX + NODE_W + labelOff}" y="${ly.y0 + ly.h / 2 + 18}" text-anchor="start"
+              font-family="var(--font-mono)" font-size="10" fill="#64748b">${fmtJoules(d.joules)}</text>
+        <title>${d.display}: ${fmtJoules(d.joules)}</title>
+      </g>`;
+  }).join('');
+
+  // Baseline reference: a slim ghost bar above the Sankey showing the
+  // total-on-baseline volume for visual comparison.
+  const baselineRatio = plan.baseline_total_joules / Math.max(totalJ, 1e-30);
+  const baselineNote = `
+    <div class="flex items-baseline justify-between mt-5 pt-4 border-t border-brand-border font-mono text-[11px]">
+      <span class="text-brand-gray tracking-wider uppercase">Baseline only (all ops on CPU/GPU)</span>
+      <span class="text-brand-gray">${fmtJoules(plan.baseline_total_joules)} · ${baselineRatio.toFixed(0)}× the dispatched plan</span>
+    </div>`;
+
+  return `
+    <div class="glass-card p-7">
+      <div class="flex items-baseline justify-between mb-4">
+        <p class="section-label">Cost surface · primitives → substrates</p>
+        <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider">flow width ∝ joules</p>
+      </div>
+      <svg viewBox="0 0 ${W} ${H + 20}" xmlns="http://www.w3.org/2000/svg"
+           class="w-full" style="max-height: 520px;" preserveAspectRatio="xMidYMid meet">
+        <g transform="translate(0, 10)">
+          ${paths}
+          ${srcNodes}
+          ${dstNodes}
+        </g>
+      </svg>
+      ${baselineNote}
+    </div>`;
+}
+
 function colorForSubstrate(name) {
   switch (name) {
     case 'baseline':   return 'cyan';
@@ -594,38 +761,8 @@ function renderPlan(plan) {
       </div>
     </div>`;
 
-  // per-substrate aggregate bars
-  const maxJ = Math.max(
-    ...plan.per_substrate_joules.map(s => s.joules),
-    plan.baseline_total_joules,
-    1e-30,
-  );
-  const aggBars = plan.per_substrate_joules.map(s => {
-    const pct = (s.joules / maxJ * 100).toFixed(2);
-    return `
-      <div>
-        <div class="flex items-baseline justify-between mb-1.5">
-          <span class="font-mono text-[12px] text-brand-light">${s.display}</span>
-          <span class="font-mono text-[11px] text-brand-amber">${fmtJoules(s.joules)} · ${s.op_count} op${s.op_count === 1 ? '' : 's'}</span>
-        </div>
-        <div class="bar-track"><div class="bar-fill ${colorForSubstrate(s.substrate)}" style="width: ${pct}%"></div></div>
-      </div>`;
-  }).join('');
-  const baselinePct = (plan.baseline_total_joules / maxJ * 100).toFixed(2);
-  const aggregate = `
-    <div class="glass-card p-7">
-      <p class="section-label mb-5">Cost surface · joules by substrate</p>
-      <div class="space-y-4">
-        ${aggBars}
-        <div class="pt-4 border-t border-brand-border">
-          <div class="flex items-baseline justify-between mb-1.5">
-            <span class="font-mono text-[12px] text-brand-gray uppercase tracking-wider">Baseline only (if dispatched everywhere)</span>
-            <span class="font-mono text-[11px] text-brand-gray">${fmtJoules(plan.baseline_total_joules)}</span>
-          </div>
-          <div class="bar-track"><div class="bar-fill cyan" style="width: ${baselinePct}%; opacity: 0.4;"></div></div>
-        </div>
-      </div>
-    </div>`;
+  // Sankey: primitives (grouped by name) → chosen substrates, flow width ∝ joules.
+  const aggregate = renderSankey(plan);
 
   // per-invocation cards
   const invs = plan.assignments.map(a => {
