@@ -210,7 +210,14 @@ import Layout from '../layouts/Layout.astro';
 <script is:inline>
 const API_BASE = (() => {
   const url = new URL(window.location.href);
-  return url.searchParams.get('api') || 'http://localhost:9651';
+  const override = url.searchParams.get('api');
+  if (override) return override;
+  // localhost dev: hit the Axum bin directly on 9651.
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+    return 'http://localhost:9651';
+  }
+  // Production: Caddy reverse-proxies /api/* and /health to the same origin.
+  return '';
 })();
 document.getElementById('api-base').textContent = API_BASE;
 
