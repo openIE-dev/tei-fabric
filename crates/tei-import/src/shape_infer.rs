@@ -401,30 +401,127 @@ fn slice_out(
     Some(out)
 }
 
-/// Fixed-point shape propagation.
+/// Fold an arithmetic / dataflow op on known-constant inputs, returning the
+/// computed output if every input was already a known constant. Lets us
+/// trace `Shape → Gather → Mul → Concat → Reshape` chains where the reshape
+/// target shape is computed from data the graph stamps as constants.
+fn try_fold_const(
+    node: &proto::NodeProto,
+    shapes: &HashMap<String, Vec<i64>>,
+    consts: &HashMap<String, Vec<i64>>,
+) -> Option<Vec<i64>> {
+    let get_c = |i: usize| node.input.get(i).and_then(|n| consts.get(n).cloned());
+    let binop = |op: fn(i64, i64) -> i64| -> Option<Vec<i64>> {
+        let a = get_c(0)?;
+        let b = get_c(1)?;
+        if a.len() == b.len() {
+            Some(a.iter().zip(b.iter()).map(|(&x, &y)| op(x, y)).collect())
+        } else if a.len() == 1 {
+            Some(b.iter().map(|&y| op(a[0], y)).collect())
+        } else if b.len() == 1 {
+            Some(a.iter().map(|&x| op(x, b[0])).collect())
+        } else {
+            None
+        }
+    };
+    match node.op_type.as_str() {
+        // Shape op: output value IS the input tensor's shape.
+        "Shape" => node.input.first().and_then(|n| shapes.get(n).cloned()),
+        // Identity, Cast — value flows through. (We're tracking int64 values
+        // only; casting to/from int32/64 preserves them at this resolution.)
+        "Identity" | "Cast" => get_c(0),
+        // Reshape, Squeeze, Unsqueeze, Flatten — for a 1-d constant vector
+        // the value list is preserved.
+        "Squeeze" | "Unsqueeze" | "Reshape" | "Flatten" => get_c(0),
+        // Elementwise binary.
+        "Add" => binop(|a, b| a + b),
+        "Sub" => binop(|a, b| a - b),
+        "Mul" => binop(|a, b| a * b),
+        "Div" => binop(|a, b| if b != 0 { a / b } else { 0 }),
+        "Min" => binop(|a, b| a.min(b)),
+        "Max" => binop(|a, b| a.max(b)),
+        // Concat of 1-d constants is straight concatenation.
+        "Concat" => {
+            let axis = attr_int(node, "axis").unwrap_or(0);
+            if axis != 0 && axis != -1 { return None; }
+            let mut out = Vec::new();
+            for input in &node.input {
+                let v = consts.get(input)?;
+                out.extend_from_slice(v);
+            }
+            Some(out)
+        }
+        // Gather on constants — for 1-D data, lookup by indices.
+        "Gather" => {
+            let data = get_c(0)?;
+            let idx = get_c(1)?;
+            let axis = attr_int(node, "axis").unwrap_or(0);
+            if axis != 0 { return None; }
+            let mut out = Vec::new();
+            for &i in &idx {
+                let ii = if i < 0 { i + data.len() as i64 } else { i };
+                if ii >= 0 && (ii as usize) < data.len() {
+                    out.push(data[ii as usize]);
+                }
+            }
+            Some(out)
+        }
+        // Slice on constants — same logic as shape_infer's slice_out but
+        // applied to the value list (since 1-D const + 1-D slice).
+        "Slice" => {
+            let data = get_c(0)?;
+            if node.input.len() < 3 { return None; }
+            let starts = get_c(1)?;
+            let ends = get_c(2)?;
+            if starts.len() != 1 || ends.len() != 1 { return None; }
+            let mut s = starts[0];
+            let mut e = ends[0];
+            let n = data.len() as i64;
+            if s < 0 { s += n; }
+            if e < 0 { e += n; }
+            s = s.clamp(0, n);
+            e = e.clamp(0, n);
+            Some(data[s as usize..e as usize].to_vec())
+        }
+        _ => None,
+    }
+}
+
+/// Fixed-point shape + constant propagation.
 ///
 /// Repeatedly walks the graph in node order, filling in missing output
-/// shapes from the rules below. Real-world ONNX graphs are usually
-/// topological but converters occasionally produce out-of-order nodes
-/// (e.g. tf2onnx). We iterate until no new shapes resolve in a pass,
-/// up to a cap so a malformed graph can't loop forever.
+/// shapes AND constant values from the rules below. Real-world ONNX graphs
+/// are usually topological but converters occasionally produce out-of-order
+/// nodes (e.g. tf2onnx); also some Reshape targets are computed from arith
+/// over input shapes, so a single pass can't resolve everything. We iterate
+/// until neither map grows, up to a cap so a malformed graph can't loop forever.
 pub fn propagate(g: &proto::GraphProto, shapes: &mut HashMap<String, Vec<i64>>) {
-    let consts = build_constants(g);
+    let mut consts = build_constants(g);
     let max_iters = 8;
     for _ in 0..max_iters {
-        let before = shapes.len();
-        propagate_pass(g, shapes, &consts);
-        if shapes.len() == before { break; }
+        let before = shapes.len() + consts.len();
+        propagate_pass(g, shapes, &mut consts);
+        if shapes.len() + consts.len() == before { break; }
     }
 }
 
 fn propagate_pass(
     g: &proto::GraphProto,
     shapes: &mut HashMap<String, Vec<i64>>,
-    consts: &HashMap<String, Vec<i64>>,
+    consts: &mut HashMap<String, Vec<i64>>,
 ) {
     for node in &g.node {
         if node.output.is_empty() || node.output[0].is_empty() { continue; }
+
+        // Constant folding — try every node, in case its inputs are known
+        // even when its shape rule isn't (e.g. Shape op outputs a constant
+        // before its shape gets recorded).
+        if !consts.contains_key(&node.output[0]) {
+            if let Some(v) = try_fold_const(node, shapes, consts) {
+                consts.insert(node.output[0].clone(), v);
+            }
+        }
+
         if shapes.contains_key(&node.output[0]) { continue; }
 
         let computed: Option<Vec<i64>> = match node.op_type.as_str() {
@@ -470,12 +567,12 @@ fn propagate_pass(
                     vec![pre.max(1), post.max(1)]
                 })
             }
-            "Reshape"   => reshape_out(node, shapes, &consts),
+            "Reshape"   => reshape_out(node, shapes, consts),
             "Transpose" => transpose_out(node, shapes),
-            "Squeeze"   => squeeze_out(node, shapes, &consts),
-            "Unsqueeze" => unsqueeze_out(node, shapes, &consts),
+            "Squeeze"   => squeeze_out(node, shapes, consts),
+            "Unsqueeze" => unsqueeze_out(node, shapes, consts),
             "Gather"    => gather_out(node, shapes),
-            "Slice"     => slice_out(node, shapes, &consts),
+            "Slice"     => slice_out(node, shapes, consts),
             // Reductive ops. Output = input shape with reduced axes either
             // removed or set to 1 (when keepdims=1, the ONNX default).
             "ReduceMean" | "ReduceSum" | "ReduceMax" | "ReduceMin"
@@ -485,7 +582,7 @@ fn propagate_pass(
                 x.map(|mut s| {
                     let keepdims = attr_int(node, "keepdims").unwrap_or(1) != 0;
                     let axes_raw: Vec<i64> = if node.input.len() >= 2 && !node.input[1].is_empty() {
-                        consts.get(&node.input[1]).cloned().unwrap_or_default()
+                        (*consts).get(&node.input[1]).cloned().unwrap_or_default()
                     } else {
                         attr_ints(node, "axes")
                     };
