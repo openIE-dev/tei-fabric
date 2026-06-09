@@ -984,6 +984,59 @@ function renderInvocationCard(a) {
 
 $('dispatch-btn').addEventListener('click', dispatch);
 
+// Live param sweep: when any engineering-parameter input changes, debounce
+// briefly then fire a non-streaming dispatch that updates only the header
+// + Sankey in place. The per-invocation cards don't change between
+// dispatches of the same workload, so leaving them alone gives smooth
+// morphing as the user drags a slider value.
+const LIVE_PARAM_IDS = ['p-wdm','p-mod','p-laser','p-adc','m-size','m-dev','m-adc','m-dac'];
+let liveTimer = null;
+async function liveDispatch() {
+  if (state.invocations.length === 0) return;
+  if (!$('r-header')) return;   // no result panel yet — full dispatch will populate it
+  const body = {
+    goal: `${state.invocations.length} invocations · live`,
+    invocations: state.invocations.map(buildInvocationPayload),
+    constraints: {
+      cycles_per_second: parseFloat($('cps').value),
+      power_budget_w: parseFloat($('budget').value),
+      volume: 10000,
+    },
+    substrate_params: buildSubstrateParams(),
+  };
+  try {
+    const res = await fetch(`${API_BASE}/api/dispatch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return;
+    const plan = await res.json();
+    // Build a summary subset and re-render header + Sankey only.
+    const summary = {
+      workload_goal: plan.workload_goal,
+      total_joules: plan.total_joules,
+      baseline_total_joules: plan.baseline_total_joules,
+      savings_factor: plan.savings_factor,
+      per_substrate_joules: plan.per_substrate_joules,
+      power_w: plan.power_w,
+      baseline_power_w: plan.baseline_power_w,
+      power_budget_w: plan.power_budget_w,
+      within_budget: plan.within_budget,
+    };
+    if ($('r-header')) $('r-header').innerHTML = renderHeaderFromSummary(summary);
+    if ($('r-sankey')) $('r-sankey').innerHTML  = renderSankeyFromAssignmentsAndSummary(plan.assignments, summary);
+  } catch (_) { /* silent — user sees stale numbers until next change */ }
+}
+for (const id of LIVE_PARAM_IDS) {
+  const el = document.getElementById(id);
+  if (!el) continue;
+  el.addEventListener('input', () => {
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(liveDispatch, 200);
+  });
+}
+
 // ────────────────────────────────────────────────────────────────────
 // ONNX import
 // ────────────────────────────────────────────────────────────────────

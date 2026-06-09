@@ -55,8 +55,9 @@ struct AppState {
 }
 
 /// Hard cap on total bytes any single upload can accumulate before we drop
-/// the buffer. 512 MB covers most ONNX models partners would import.
-const MAX_UPLOAD_BYTES: usize = 512 * 1024 * 1024;
+/// the buffer. 2.5 GB covers full Stable-Diffusion v1 UNets (~1.6 GB float)
+/// with headroom; SDXL UNets (~5 GB) still need a separate path.
+const MAX_UPLOAD_BYTES: usize = 2_560 * 1024 * 1024;
 /// Maximum concurrent active uploads. Bounds memory residency.
 const MAX_CONCURRENT_UPLOADS: usize = 16;
 /// Drop uploads that have been idle this long.
