@@ -987,20 +987,21 @@ $('dispatch-btn').addEventListener('click', dispatch);
 // ────────────────────────────────────────────────────────────────────
 // ONNX import
 // ────────────────────────────────────────────────────────────────────
+// Chunk size for the chunked-upload path. Cloudflare's free-plan request
+// body limit is 100 MB; staying at 8 MB per chunk keeps each request well
+// under that and gives the UI smooth per-chunk progress.
+const CHUNK_BYTES = 8 * 1024 * 1024;
+
 async function importOnnx(file) {
   const status = $('onnx-status');
   status.style.display = '';
-  status.textContent = `READING ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)…`;
+  const mb = (file.size / 1024 / 1024).toFixed(1);
+  status.textContent = `READING ${file.name} (${mb} MB)…`;
   try {
-    const bytes = await file.arrayBuffer();
-    status.textContent = `POSTING ${(bytes.byteLength / 1024 / 1024).toFixed(1)} MB to /api/import/onnx…`;
-    const res = await fetch(`${API_BASE}/api/import/onnx`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: bytes,
+    const report = await uploadChunked(file, (received, total) => {
+      const pct = (received / total * 100).toFixed(0);
+      status.textContent = `UPLOADING ${file.name} · chunk ${received}/${total} (${pct}%)`;
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status} — ${await res.text()}`);
-    const report = await res.json();
     // Convert the workload's invocations back to form state.
     const fromReport = report.workload.invocations.map((iv) => {
       const p = PRIM_BY_ID[iv.primitive_id] || { kind: 'scalar' };
@@ -1042,6 +1043,42 @@ $('onnx-file').addEventListener('change', (e) => {
   const file = e.target.files && e.target.files[0];
   if (file) importOnnx(file);
 });
+
+// Chunked upload to /api/import/onnx/chunk. Splits `file` into CHUNK_BYTES
+// pieces, POSTs each with X-Upload-Id + X-Chunk-Index + X-Chunk-Total
+// headers, and resolves with the final ImportReport when the server
+// returns { status: "done", report }. Calls `onProgress(received, total)`
+// after each chunk.
+async function uploadChunked(file, onProgress) {
+  const total = Math.max(1, Math.ceil(file.size / CHUNK_BYTES));
+  const upload_id = (crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
+  for (let i = 0; i < total; i++) {
+    const start = i * CHUNK_BYTES;
+    const end = Math.min(start + CHUNK_BYTES, file.size);
+    const chunk = file.slice(start, end);
+    const res = await fetch(`${API_BASE}/api/import/onnx/chunk`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Upload-Id': upload_id,
+        'X-Chunk-Index': String(i),
+        'X-Chunk-Total': String(total),
+      },
+      body: chunk,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`chunk ${i + 1}/${total} → HTTP ${res.status}${text ? ` — ${text}` : ''}`);
+    }
+    const json = await res.json();
+    if (onProgress) onProgress(i + 1, total);
+    if (json.status === 'done') return json.report;
+  }
+  throw new Error('upload finished but server never returned done');
+}
 
 // ────────────────────────────────────────────────────────────────────
 // Auto-load: populate with the transformer-layer preset and dispatch.

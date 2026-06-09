@@ -13,15 +13,16 @@ use axum::{
     Json, Router,
     body::Bytes,
     extract::{DefaultBodyLimit, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, sse::{Event, KeepAlive, Sse}},
     routing::{get, post},
 };
 use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap};
 use std::convert::Infallible;
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tei_cost_surface::{
     DispatchPlan, Preset, SubstrateParams, default_substrates, dispatch, dispatch_invocation,
     enumerate_presets, substrates_with_params, summarize,
@@ -32,11 +33,34 @@ use tei_substrate_traits::Substrate;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
+/// One pending chunked upload. Lives only until the final chunk arrives or
+/// the GC sweep drops it.
+struct UploadBuffer {
+    chunks: BTreeMap<u32, Bytes>,
+    total: u32,
+    received_bytes: usize,
+    started: Instant,
+}
+
+#[derive(Default)]
+struct UploadState {
+    map: Mutex<HashMap<String, UploadBuffer>>,
+}
+
 #[derive(Clone)]
 struct AppState {
     stack: Arc<Stack>,
     substrates: Arc<Vec<Arc<dyn Substrate>>>,
+    uploads: Arc<UploadState>,
 }
+
+/// Hard cap on total bytes any single upload can accumulate before we drop
+/// the buffer. 512 MB covers most ONNX models partners would import.
+const MAX_UPLOAD_BYTES: usize = 512 * 1024 * 1024;
+/// Maximum concurrent active uploads. Bounds memory residency.
+const MAX_CONCURRENT_UPLOADS: usize = 16;
+/// Drop uploads that have been idle this long.
+const UPLOAD_TTL: Duration = Duration::from_secs(15 * 60);
 
 #[derive(Serialize)]
 struct HealthResponse {
@@ -181,6 +205,109 @@ async fn post_import_onnx(
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("ONNX parse failed: {e}")))
 }
 
+/// Streaming chunk response. The server returns one of these per `POST
+/// /api/import/onnx/chunk` call: either `accepting` while more chunks are
+/// expected or `done` with the final ImportReport.
+#[derive(Serialize)]
+#[serde(tag = "status", rename_all = "lowercase")]
+enum ChunkResponse {
+    Accepting { received: u32, total: u32 },
+    Done { report: tei_import::ImportReport },
+}
+
+/// Chunked-upload ONNX import.
+///
+/// Clients split a large `.onnx` file into chunks (8 MB is a reasonable
+/// default) and POST each one to this endpoint. Headers carry the upload
+/// identity:
+///   X-Upload-Id     unique string per upload (uuid is fine)
+///   X-Chunk-Index   zero-based index
+///   X-Chunk-Total   total expected chunks
+///
+/// Body is the raw chunk bytes (`Content-Type: application/octet-stream`).
+///
+/// While chunks are still missing the response is `{ status: "accepting",
+/// received, total }`. When the last chunk arrives, the buffer is
+/// concatenated and parsed; the response is `{ status: "done", report }`.
+///
+/// Bounded by MAX_UPLOAD_BYTES and MAX_CONCURRENT_UPLOADS; idle uploads are
+/// dropped after UPLOAD_TTL.
+async fn post_import_onnx_chunk(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Json<ChunkResponse>, (StatusCode, String)> {
+    let hdr_str = |name: &str| -> Option<String> {
+        headers.get(name).and_then(|h| h.to_str().ok()).map(|s| s.to_string())
+    };
+    let hdr_u32 = |name: &str| hdr_str(name).and_then(|s| s.parse::<u32>().ok());
+
+    let upload_id = hdr_str("x-upload-id")
+        .ok_or((StatusCode::BAD_REQUEST, "missing X-Upload-Id header".into()))?;
+    let chunk_index = hdr_u32("x-chunk-index")
+        .ok_or((StatusCode::BAD_REQUEST, "missing/invalid X-Chunk-Index header".into()))?;
+    let chunk_total = hdr_u32("x-chunk-total")
+        .ok_or((StatusCode::BAD_REQUEST, "missing/invalid X-Chunk-Total header".into()))?;
+    if chunk_total == 0 || chunk_index >= chunk_total {
+        return Err((StatusCode::BAD_REQUEST, format!("bad chunk indexing: {chunk_index}/{chunk_total}")));
+    }
+
+    let body_len = body.len();
+    let full_bytes = {
+        let mut map = state.uploads.map.lock().unwrap();
+        // Sweep expired uploads.
+        let now = Instant::now();
+        map.retain(|_, b| now.duration_since(b.started) < UPLOAD_TTL);
+
+        if map.len() >= MAX_CONCURRENT_UPLOADS && !map.contains_key(&upload_id) {
+            return Err((StatusCode::TOO_MANY_REQUESTS,
+                format!("too many concurrent uploads ({MAX_CONCURRENT_UPLOADS} max); retry shortly")));
+        }
+
+        let buf = map.entry(upload_id.clone()).or_insert_with(|| UploadBuffer {
+            chunks: BTreeMap::new(),
+            total: chunk_total,
+            received_bytes: 0,
+            started: now,
+        });
+
+        if buf.total != chunk_total {
+            let prev_total = buf.total;
+            map.remove(&upload_id);
+            return Err((StatusCode::BAD_REQUEST,
+                format!("chunk_total disagreement: previous {prev_total} vs incoming {chunk_total}")));
+        }
+
+        // Accept the chunk (idempotent on re-send).
+        buf.received_bytes = buf.received_bytes.saturating_add(body_len);
+        if buf.received_bytes > MAX_UPLOAD_BYTES {
+            map.remove(&upload_id);
+            return Err((StatusCode::PAYLOAD_TOO_LARGE,
+                format!("upload exceeded server cap of {} MB", MAX_UPLOAD_BYTES / (1024 * 1024))));
+        }
+        buf.chunks.insert(chunk_index, body);
+
+        // Final chunk? Snapshot bytes + drop buffer; otherwise yield progress.
+        if (buf.chunks.len() as u32) == buf.total {
+            let mut full = Vec::with_capacity(buf.received_bytes);
+            for c in buf.chunks.values() { full.extend_from_slice(c); }
+            map.remove(&upload_id);
+            Some(full)
+        } else {
+            return Ok(Json(ChunkResponse::Accepting {
+                received: buf.chunks.len() as u32,
+                total: chunk_total,
+            }));
+        }
+    };
+
+    // We have the full file. Parse outside the lock.
+    let bytes = full_bytes.unwrap();
+    let report = tei_import::parse_onnx(&bytes)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("ONNX parse failed: {e}")))?;
+    Ok(Json(ChunkResponse::Done { report }))
+}
+
 async fn not_found() -> impl IntoResponse {
     (StatusCode::NOT_FOUND, "not found")
 }
@@ -215,7 +342,11 @@ async fn main() -> anyhow::Result<()> {
             .join(", ")
     );
 
-    let state = AppState { stack, substrates };
+    let state = AppState {
+        stack,
+        substrates,
+        uploads: Arc::new(UploadState::default()),
+    };
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -230,6 +361,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/dispatch", post(post_dispatch))
         .route("/api/dispatch/stream", post(post_dispatch_stream))
         .route("/api/import/onnx", post(post_import_onnx))
+        .route("/api/import/onnx/chunk", post(post_import_onnx_chunk))
         // ONNX models can be hundreds of MB — lift the default 2 MB body limit.
         .layer(DefaultBodyLimit::max(512 * 1024 * 1024))
         .fallback(not_found)
