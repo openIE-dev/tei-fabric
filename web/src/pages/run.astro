@@ -1,86 +1,42 @@
 ---
 import Layout from '../layouts/Layout.astro';
 ---
-<Layout title="Run" description="Execute a workload on a native substrate simulator and watch it happen — live Max-Cut annealing on the thrml-class stochastic column, in pure Rust.">
+<Layout title="Run" description="Execute a workload on any of the seven native substrate simulators and watch it happen — annealing, spiking, analog MVM, photonic meshes, CV quantum, adiabatic circuits, full-wave fields. Pure Rust.">
 
 <section class="max-w-5xl mx-auto px-6 pt-20 pb-10">
-  <p class="section-label mb-5">Execute &middot; the stochastic column</p>
+  <p class="section-label mb-5">Execute &middot; seven columns</p>
   <h1 class="font-display text-5xl md:text-6xl font-bold text-brand-white leading-[1.05] tracking-tight mb-6">
     Watch the substrate <span class="text-brand-amber italic">compute</span>.
   </h1>
   <p class="text-brand-light text-lg md:text-xl max-w-3xl leading-relaxed">
-    This is not a cost estimate — it&rsquo;s the computation itself. A Max-Cut instance is annealed by chromatic block Gibbs sampling on the thrml-class stochastic simulator, in pure Rust, streamed sweep by sweep. The event ledger it returns is what recalibrates the cost surface.
+    These are not cost estimates — they are the computations themselves, running in pure Rust and streamed event by event. Every column is validated against closed-form physics only: Onsager&rsquo;s critical temperature, the Clements decomposition, EPR correlations, the adiabatic ramp law. The event ledgers they return are what recalibrate the cost surface.
   </p>
 </section>
 
 <section class="max-w-7xl mx-auto px-6 pb-24">
-  <div class="grid lg:grid-cols-[380px_1fr] gap-6">
+  <!-- substrate picker -->
+  <div id="picker" class="flex flex-wrap gap-2 mb-6"></div>
 
+  <div class="grid lg:grid-cols-[380px_1fr] gap-6">
     <!-- controls -->
     <div class="glass-card p-6 self-start">
-      <p class="section-label mb-4">Problem</p>
-      <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Instance</label>
-      <select id="instance" class="mb-4">
-        <option value="random" selected>Random d-regular graph</option>
-        <option value="complete">Complete Kₙ (optimum = ⌊n²/4⌋)</option>
-        <option value="cycle">Cycle Cₙ (optimum known)</option>
-        <option value="petersen">Petersen graph (optimum = 12)</option>
-      </select>
-
-      <div class="grid grid-cols-2 gap-3 mb-4">
-        <div>
-          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Nodes</label>
-          <input id="nodes" type="number" value="400" min="4" max="20000" />
-        </div>
-        <div>
-          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Degree</label>
-          <input id="degree" type="number" value="4" min="2" max="16" />
-        </div>
-        <div>
-          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Sweeps</label>
-          <input id="sweeps" type="number" value="4000" min="100" max="200000" />
-        </div>
-        <div>
-          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Seed</label>
-          <input id="seed" type="number" value="42" min="0" />
-        </div>
-      </div>
-
-      <p class="section-label mb-3">Schedule</p>
-      <div class="grid grid-cols-2 gap-3 mb-5">
-        <div>
-          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">β start</label>
-          <input id="beta0" type="number" step="0.05" value="0.1" min="0.001" />
-        </div>
-        <div>
-          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">β end</label>
-          <input id="beta1" type="number" step="0.5" value="6" min="0.01" />
-        </div>
-      </div>
-
-      <button id="run-btn" class="primary w-full">ANNEAL →</button>
-
-      <div id="stats" class="mt-6 space-y-2 font-mono text-[12px] text-brand-light" style="display:none;">
-        <div class="flex justify-between"><span class="text-brand-gray">BEST CUT</span><span id="s-best" class="text-brand-amber font-bold"></span></div>
-        <div class="flex justify-between"><span class="text-brand-gray">KNOWN OPTIMUM</span><span id="s-opt"></span></div>
-        <div class="flex justify-between"><span class="text-brand-gray">EDGES</span><span id="s-edges"></span></div>
-        <div class="flex justify-between"><span class="text-brand-gray">SPIN UPDATES</span><span id="s-updates"></span></div>
-        <div class="flex justify-between"><span class="text-brand-gray">FLIPS</span><span id="s-flips"></span></div>
-        <div class="flex justify-between"><span class="text-brand-gray">WALL TIME</span><span id="s-wall"></span></div>
-        <div class="flex justify-between"><span class="text-brand-gray">UPDATE RATE</span><span id="s-rate" class="text-brand-cyan"></span></div>
-      </div>
+      <p class="section-label mb-1">Problem</p>
+      <p id="sub-blurb" class="text-brand-gray text-[13px] leading-relaxed mb-4"></p>
+      <div id="fields" class="grid grid-cols-2 gap-3 mb-5"></div>
+      <button id="run-btn" class="primary w-full">RUN →</button>
+      <div id="stats" class="mt-6 space-y-2 font-mono text-[12px] text-brand-light" style="display:none;"></div>
     </div>
 
-    <!-- live chart -->
+    <!-- live view -->
     <div class="glass-card p-6">
       <div class="flex items-baseline justify-between mb-4">
-        <p class="section-label">Cut value vs sweep &middot; live</p>
-        <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider">chromatic block gibbs &middot; pure rust</p>
+        <p class="section-label" id="viz-title">live</p>
+        <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider">pure rust &middot; sse</p>
       </div>
       <div class="relative aspect-[16/9]">
         <canvas id="chart" class="absolute inset-0 w-full h-full"></canvas>
       </div>
-      <p id="status-line" class="font-mono text-[11px] text-brand-gray tracking-wider uppercase mt-3 text-center">idle — configure and anneal</p>
+      <p id="status-line" class="font-mono text-[11px] text-brand-gray tracking-wider uppercase mt-3 text-center">idle — pick a column and run</p>
     </div>
   </div>
 </section>
@@ -93,179 +49,409 @@ const API_BASE = (() => {
   if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return 'http://localhost:9651';
   return '';
 })();
-
 function $(id) { return document.getElementById(id); }
 
-// ── canvas chart ──────────────────────────────────────────────────────
+const AMBER = '#F59E0B', CYAN = 'rgba(14,165,233,0.45)', GREEN = '#34d399', GRAY = '#64748B';
+
+// ── canvas helpers ────────────────────────────────────────────────────
 const canvas = $('chart');
 const ctx = canvas.getContext('2d');
-let points = [];      // {sweep, cut, best}
-let optimum = null;
-
+function dpr() { return devicePixelRatio || 1; }
 function resizeCanvas() {
   const r = canvas.getBoundingClientRect();
-  canvas.width = r.width * devicePixelRatio;
-  canvas.height = r.height * devicePixelRatio;
+  canvas.width = r.width * dpr(); canvas.height = r.height * dpr();
 }
-new ResizeObserver(() => { resizeCanvas(); draw(); }).observe(canvas);
+new ResizeObserver(() => { resizeCanvas(); redraw(); }).observe(canvas);
 
-function draw() {
-  const W = canvas.width, H = canvas.height;
+function frame(xMin, xMax, yMin, yMax, xLabel) {
+  const W = canvas.width, H = canvas.height, d = dpr();
+  const padL = 70 * d, padB = 34 * d, padT = 12 * d, padR = 16 * d;
   ctx.clearRect(0, 0, W, H);
-  if (points.length < 2) return;
-  const padL = 70 * devicePixelRatio, padB = 34 * devicePixelRatio,
-        padT = 12 * devicePixelRatio, padR = 16 * devicePixelRatio;
-  const xs = points.map(p => p.sweep);
-  const ys = points.flatMap(p => [p.cut, p.best]);
-  if (optimum != null) ys.push(optimum);
-  const xMin = xs[0], xMax = xs[xs.length - 1];
-  let yMin = Math.min(...ys), yMax = Math.max(...ys);
   if (yMax === yMin) { yMax += 1; yMin -= 1; }
-  const yPad = (yMax - yMin) * 0.06;
-  yMin -= yPad; yMax += yPad;
-  const px = s => padL + (s - xMin) / (xMax - xMin || 1) * (W - padL - padR);
-  const py = c => H - padB - (c - yMin) / (yMax - yMin) * (H - padT - padB);
-
-  ctx.strokeStyle = 'rgba(148,163,184,0.12)';
-  ctx.fillStyle = '#64748B';
-  ctx.font = `${11 * devicePixelRatio}px "JetBrains Mono", monospace`;
-  ctx.lineWidth = 1;
+  const yPad = (yMax - yMin) * 0.06; yMin -= yPad; yMax += yPad;
+  ctx.strokeStyle = 'rgba(148,163,184,0.12)'; ctx.fillStyle = GRAY;
+  ctx.font = `${11 * d}px "JetBrains Mono", monospace`; ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
-    const v = yMin + (yMax - yMin) * i / 4;
-    const y = py(v);
+    const v = yMin + (yMax - yMin) * i / 4, y = H - padB - (v - yMin) / (yMax - yMin) * (H - padT - padB);
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
-    ctx.fillText(v.toFixed(0), 8 * devicePixelRatio, y + 4 * devicePixelRatio);
+    ctx.fillText(Math.abs(v) >= 1000 ? v.toFixed(0) : v.toPrecision(3), 6 * d, y + 4 * d);
   }
-  ctx.fillText(`sweep ${xMax}`, W - 120 * devicePixelRatio, H - 10 * devicePixelRatio);
-
-  if (optimum != null) {
-    ctx.strokeStyle = 'rgba(52,211,153,0.8)';
-    ctx.setLineDash([6 * devicePixelRatio, 5 * devicePixelRatio]);
-    ctx.beginPath(); ctx.moveTo(padL, py(optimum)); ctx.lineTo(W - padR, py(optimum)); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = '#34d399';
-    ctx.fillText(`optimum ${optimum}`, padL + 8 * devicePixelRatio, py(optimum) - 6 * devicePixelRatio);
-  }
-
-  // instantaneous cut (faint cyan)
-  ctx.strokeStyle = 'rgba(14,165,233,0.45)';
-  ctx.lineWidth = 1.5 * devicePixelRatio;
-  ctx.beginPath();
-  points.forEach((p, i) => i ? ctx.lineTo(px(p.sweep), py(p.cut)) : ctx.moveTo(px(p.sweep), py(p.cut)));
-  ctx.stroke();
-
-  // best-so-far (amber, bold)
-  ctx.strokeStyle = '#F59E0B';
-  ctx.lineWidth = 2.5 * devicePixelRatio;
-  ctx.beginPath();
-  points.forEach((p, i) => i ? ctx.lineTo(px(p.sweep), py(p.best)) : ctx.moveTo(px(p.sweep), py(p.best)));
+  if (xLabel) ctx.fillText(xLabel, W - padR - ctx.measureText(xLabel).width, H - 10 * d);
+  return {
+    px: x => padL + (x - xMin) / (xMax - xMin || 1) * (W - padL - padR),
+    py: y => H - padB - (y - yMin) / (yMax - yMin) * (H - padT - padB),
+  };
+}
+function polyline(pts, px, py, color, width) {
+  ctx.strokeStyle = color; ctx.lineWidth = width * dpr(); ctx.beginPath();
+  pts.forEach((p, i) => i ? ctx.lineTo(px(p[0]), py(p[1])) : ctx.moveTo(px(p[0]), py(p[1])));
   ctx.stroke();
 }
 
-// ── run ───────────────────────────────────────────────────────────────
-function problemSpec() {
-  const n = parseInt($('nodes').value, 10);
-  switch ($('instance').value) {
-    case 'complete':  return { kind: 'complete', n: Math.min(n, 200) };
-    case 'cycle':     return { kind: 'cycle', n };
-    case 'petersen':  return { kind: 'petersen' };
-    default: return {
-      kind: 'random_regular', n,
-      degree: parseInt($('degree').value, 10),
-      seed: parseInt($('seed').value, 10),
-    };
+// ── per-substrate state ───────────────────────────────────────────────
+let view = { kind: 'idle' };   // what redraw() renders
+
+function redraw() {
+  const d = dpr();
+  if (view.kind === 'series') {
+    // generic line chart: view.series = [{pts, color, width}], optional hline
+    const all = view.series.flatMap(s => s.pts);
+    if (all.length < 2) { ctx.clearRect(0, 0, canvas.width, canvas.height); return; }
+    const xs = all.map(p => p[0]), ys = all.map(p => p[1]).concat(view.hline != null ? [view.hline] : []);
+    const f = frame(Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys), view.xLabel);
+    if (view.hline != null) {
+      ctx.strokeStyle = GREEN; ctx.setLineDash([6 * d, 5 * d]); ctx.beginPath();
+      ctx.moveTo(f.px(Math.min(...xs)), f.py(view.hline)); ctx.lineTo(f.px(Math.max(...xs)), f.py(view.hline));
+      ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = GREEN; ctx.fillText(view.hlineLabel || '', 80 * d, f.py(view.hline) - 6 * d);
+    }
+    view.series.forEach(s => polyline(s.pts, f.px, f.py, s.color, s.width));
+  } else if (view.kind === 'raster') {
+    const pts = view.pts; if (!pts.length) return;
+    const f = frame(0, view.tMax, 0, view.nMax, 'time (s)');
+    ctx.fillStyle = AMBER;
+    const r = Math.max(1, 1.2 * d);
+    for (const p of pts) { ctx.fillRect(f.px(p.t) - r / 2, f.py(p.neuron) - r / 2, r, r); }
+  } else if (view.kind === 'hist') {
+    const c = view.counts, n = c.length, lo = view.lo, hi = view.hi;
+    const yMax = Math.max(...c, ...(view.overlay || [0]));
+    const f = frame(lo, hi, 0, yMax, 'homodyne outcome x');
+    const bw = (hi - lo) / n;
+    ctx.fillStyle = 'rgba(245,158,11,0.55)';
+    for (let i = 0; i < n; i++) {
+      const x0 = f.px(lo + i * bw), x1 = f.px(lo + (i + 1) * bw), y = f.py(c[i]);
+      ctx.fillRect(x0 + 1, y, Math.max(1, x1 - x0 - 2), f.py(0) - y);
+    }
+    if (view.overlay) polyline(view.overlay.map((v, i) => [lo + (i + 0.5) * bw, v]), f.px, f.py, '#0ea5e9', 2);
+  } else if (view.kind === 'heatmap') {
+    const { nx, ny, ez } = view;
+    let amax = 1e-12; for (const v of ez) amax = Math.max(amax, Math.abs(v));
+    const off = new OffscreenCanvas(nx, ny), octx = off.getContext('2d');
+    const img = octx.createImageData(nx, ny);
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const v = ez[j * nx + i] / amax, k = 4 * ((ny - 1 - j) * nx + i);
+      // diverging: cyan (−) → near-black → amber (+)
+      if (v >= 0) { img.data[k] = 245 * v + 8; img.data[k+1] = 158 * v + 10; img.data[k+2] = 11 * v + 16; }
+      else { img.data[k] = 14 * -v + 8; img.data[k+1] = 165 * -v + 10; img.data[k+2] = 233 * -v + 16; }
+      img.data[k+3] = 255;
+    }
+    octx.putImageData(img, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = true;
+    const s = Math.min(canvas.width / nx, canvas.height / ny);
+    ctx.drawImage(off, (canvas.width - nx * s) / 2, (canvas.height - ny * s) / 2, nx * s, ny * s);
+  } else {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
+}
+
+// ── substrate definitions ─────────────────────────────────────────────
+// Each: blurb, viz title, fields, buildJob(v), onProgress(m), onResult(outputs, ledger)
+const SUBSTRATES = {
+  stochastic: {
+    label: 'STOCHASTIC', blurb: 'Max-Cut annealed by chromatic block Gibbs on a thrml-class Ising sampler. Amber = best-so-far, cyan = instantaneous.',
+    viz: 'cut value vs sweep · live',
+    fields: [
+      ['nodes', 'Nodes', 400], ['degree', 'Degree', 4],
+      ['sweeps', 'Sweeps', 4000], ['seed', 'Seed', 42],
+      ['beta0', 'β start', 0.1, 0.05], ['beta1', 'β end', 6, 0.5],
+    ],
+    buildJob: v => ({
+      substrate: 'stochastic',
+      problem: { kind: 'random_regular', n: v.nodes | 0, degree: v.degree | 0, seed: v.seed | 0 },
+      schedule: { sweeps: v.sweeps | 0, beta0: v.beta0, beta1: v.beta1, kind: 'geometric' },
+      seed: v.seed | 0,
+    }),
+    init() { this._cut = []; this._best = []; },
+    onProgress(m) {
+      if (m.cut == null) return;
+      this._cut.push([m.sweep, m.cut]); this._best.push([m.sweep, m.best_cut]);
+      view = { kind: 'series', xLabel: 'sweep', series: [
+        { pts: this._cut, color: CYAN, width: 1.5 }, { pts: this._best, color: AMBER, width: 2.5 }] };
+      redraw();
+      status(`sweep ${m.sweep} · cut ${m.cut.toFixed(0)} · best ${m.best_cut.toFixed(0)} · β ${m.beta.toFixed(2)}`);
+    },
+    onResult(o, l) {
+      return [['BEST CUT', fmt(o.best_cut), AMBER], ['EDGES', o.n_edges],
+        ['SPIN UPDATES', fmt(l.spin_updates)], ['FLIPS', fmt(l.flips)],
+        ['WALL', wall(l)], ['RATE', l.wall_seconds > 0 ? `${(l.spin_updates / l.wall_seconds / 1e6).toFixed(1)} M/s` : '—', '#0ea5e9']];
+    },
+  },
+
+  spiking: {
+    label: 'SPIKING', blurb: 'A recurrent LIF population under Poisson bombardment — Lava-class, exact exponential integrator. Each dot is one spike.',
+    viz: 'spike raster · first 2000 spikes',
+    fields: [
+      ['n', 'Neurons', 200], ['prob', 'Conn p', 0.1, 0.01],
+      ['weight', 'Syn w (mV)', 0.3, 0.05], ['rate', 'Poisson Hz', 8000],
+      ['duration', 'Duration s', 0.5, 0.1], ['seed', 'Seed', 7],
+    ],
+    buildJob: v => ({
+      substrate: 'spiking',
+      layers: [{ name: 'exc', n: v.n | 0, tau: 0.02, v_rest: 0, v_reset: 0, v_th: 20,
+        t_ref: 0.002, r: 1, i_ext: 0, poisson_rate: v.rate, poisson_weight: 0.5 }],
+      connections: [{ pre: 0, post: 0, probability: v.prob, weight: v.weight, delay: 3 }],
+      duration: v.duration, dt: 0.0001, seed: v.seed | 0,
+    }),
+    init() {},
+    onProgress(m) { if (m.t != null) status(`t ${m.t.toFixed(3)} s · ${fmt(m.total_spikes)} spikes · ${m.rate_hz.toFixed(1)} Hz`); },
+    onResult(o, l) {
+      const pts = o.raster_sample || [];
+      view = { kind: 'raster', pts, tMax: o.duration, nMax: o.n_neurons, };
+      redraw();
+      return [['MEAN RATE', `${o.mean_rate_hz.toFixed(1)} Hz`, AMBER], ['CV ISI', o.cv_isi?.toFixed(3)],
+        ['NEURONS', o.n_neurons], ['SYNAPSES', fmt(o.n_synapses)],
+        ['SPIKES', fmt(l.spikes)], ['SYN OPS', fmt(l.sops)], ['WALL', wall(l)]];
+    },
+  },
+
+  crossbar: {
+    label: 'CROSSBAR', blurb: 'Noisy analog matrix-vector multiply on a tiled memristive array — programming variability, read noise, DAC/ADC quantization. Live SNR as queries accumulate.',
+    viz: 'output snr vs query · live',
+    fields: [
+      ['rows', 'Rows', 256], ['cols', 'Cols', 256],
+      ['queries', 'Queries', 200], ['sigma', 'σ read', 0.01, 0.005],
+      ['bits', 'ADC bits', 8], ['seed', 'Seed', 3],
+    ],
+    buildJob: v => ({
+      substrate: 'crossbar', rows: v.rows | 0, cols: v.cols | 0, n_queries: v.queries | 0, seed: v.seed | 0,
+      device: { sigma_read: v.sigma, adc: { bits: v.bits | 0, range: Math.sqrt(v.rows / 9) * 6 } },
+    }),
+    init() { this._snr = []; },
+    onProgress(m) {
+      if (m.snr_db == null) return;
+      this._snr.push([m.query, m.snr_db]);
+      view = { kind: 'series', xLabel: 'query', series: [{ pts: this._snr, color: AMBER, width: 2.5 }] };
+      redraw();
+      status(`query ${m.query} · snr ${m.snr_db.toFixed(1)} dB · rms ${m.rms_error.toExponential(2)}`);
+    },
+    onResult(o, l) {
+      return [['SNR', `${o.snr_db.toFixed(1)} dB`, AMBER], ['RMS ERR', o.rms_error.toExponential(2)],
+        ['ARRAY', `${o.rows}×${o.cols} on ${o.array_size}`], ['MACS', fmt(l.macs)],
+        ['ADC SAMPLES', fmt(l.adc_samples)], ['WALL', wall(l)]];
+    },
+  },
+
+  photonic: {
+    label: 'PHOTONIC', blurb: 'A Haar-random unitary decomposed into a rectangular MZI mesh (Clements 2016 nulling), rebuilt, and driven with optical-power MVM queries. Live reconstruction fidelity.',
+    viz: 'mvm error vs query · live',
+    fields: [
+      ['n', 'Modes N', 8], ['queries', 'Queries', 50],
+      ['useed', 'Unitary seed', 11], ['seed', 'Seed', 5],
+    ],
+    buildJob: v => ({
+      substrate: 'photonic', n: v.n | 0, unitary: { kind: 'random_haar', seed: v.useed | 0 },
+      n_queries: v.queries | 0, seed: v.seed | 0,
+    }),
+    init() { this._err = []; },
+    onProgress(m) {
+      if (m.stage === 'decomposed') { status(`mesh: ${m.n_mzis} MZIs · recon err ${m.reconstruction_max_error.toExponential(1)}`); return; }
+      if (m.rms_error != null) {
+        this._err.push([m.queries_done, Math.log10(Math.max(m.rms_error, 1e-18))]);
+        view = { kind: 'series', xLabel: 'query (log₁₀ rms err)', series: [{ pts: this._err, color: AMBER, width: 2.5 }] };
+        redraw();
+        status(`query ${m.queries_done} · mvm rms 1e${Math.log10(Math.max(m.rms_error, 1e-18)).toFixed(1)}`);
+      }
+    },
+    onResult(o, l) {
+      if (o.error) { status(`error: ${o.error}`); return []; }
+      return [['RECON MAX ERR', o.reconstruction_max_error.toExponential(2), AMBER],
+        ['MVM RMS', o.mvm_rms_error.toExponential(2)], ['MZIs', o.n_mzis], ['PHASES', o.n_phases],
+        ['MACS', fmt(l.macs)], ['DETECTOR READS', fmt(l.adc_samples)], ['WALL', wall(l)]];
+    },
+  },
+
+  gaussian: {
+    label: 'GAUSSIAN', blurb: 'Two-mode squeezed vacuum — the EPR state — measured by homodyne, in the covariance-matrix formalism (ħ=2). Bars: 20k sampled shots. Cyan: the exact thermal marginal 𝒩(0, cosh 2r).',
+    viz: 'homodyne histogram · x quadrature, mode 0',
+    fields: [
+      ['r', 'Squeeze r', 1.0, 0.1], ['shots', 'Shots', 20000],
+      ['phi', 'Angle φ', 0, 0.1], ['seed', 'Seed', 4],
+    ],
+    buildJob: v => ({
+      substrate: 'gaussian', n_modes: 2,
+      circuit: [{ op: 'two_mode_squeeze', mode_a: 0, mode_b: 1, r: v.r }],
+      homodyne: { mode: 0, phi: v.phi, shots: v.shots | 0 }, seed: v.seed | 0,
+    }),
+    init() {},
+    onProgress(m) { if (m.shots_done != null) status(`${fmt(m.shots_done)} shots`); },
+    onResult(o, l) {
+      const h = o.homodyne;
+      if (h?.histogram) {
+        const { counts, lo, hi } = h.histogram, n = counts.length, bw = (hi - lo) / n;
+        const sig2 = h.marginal_variance, norm = h.shots * bw / Math.sqrt(2 * Math.PI * sig2);
+        const overlay = Array.from({ length: n }, (_, i) => {
+          const x = lo + (i + 0.5) * bw; return norm * Math.exp(-x * x / (2 * sig2));
+        });
+        view = { kind: 'hist', counts, lo, hi, overlay };
+        redraw();
+      }
+      const m0 = o.modes?.[0];
+      return [['⟨n⟩ MODE 0', m0?.mean_photons.toFixed(4), AMBER],
+        ['VAR (exact)', h?.marginal_variance.toFixed(4)], ['VAR (sampled)', h?.sample_variance.toFixed(4)],
+        ['PHYSICALITY', o.physicality_margin != null ? o.physicality_margin.toExponential(1) : (o.symplectic_min_nu != null ? (o.symplectic_min_nu - 1).toExponential(1) : '—')],
+        ['SHOTS', fmt(h?.shots)], ['WALL', wall(l)]];
+    },
+  },
+
+  circuit: {
+    label: 'CIRCUIT', blurb: 'A capacitor charged through a resistor by a linear ramp — the adiabatic-computing energy argument, run live. Slow the ramp and watch dissipation fall as (RC/T)·CV².',
+    viz: 'node voltages vs time · live',
+    fields: [
+      ['ratio', 'T / RC', 100], ['r', 'R (Ω)', 1000],
+      ['c', 'C (nF)', 100], ['v', 'V final', 1.0, 0.1],
+    ],
+    buildJob(v) {
+      const rc = v.r * v.c * 1e-9, T = v.ratio * rc;
+      this._pred = { adia: (rc / T) * (v.c * 1e-9) * v.v * v.v, abrupt: 0.5 * v.c * 1e-9 * v.v * v.v };
+      return {
+        substrate: 'circuit',
+        netlist: { elements: [
+          { kind: 'voltage_source', name: 'vclk', p: 1, n: 0, wave: { shape: 'ramp', v: v.v, t_ramp: T } },
+          { kind: 'resistor', name: 'r1', p: 1, n: 2, r: v.r },
+          { kind: 'capacitor', name: 'c1', p: 2, n: 0, c: v.c * 1e-9, ic: 0 },
+        ]},
+        t_stop: 2 * T, dt: Math.min(rc / 50, T / 2000),
+      };
+    },
+    init() {},
+    onProgress(m) { if (m.fraction != null || m.t != null) status(`simulating…`); },
+    onResult(o, l) {
+      if (o.error) { status(`error: ${o.error}`); return []; }
+      const series = (o.nodes || []).map((vs, k) => ({
+        pts: vs.map((y, i) => [o.t[i], y]), color: k === 0 ? CYAN : AMBER, width: k === 0 ? 1.5 : 2.5 }));
+      view = { kind: 'series', xLabel: 'time (s) · cyan=clock amber=cap', series };
+      redraw();
+      const er = o.element_energy_j?.r1;
+      return [['E DISSIPATED', `${er?.toExponential(3)} J`, AMBER],
+        ['(RC/T)CV² PRED', `${this._pred.adia.toExponential(3)} J`, GREEN],
+        ['ABRUPT ½CV²', `${this._pred.abrupt.toExponential(3)} J`],
+        ['SAVINGS', `${(this._pred.abrupt / er).toFixed(1)}×`, '#0ea5e9'],
+        ['TELLEGEN MAX', `${o.tellegen_max_w?.toExponential(1)} W`], ['STEPS', fmt(o.steps)], ['WALL', wall(l)]];
+    },
+  },
+
+  field: {
+    label: 'FIELD', blurb: 'A Gaussian pulse radiating across a 2D Yee FDTD grid into CPML absorbers, with an ε_r=4 dielectric slab on the right. The heatmap is the final Ez field — amber positive, cyan negative.',
+    viz: 'Ez field snapshot · final step',
+    fields: [
+      ['nx', 'Grid nx', 200], ['ny', 'Grid ny', 200],
+      ['steps', 'Steps', 360], ['slab', 'Slab ε_r', 4, 0.5],
+    ],
+    buildJob: v => ({
+      substrate: 'field', nx: v.nx | 0, ny: v.ny | 0, steps: v.steps | 0,
+      eps: { kind: 'slab', eps_r: v.slab, i0: Math.round(v.nx * 0.7), i1: Math.round(v.nx * 0.85) },
+      source: { shape: { shape: 'point', i: Math.round(v.nx * 0.35), j: Math.round(v.ny / 2) },
+        time: { type: 'gaussian', t0: 40, tau: 12 } },
+      probe: [Math.round(v.nx * 0.9), Math.round(v.ny / 2)],
+      snapshot: true,
+    }),
+    init() {},
+    onProgress(m) { if (m.step != null) status(`step ${m.step} · Ez(probe) ${m.ez_probe?.toExponential(2) ?? ''}`); },
+    onResult(o, l) {
+      if (o.snapshot?.ez) { view = { kind: 'heatmap', nx: o.snapshot.nx, ny: o.snapshot.ny, ez: o.snapshot.ez }; redraw(); }
+      return [['GRID', `${o.snapshot?.nx}×${o.snapshot?.ny}`], ['STEPS', fmt(o.steps)],
+        ['FIELD UPDATES', fmt(l.macs), AMBER], ['MONITOR READS', fmt(l.adc_samples)], ['WALL', wall(l)]];
+    },
+  },
+};
+
+// ── generic plumbing ──────────────────────────────────────────────────
+let active = 'stochastic';
+function fmt(x) { return x == null ? '—' : Number(x).toLocaleString(); }
+function wall(l) { const w = l.wall_seconds ?? 0; return w < 1 ? `${(w * 1000).toFixed(0)} ms` : `${w.toFixed(2)} s`; }
+function status(s) { $('status-line').textContent = s; }
+
+function renderPicker() {
+  $('picker').innerHTML = '';
+  for (const key of Object.keys(SUBSTRATES)) {
+    const b = document.createElement('button');
+    b.textContent = SUBSTRATES[key].label;
+    b.className = 'font-mono text-[11px] tracking-wider px-4 py-2 rounded-lg border transition-colors ' +
+      (key === active
+        ? 'border-brand-amber text-brand-amber bg-brand-amber/10'
+        : 'border-white/10 text-brand-gray hover:text-brand-light hover:border-white/25');
+    b.onclick = () => { active = key; renderPicker(); renderFields(); view = { kind: 'idle' }; redraw(); $('stats').style.display = 'none'; status('ready'); };
+    $('picker').appendChild(b);
+  }
+}
+
+function renderFields() {
+  const s = SUBSTRATES[active];
+  $('sub-blurb').textContent = s.blurb;
+  $('viz-title').textContent = s.viz;
+  $('fields').innerHTML = '';
+  for (const [id, label, value, step] of s.fields) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `<label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">${label}</label>
+      <input id="f-${id}" type="number" value="${value}" ${step ? `step="${step}"` : ''} />`;
+    $('fields').appendChild(wrap);
+  }
+}
+
+function values() {
+  const v = {};
+  for (const [id] of SUBSTRATES[active].fields) v[id] = parseFloat($(`f-${id}`).value);
+  return v;
 }
 
 async function run() {
+  const s = SUBSTRATES[active];
   const btn = $('run-btn');
-  btn.disabled = true; btn.textContent = 'ANNEALING…';
-  points = []; optimum = null; draw();
+  btn.disabled = true; btn.textContent = 'RUNNING…';
   $('stats').style.display = 'none';
-  $('status-line').textContent = 'connecting…';
-
-  const body = {
-    substrate: 'stochastic',
-    problem: problemSpec(),
-    schedule: {
-      sweeps: parseInt($('sweeps').value, 10),
-      beta0: parseFloat($('beta0').value),
-      beta1: parseFloat($('beta1').value),
-      kind: 'geometric',
-    },
-    seed: parseInt($('seed').value, 10),
-  };
-
+  view = { kind: 'idle' }; redraw();
+  s.init();
+  status('connecting…');
   try {
     const res = await fetch(`${API_BASE}/api/execute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(s.buildJob(values())),
     });
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
+    const reader = res.body.getReader(), dec = new TextDecoder();
     let buf = '';
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
       buf += dec.decode(value, { stream: true });
       let i;
-      while ((i = buf.indexOf('\n\n')) >= 0) {
-        handleBlock(buf.slice(0, i).trim());
-        buf = buf.slice(i + 2);
-      }
+      while ((i = buf.indexOf('\n\n')) >= 0) { handleBlock(buf.slice(0, i).trim(), s); buf = buf.slice(i + 2); }
     }
   } catch (e) {
-    $('status-line').textContent = `failed: ${e.message} — is tei-serve running?`;
+    status(`failed: ${e.message} — is tei-serve running?`);
   } finally {
-    btn.disabled = false; btn.textContent = 'ANNEAL →';
+    btn.disabled = false; btn.textContent = 'RUN →';
   }
 }
 
-function handleBlock(block) {
-  let evt = 'message';
-  const data = [];
+function handleBlock(block, s) {
+  let evt = 'message'; const data = [];
   for (const line of block.split('\n')) {
     if (line.startsWith('event:')) evt = line.slice(6).trim();
     else if (line.startsWith('data:')) data.push(line.slice(5).trim());
   }
   if (!data.length) return;
-  let payload;
-  try { payload = JSON.parse(data.join('')); } catch { return; }
-
-  if (evt === 'progress') {
-    const m = payload.metrics || {};
-    if (m.cut != null) {
-      points.push({ sweep: m.sweep, cut: m.cut, best: m.best_cut });
-      draw();
-      $('status-line').textContent =
-        `sweep ${m.sweep} · cut ${m.cut.toFixed(0)} · best ${m.best_cut.toFixed(0)} · β ${m.beta.toFixed(2)}`;
+  let payload; try { payload = JSON.parse(data.join('')); } catch { return; }
+  if (evt === 'progress') s.onProgress(payload.metrics || {});
+  else if (evt === 'result') {
+    const rows = s.onResult(payload.outputs || {}, payload.ledger || {}) || [];
+    const el = $('stats'); el.innerHTML = '';
+    for (const [k, v, color] of rows) {
+      const div = document.createElement('div');
+      div.className = 'flex justify-between';
+      div.innerHTML = `<span class="text-brand-gray">${k}</span><span${color ? ` style="color:${color}" class="font-bold"` : ''}>${v ?? '—'}</span>`;
+      el.appendChild(div);
     }
-  } else if (evt === 'result') {
-    const o = payload.outputs || {};
-    const l = payload.ledger || {};
-    optimum = o.known_optimum ?? null;
-    draw();
-    $('stats').style.display = '';
-    $('s-best').textContent = (o.best_cut ?? 0).toFixed(0)
-      + (optimum != null && o.best_cut >= optimum ? '  ✓ OPTIMUM' : '');
-    $('s-opt').textContent = optimum != null ? optimum.toFixed(0) : '— (open instance)';
-    $('s-edges').textContent = o.n_edges ?? '';
-    $('s-updates').textContent = (l.spin_updates ?? 0).toLocaleString();
-    $('s-flips').textContent = (l.flips ?? 0).toLocaleString();
-    const w = l.wall_seconds ?? 0;
-    $('s-wall').textContent = w < 1 ? `${(w * 1000).toFixed(0)} ms` : `${w.toFixed(2)} s`;
-    $('s-rate').textContent = w > 0
-      ? `${((l.spin_updates ?? 0) / w / 1e6).toFixed(1)} M updates/s`
-      : '—';
-    $('status-line').textContent = 'done';
+    el.style.display = '';
+    status('done');
   }
 }
 
 $('run-btn').addEventListener('click', run);
 window.addEventListener('DOMContentLoaded', () => {
-  resizeCanvas();
+  renderPicker(); renderFields(); resizeCanvas();
   fetch(`${API_BASE}/health`).then(r => r.ok && run()).catch(() => {});
 });
 </script>

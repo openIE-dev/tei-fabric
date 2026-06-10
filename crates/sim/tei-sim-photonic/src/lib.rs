@@ -179,6 +179,7 @@ impl Executor for PhotonicExecutor {
                     metrics: serde_json::json!({
                         "stage": "mvm",
                         "queries_done": q + 1,
+                        "rms_error": (sq_err_sum / ((q + 1) * n) as f64).sqrt(),
                     }),
                 });
             }
