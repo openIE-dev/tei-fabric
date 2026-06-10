@@ -48,7 +48,7 @@ use tei_substrate_traits::{Cost, K_T_LN2_300K, Substrate};
 /// floor for quasi-static and practical-speed adiabatic logic respectively.
 /// `1e3` is a defensible production-speed target for the L₀ kernel of any
 /// Bennett-decomposable primitive (DeBenedictis aa + Vaire prototypes).
-const REVERSIBLE_OVERHEAD_L0: f64 = 1.0e3;
+pub const REVERSIBLE_OVERHEAD_L0: f64 = 1.0e3;
 
 /// L₂ irreversible-projection overhead — same anchor as `tei-d-baseline`'s
 /// L₂ constant (Orin Nano-class CMOS at production density).

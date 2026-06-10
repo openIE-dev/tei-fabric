@@ -18,6 +18,7 @@ members = [
     "crates/sim/tei-sim-photonic",
     "crates/sim/tei-sim-gaussian",
     "crates/sim/tei-sim-circuit",
+    "crates/sim/tei-sim-adiabatic",
     "crates/sim/tei-sim-field",
     "crates/tei-import",
     "bin/tei-serve",
@@ -50,10 +51,12 @@ tei-sim-crossbar = { path = "crates/sim/tei-sim-crossbar" }
 tei-sim-photonic = { path = "crates/sim/tei-sim-photonic" }
 tei-sim-gaussian = { path = "crates/sim/tei-sim-gaussian" }
 tei-sim-circuit = { path = "crates/sim/tei-sim-circuit" }
+tei-sim-adiabatic = { path = "crates/sim/tei-sim-adiabatic" }
 tei-sim-field = { path = "crates/sim/tei-sim-field" }
 tei-import = { path = "crates/tei-import" }
 
 # External
+rayon = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"

@@ -44,12 +44,12 @@ use tei_stack::Primitive;
 use tei_substrate_traits::{Cost, Substrate};
 
 /// sMTJ per-sample energy, joules. Source: Camsari group + Extropic device modeling.
-const PBIT_J_PER_SAMPLE: f64 = 1.0e-15;
+pub const PBIT_J_PER_SAMPLE: f64 = 1.0e-15;
 
 /// Per-sweep coupling + readout overhead, joules. Dominated by the analog
 /// integration network and any ADC snapshots. Roughly one small ADC sample
 /// per sweep at the system level.
-const READOUT_J_PER_SWEEP: f64 = 1.0e-12;
+pub const READOUT_J_PER_SWEEP: f64 = 1.0e-12;
 
 /// Sustained sweep rate at the system level (sweeps per second).
 /// Stochastic substrates run sweep cycles at GHz rates per Camsari & Extropic

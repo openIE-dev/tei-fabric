@@ -36,6 +36,8 @@ use tei_substrate_traits::Substrate;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
+mod calib;
+
 /// One pending chunked upload. Lives only until the final chunk arrives or
 /// the GC sweep drops it.
 struct UploadBuffer {
@@ -212,26 +214,33 @@ enum ExecuteRequest {
     Gaussian(tei_sim_gaussian::GaussianJob),
     Circuit(tei_sim_circuit::CircuitJob),
     Field(tei_sim_field::FieldJob),
+    Adiabatic(tei_sim_adiabatic::AdiabaticJob),
 }
 
 /// Run one executor on the blocking thread, forwarding progress ticks and
-/// the final result over the SSE channel.
-fn run_streaming<E: tei_sim_core::exec::Executor>(
+/// the final result over the SSE channel. `calibrate` prices the measured
+/// ledger with the dialect's own constants (None for columns with no
+/// dialect counterpart).
+fn run_streaming<E, F>(
     exec: E,
     job: &E::Job,
     tx: &tokio::sync::mpsc::UnboundedSender<Event>,
-) {
+    calibrate: F,
+) where
+    E: tei_sim_core::exec::Executor,
+    F: FnOnce(&tei_sim_core::exec::ExecutionResult) -> Option<serde_json::Value>,
+{
     let tx_progress = tx.clone();
     let mut on_progress = move |p: tei_sim_core::exec::Progress| {
         let payload = serde_json::json!({ "fraction": p.fraction, "metrics": p.metrics });
         let _ = tx_progress.send(Event::default().event("progress").data(payload.to_string()));
     };
     let result = exec.execute(job, &mut on_progress);
-    let _ = tx.send(
-        Event::default()
-            .event("result")
-            .data(serde_json::to_string(&result).unwrap_or_default()),
-    );
+    let mut payload = serde_json::to_value(&result).unwrap_or_default();
+    if let Some(cal) = calibrate(&result) {
+        payload["calibration"] = cal;
+    }
+    let _ = tx.send(Event::default().event("result").data(payload.to_string()));
 }
 
 /// POST /api/execute — run a workload on a native simulator, streaming
@@ -239,33 +248,64 @@ fn run_streaming<E: tei_sim_core::exec::Executor>(
 /// The simulator runs on a blocking thread; progress crosses to the SSE
 /// stream over an unbounded channel.
 async fn post_execute(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(req): Json<ExecuteRequest>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Event>();
+    let stack = state.stack.clone();
+    let subs = state.substrates.clone();
 
     tokio::task::spawn_blocking(move || {
         let _ = tx.send(Event::default().event("started").data("{}"));
         match req {
             ExecuteRequest::Stochastic(job) => {
-                run_streaming(tei_sim_stochastic::StochasticExecutor, &job, &tx)
+                use tei_sim_stochastic::maxcut::ProblemSpec;
+                let variables = match &job.problem {
+                    ProblemSpec::Complete { n }
+                    | ProblemSpec::Cycle { n }
+                    | ProblemSpec::RandomRegular { n, .. } => *n,
+                    ProblemSpec::CompleteBipartite { a, b } => a + b,
+                    ProblemSpec::Petersen => 10,
+                };
+                let sweeps = job.schedule.sweeps;
+                run_streaming(tei_sim_stochastic::StochasticExecutor, &job, &tx, |r| {
+                    calib::stochastic(&stack, &subs, sweeps, variables, &r.ledger)
+                })
             }
             ExecuteRequest::Spiking(job) => {
-                run_streaming(tei_sim_spiking::SpikingExecutor, &job, &tx)
+                let neurons: u64 = job.layers.iter().map(|l| l.n as u64).sum();
+                let timesteps = (job.duration / job.dt).round() as u64;
+                run_streaming(tei_sim_spiking::SpikingExecutor, &job, &tx, |r| {
+                    let n_synapses = r.outputs.get("n_synapses").and_then(|v| v.as_u64())?;
+                    calib::spiking(&stack, &subs, neurons, timesteps, n_synapses, &r.ledger)
+                })
             }
             ExecuteRequest::Crossbar(job) => {
-                run_streaming(tei_sim_crossbar::CrossbarExecutor, &job, &tx)
+                let (rows, cols, n_queries) = (job.rows, job.cols, job.n_queries);
+                run_streaming(tei_sim_crossbar::CrossbarExecutor, &job, &tx, |r| {
+                    calib::crossbar(&stack, &subs, rows, cols, n_queries, &r.ledger)
+                })
             }
             ExecuteRequest::Photonic(job) => {
-                run_streaming(tei_sim_photonic::PhotonicExecutor, &job, &tx)
+                let (n, n_queries) = (job.n, job.n_queries);
+                run_streaming(tei_sim_photonic::PhotonicExecutor, &job, &tx, |r| {
+                    calib::photonic(&stack, &subs, n, n_queries, &r.ledger)
+                })
             }
             ExecuteRequest::Gaussian(job) => {
-                run_streaming(tei_sim_gaussian::GaussianExecutor, &job, &tx)
+                run_streaming(tei_sim_gaussian::GaussianExecutor, &job, &tx, |_| None)
             }
             ExecuteRequest::Circuit(job) => {
-                run_streaming(tei_sim_circuit::CircuitExecutor, &job, &tx)
+                run_streaming(tei_sim_circuit::CircuitExecutor, &job, &tx, |_| None)
             }
-            ExecuteRequest::Field(job) => run_streaming(tei_sim_field::FieldExecutor, &job, &tx),
+            ExecuteRequest::Field(job) => {
+                run_streaming(tei_sim_field::FieldExecutor, &job, &tx, |_| None)
+            }
+            ExecuteRequest::Adiabatic(job) => {
+                run_streaming(tei_sim_adiabatic::AdiabaticExecutor, &job, &tx, |r| {
+                    calib::adiabatic(&r.outputs)
+                })
+            }
         }
     });
 

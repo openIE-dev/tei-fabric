@@ -25,6 +25,12 @@ tei-sim-photonic.workspace = true
 tei-sim-gaussian.workspace = true
 tei-sim-circuit.workspace = true
 tei-sim-field.workspace = true
+tei-sim-adiabatic.workspace = true
+tei-d-stochastic.workspace = true
+tei-d-neuromorphic.workspace = true
+tei-d-in-memory.workspace = true
+tei-d-photonic.workspace = true
+tei-d-reversible.workspace = true
 
 tokio.workspace = true
 axum.workspace = true

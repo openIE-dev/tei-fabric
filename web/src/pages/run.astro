@@ -1,10 +1,10 @@
 ---
 import Layout from '../layouts/Layout.astro';
 ---
-<Layout title="Run" description="Execute a workload on any of the seven native substrate simulators and watch it happen — annealing, spiking, analog MVM, photonic meshes, CV quantum, adiabatic circuits, full-wave fields. Pure Rust.">
+<Layout title="Run" description="Execute a workload on any of the eight native substrate simulators and watch it happen — annealing, spiking, analog MVM, photonic meshes, CV quantum, adiabatic circuits, full-wave fields. Pure Rust.">
 
 <section class="max-w-5xl mx-auto px-6 pt-20 pb-10">
-  <p class="section-label mb-5">Execute &middot; seven columns</p>
+  <p class="section-label mb-5">Execute &middot; eight columns</p>
   <h1 class="font-display text-5xl md:text-6xl font-bold text-brand-white leading-[1.05] tracking-tight mb-6">
     Watch the substrate <span class="text-brand-amber italic">compute</span>.
   </h1>
@@ -294,6 +294,38 @@ const SUBSTRATES = {
     },
   },
 
+  adiabatic: {
+    label: 'ADIABATIC', blurb: 'A ramp-charged cell swept across T/RC, plotted as overhead above the Landauer floor. The green dashed line is the cost dialect’s assumed constant (10³×) — the sweep measures where on the curve that assumption actually lives.',
+    viz: 'overhead above landauer vs T/RC · log–log · live',
+    fields: [
+      ['r', 'R (Ω)', 1000], ['c', 'C (fF)', 1, 0.5],
+      ['v', 'V rail', 0.7, 0.1], ['points', 'Points', 13],
+    ],
+    buildJob(v) {
+      this._floor = 4 * 2.85e-21;
+      const n = Math.max(3, v.points | 0);
+      const ratios = Array.from({ length: n }, (_, i) => Math.pow(10, 3 * i / (n - 1)));
+      return { substrate: 'adiabatic', cell: { kind: 'ramp_charge', r_ohm: v.r, c_f: v.c * 1e-15, v: v.v }, ratios };
+    },
+    init() { this._pts = []; },
+    onProgress(m) {
+      if (m.ratio == null) return;
+      this._pts.push([Math.log10(m.ratio), Math.log10(m.e_diss_j / this._floor)]);
+      this._pts.sort((a, b) => a[0] - b[0]);
+      view = { kind: 'series', xLabel: 'log₁₀ T/RC · dashed = dialect’s assumed 10³',
+        hline: 3, hlineLabel: 'REVERSIBLE_OVERHEAD_L0 = 10³',
+        series: [{ pts: this._pts, color: AMBER, width: 2.5 }] };
+      redraw();
+      status(`T/RC ${m.ratio.toPrecision(3)} · overhead 10^${Math.log10(m.e_diss_j / this._floor).toFixed(2)}`);
+    },
+    onResult(o, l) {
+      if (o.error) { status(`error: ${o.error}`); return []; }
+      return [['LOG–LOG SLOPE', o.fitted_loglog_slope?.toFixed(3), AMBER],
+        ['ABRUPT ½CV²', `${o.abrupt_limit_j?.toExponential(2)} J`],
+        ['RC', `${o.params?.rc_s?.toExponential(2)} s`], ['WALL', wall(l)]];
+    },
+  },
+
   circuit: {
     label: 'CIRCUIT', blurb: 'A capacitor charged through a resistor by a linear ramp — the adiabatic-computing energy argument, run live. Slow the ramp and watch dissipation fall as (RC/T)·CV².',
     viz: 'node voltages vs time · live',
@@ -437,6 +469,19 @@ function handleBlock(block, s) {
   if (evt === 'progress') s.onProgress(payload.metrics || {});
   else if (evt === 'result') {
     const rows = s.onResult(payload.outputs || {}, payload.ledger || {}) || [];
+    const cal = payload.calibration;
+    if (cal && cal.estimated_j != null) {
+      rows.push(['— CALIBRATION —', '']);
+      rows.push(['EST (DIALECT)', `${cal.estimated_j.toExponential(2)} J`]);
+      rows.push(['MEASURED (LEDGER)', `${cal.measured_j.toExponential(2)} J`, AMBER]);
+      if (cal.measured_over_estimated != null)
+        rows.push(['MEASURED / EST', cal.measured_over_estimated.toFixed(3), GREEN]);
+      const d = cal.details || {};
+      if (d.measured_activity != null)
+        rows.push(['ACTIVITY ASSUMED→MEAS', `${d.assumed_activity} → ${d.measured_activity.toFixed(3)}`]);
+      if (d.crossover_t_over_rc != null)
+        rows.push(['10³ CROSSOVER AT T/RC', d.crossover_t_over_rc.toFixed(1), GREEN]);
+    }
     const el = $('stats'); el.innerHTML = '';
     for (const [k, v, color] of rows) {
       const div = document.createElement('div');

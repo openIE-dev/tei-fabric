@@ -78,7 +78,7 @@ const TIMESTEPS_PER_SEC: f64 = 1.0e4;
 
 /// Typical SNN activity factor substituted when the workload leaves
 /// `sparsity` at the dense default.
-const DEFAULT_ACTIVITY: f64 = 0.1;
+pub const DEFAULT_ACTIVITY: f64 = 0.1;
 
 /// Catalog primitive ID for STDP (NEURO family) — the only primitive that
 /// pays the plasticity term. LIF (id 50) and future NEURO additions route
