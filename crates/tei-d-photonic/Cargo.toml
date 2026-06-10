@@ -12,3 +12,6 @@ tei-stack.workspace = true
 tei-ir.workspace = true
 tei-substrate-traits.workspace = true
 serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

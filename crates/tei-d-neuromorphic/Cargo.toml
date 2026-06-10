@@ -1,16 +1,17 @@
 [package]
-name = "tei-d-baseline"
+name = "tei-d-neuromorphic"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Baseline substrate dialect — modern CPU / GPU joule model anchored to measured silicon."
+description = "Neuromorphic substrate dialect — LIF spike-event physics calibrated to Loihi / TrueNorth-class silicon."
 
 [dependencies]
 tei-stack.workspace = true
 tei-ir.workspace = true
 tei-substrate-traits.workspace = true
+serde.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

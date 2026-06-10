@@ -53,16 +53,16 @@ pub struct ImportReport {
 /// Codes per the ONNX spec (TensorProto.DataType enum).
 fn map_dtype(code: i32) -> Dtype {
     match code {
-        1 => Dtype::F32,    // FLOAT
-        2 => Dtype::I8,     // UINT8 — collapse to i8
-        3 => Dtype::I8,     // INT8
-        4 => Dtype::I16,    // UINT16 — collapse to i16
-        5 => Dtype::I16,    // INT16
-        6 => Dtype::I32,    // INT32
-        7 => Dtype::I32,    // INT64 — best we have is i32
-        10 => Dtype::F16,   // FLOAT16
-        11 => Dtype::F64,   // DOUBLE
-        16 => Dtype::Bf16,  // BFLOAT16
+        1 => Dtype::F32,   // FLOAT
+        2 => Dtype::I8,    // UINT8 — collapse to i8
+        3 => Dtype::I8,    // INT8
+        4 => Dtype::I16,   // UINT16 — collapse to i16
+        5 => Dtype::I16,   // INT16
+        6 => Dtype::I32,   // INT32
+        7 => Dtype::I32,   // INT64 — best we have is i32
+        10 => Dtype::F16,  // FLOAT16
+        11 => Dtype::F64,  // DOUBLE
+        16 => Dtype::Bf16, // BFLOAT16
         _ => Dtype::F32,
     }
 }
@@ -74,10 +74,14 @@ fn build_shape_map(g: &proto::GraphProto) -> HashMap<String, Vec<i64>> {
 
     let from_value_info = |vi: &proto::ValueInfoProto| -> Option<(String, Vec<i64>)> {
         let name = vi.name.clone();
-        if name.is_empty() { return None; }
+        if name.is_empty() {
+            return None;
+        }
         let tensor_type = vi.r#type.as_ref()?.tensor_type.as_ref()?;
         let shape = tensor_type.shape.as_ref()?;
-        let dims: Vec<i64> = shape.dim.iter()
+        let dims: Vec<i64> = shape
+            .dim
+            .iter()
             .map(|d| {
                 if d.dim_value > 0 {
                     d.dim_value
@@ -98,9 +102,21 @@ fn build_shape_map(g: &proto::GraphProto) -> HashMap<String, Vec<i64>> {
         Some((name, dims))
     };
 
-    for vi in &g.input        { if let Some((n, d)) = from_value_info(vi) { shapes.insert(n, d); } }
-    for vi in &g.output       { if let Some((n, d)) = from_value_info(vi) { shapes.insert(n, d); } }
-    for vi in &g.value_info   { if let Some((n, d)) = from_value_info(vi) { shapes.insert(n, d); } }
+    for vi in &g.input {
+        if let Some((n, d)) = from_value_info(vi) {
+            shapes.insert(n, d);
+        }
+    }
+    for vi in &g.output {
+        if let Some((n, d)) = from_value_info(vi) {
+            shapes.insert(n, d);
+        }
+    }
+    for vi in &g.value_info {
+        if let Some((n, d)) = from_value_info(vi) {
+            shapes.insert(n, d);
+        }
+    }
     // Initializers (model weights) — their dims are authoritative.
     for t in &g.initializer {
         if !t.name.is_empty() {
@@ -136,16 +152,38 @@ fn resolve_matmul(
     node: &proto::NodeProto,
     shapes: &HashMap<String, Vec<i64>>,
 ) -> Option<(usize, usize, usize)> {
-    if node.input.len() < 2 { return None; }
+    if node.input.len() < 2 {
+        return None;
+    }
     let mut a = coerce_dims(shapes.get(&node.input[0])?)?;
     let mut b = coerce_dims(shapes.get(&node.input[1])?)?;
-    if a.len() < 2 || b.len() < 2 { return None; }
+    if a.len() < 2 || b.len() < 2 {
+        return None;
+    }
 
     if node.op_type == "FusedMatMul" {
-        let trans_a = node.attribute.iter().find(|x| x.name == "transA").map(|x| x.i).unwrap_or(0) != 0;
-        let trans_b = node.attribute.iter().find(|x| x.name == "transB").map(|x| x.i).unwrap_or(0) != 0;
-        if trans_a { let n = a.len(); a.swap(n - 2, n - 1); }
-        if trans_b { let n = b.len(); b.swap(n - 2, n - 1); }
+        let trans_a = node
+            .attribute
+            .iter()
+            .find(|x| x.name == "transA")
+            .map(|x| x.i)
+            .unwrap_or(0)
+            != 0;
+        let trans_b = node
+            .attribute
+            .iter()
+            .find(|x| x.name == "transB")
+            .map(|x| x.i)
+            .unwrap_or(0)
+            != 0;
+        if trans_a {
+            let n = a.len();
+            a.swap(n - 2, n - 1);
+        }
+        if trans_b {
+            let n = b.len();
+            b.swap(n - 2, n - 1);
+        }
     }
 
     // Higher-rank tensors: matmul contracts the last two axes; batch dimensions
@@ -172,7 +210,9 @@ fn resolve_mha(
     shapes: &HashMap<String, Vec<i64>>,
 ) -> Option<(usize, usize, usize)> {
     let q = coerce_dims(shapes.get(&node.input[0])?)?;
-    if q.len() < 3 { return None; }
+    if q.len() < 3 {
+        return None;
+    }
     let batch: usize = q[..q.len() - 2].iter().product::<usize>().max(1);
     let s = q[q.len() - 2];
     let h = q[q.len() - 1];
@@ -186,10 +226,14 @@ fn resolve_conv(
     node: &proto::NodeProto,
     shapes: &HashMap<String, Vec<i64>>,
 ) -> Option<(usize, usize, usize)> {
-    if node.input.len() < 2 { return None; }
+    if node.input.len() < 2 {
+        return None;
+    }
     let x = shapes.get(&node.input[0]).and_then(|d| coerce_dims(d))?;
     let w = shapes.get(&node.input[1]).and_then(|d| coerce_dims(d))?;
-    if x.len() < 3 || w.len() < 3 { return None; }
+    if x.len() < 3 || w.len() < 3 {
+        return None;
+    }
     // X = [N, C, *spatial], W = [M, C/group, *kernel]
     let n_batch = x[0];
     let c_in = x[1];
@@ -253,61 +297,57 @@ pub fn parse_onnx(bytes: &[u8]) -> Result<ImportReport, ImportError> {
         };
 
         let profile = match kind {
-            "matmul" => {
-                match resolve_matmul(node, &shapes) {
-                    Some((m, k, n)) => OpProfile {
-                        shape: TensorShape { dims: vec![m, n] },
-                        reduce_dim: Some(k),
-                        batch: 1,
-                        dtype,
-                        sparsity: 0.0,
-                        sweeps: None,
-                        variables: None,
-                    },
-                    None => {
-                        skipped_unresolved.push(label);
-                        continue;
-                    }
+            "matmul" => match resolve_matmul(node, &shapes) {
+                Some((m, k, n)) => OpProfile {
+                    shape: TensorShape { dims: vec![m, n] },
+                    reduce_dim: Some(k),
+                    batch: 1,
+                    dtype,
+                    sparsity: 0.0,
+                    sweeps: None,
+                    variables: None,
+                },
+                None => {
+                    skipped_unresolved.push(label);
+                    continue;
                 }
-            }
-            "mha" => {
-                match resolve_mha(node, &shapes) {
-                    Some((m, k, n)) => OpProfile {
-                        shape: TensorShape { dims: vec![m, n] },
-                        reduce_dim: Some(k),
-                        batch: 1,
-                        dtype,
-                        sparsity: 0.0,
-                        sweeps: None,
-                        variables: None,
-                    },
-                    None => {
-                        skipped_unresolved.push(label);
-                        continue;
-                    }
+            },
+            "mha" => match resolve_mha(node, &shapes) {
+                Some((m, k, n)) => OpProfile {
+                    shape: TensorShape { dims: vec![m, n] },
+                    reduce_dim: Some(k),
+                    batch: 1,
+                    dtype,
+                    sparsity: 0.0,
+                    sweeps: None,
+                    variables: None,
+                },
+                None => {
+                    skipped_unresolved.push(label);
+                    continue;
                 }
-            }
-            "conv" => {
-                match resolve_conv(node, &shapes) {
-                    Some((m, k, n)) => OpProfile {
-                        shape: TensorShape { dims: vec![m, n] },
-                        reduce_dim: Some(k),
-                        batch: 1,
-                        dtype,
-                        sparsity: 0.0,
-                        sweeps: None,
-                        variables: None,
-                    },
-                    None => {
-                        skipped_unresolved.push(label);
-                        continue;
-                    }
+            },
+            "conv" => match resolve_conv(node, &shapes) {
+                Some((m, k, n)) => OpProfile {
+                    shape: TensorShape { dims: vec![m, n] },
+                    reduce_dim: Some(k),
+                    batch: 1,
+                    dtype,
+                    sparsity: 0.0,
+                    sweeps: None,
+                    variables: None,
+                },
+                None => {
+                    skipped_unresolved.push(label);
+                    continue;
                 }
-            }
+            },
             _ => {
                 // Scalar / pointwise / reductive — pass through output shape,
                 // no reduce_dim.
-                let out_shape = node.output.first()
+                let out_shape = node
+                    .output
+                    .first()
                     .and_then(|n| shapes.get(n))
                     .and_then(|d| coerce_dims(d))
                     .unwrap_or_else(|| vec![1]);
@@ -335,7 +375,11 @@ pub fn parse_onnx(bytes: &[u8]) -> Result<ImportReport, ImportError> {
     let workload = Workload {
         goal: format!(
             "ONNX model · {} ({} nodes → {} mapped)",
-            if graph.name.is_empty() { "unnamed".to_string() } else { graph.name.clone() },
+            if graph.name.is_empty() {
+                "unnamed".to_string()
+            } else {
+                graph.name.clone()
+            },
             node_count,
             mapped_count,
         ),
@@ -350,7 +394,9 @@ pub fn parse_onnx(bytes: &[u8]) -> Result<ImportReport, ImportError> {
     Ok(ImportReport {
         workload,
         model_name: graph.name,
-        producer: format!("{} {}", model.producer_name, model.producer_version).trim().to_string(),
+        producer: format!("{} {}", model.producer_name, model.producer_version)
+            .trim()
+            .to_string(),
         node_count,
         mapped_count,
         skipped_unresolved,
@@ -368,7 +414,9 @@ pub fn parse_onnx_file(path: &str) -> Result<ImportReport, ImportError> {
 /// shape-inference map. Used by `examples/diag.rs` to find the highest
 /// unresolved node in a chain.
 #[doc(hidden)]
-pub fn parse_onnx_with_shapes(bytes: &[u8]) -> Result<(ImportReport, HashMap<String, Vec<i64>>), ImportError> {
+pub fn parse_onnx_with_shapes(
+    bytes: &[u8],
+) -> Result<(ImportReport, HashMap<String, Vec<i64>>), ImportError> {
     use prost::Message;
     let model = proto::ModelProto::decode(bytes)?;
     let graph = model.graph.clone().ok_or(ImportError::NoGraph)?;

@@ -64,9 +64,9 @@ pub struct InMemoryParams {
 impl Default for InMemoryParams {
     fn default() -> Self {
         Self {
-            crossbar_size:    256,
+            crossbar_size: 256,
             device_j_per_mac: 1.0e-15,
-            dac_j_per_bit:    1.0e-15,
+            dac_j_per_bit: 1.0e-15,
             adc_j_per_sample: 1.0e-12,
         }
     }
@@ -91,7 +91,7 @@ fn primitive_is_crossbar_native(p: &Primitive) -> bool {
         19 |  // SpMM / SpMV — canonical crossbar fit                  (LA · L2)
         20 |  // Attention — Q·Kᵀ and ·V are MVMs                       (LA · L2)
         24 |  // Convolution — im2col → MVM                             (TR · L2)
-        48    // Tensor network contraction — matmul sequences           (TEN · L2)
+        48 // Tensor network contraction — matmul sequences           (TEN · L2)
     )
 }
 
@@ -102,7 +102,9 @@ pub struct InMemory {
 }
 
 impl InMemory {
-    pub fn with_params(params: InMemoryParams) -> Self { Self { params } }
+    pub fn with_params(params: InMemoryParams) -> Self {
+        Self { params }
+    }
 
     fn matmul_energy(&self, profile: &OpProfile) -> Cost {
         let p = &self.params;
@@ -147,17 +149,19 @@ impl InMemory {
 }
 
 impl Substrate for InMemory {
-    fn name(&self) -> &str { "in-memory" }
-    fn display_name(&self) -> &str { "In-memory (RRAM crossbar)" }
+    fn name(&self) -> &str {
+        "in-memory"
+    }
+    fn display_name(&self) -> &str {
+        "In-memory (RRAM crossbar)"
+    }
 
     fn supports(&self, primitive: &Primitive) -> bool {
         primitive_is_crossbar_native(primitive)
     }
 
     fn cost(&self, primitive: &Primitive, profile: &OpProfile) -> Cost {
-        if matches!(primitive.id, 18 | 19 | 20 | 24 | 48)
-            && profile.matmul_macs().is_some()
-        {
+        if matches!(primitive.id, 18 | 19 | 20 | 24 | 48) && profile.matmul_macs().is_some() {
             return self.matmul_energy(profile);
         }
         self.default_cost()
@@ -172,5 +176,69 @@ impl Substrate for InMemory {
             "Sandia CrossSim v3.0 (2024) — reference simulator.",
             "Murmann ADC survey 2020-2024.",
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tei_ir::{Dtype, TensorShape};
+
+    fn matmul_profile() -> OpProfile {
+        OpProfile {
+            shape: TensorShape {
+                dims: vec![512, 2048],
+            },
+            reduce_dim: Some(768),
+            batch: 1,
+            dtype: Dtype::F16,
+            sparsity: 0.0,
+            sweeps: None,
+            variables: None,
+        }
+    }
+
+    fn dense_matmul() -> tei_stack::Primitive {
+        serde_json::from_str(
+            r#"{
+            "id": 18, "name": "Dense MatMul", "family": "LA",
+            "B": "kernel", "C": "L2", "D": "data-parallel",
+            "existing": "HW", "silicon_target": null, "wave": null
+        }"#,
+        )
+        .unwrap()
+    }
+
+    /// Anchor: default 256×256 crossbar, 512×768×2048 f16 matmul →
+    /// ~2-5 fJ/MAC system level, inside the published NeuRRAM / HERMES /
+    /// Mythic 1-30 fJ/MAC band. k=768 on a 256-row array = 3 tile
+    /// activations per output element.
+    #[test]
+    fn crossbar_mac_in_published_band() {
+        let s = InMemory::default();
+        let macs = (512u64 * 768 * 2048) as f64;
+        let cost = s.cost(&dense_matmul(), &matmul_profile());
+        let per_mac = cost.joules_per_op / macs;
+        assert!(
+            per_mac > 1e-15 && per_mac < 30e-15,
+            "crossbar per-MAC {per_mac:.3e} outside 1-30 fJ band"
+        );
+    }
+
+    /// Bigger arrays amortize the per-column ADC: a 1024-row crossbar must
+    /// be strictly cheaper than a 64-row crossbar on a k=768 reduction.
+    #[test]
+    fn larger_crossbar_is_cheaper() {
+        let small = InMemory::with_params(InMemoryParams {
+            crossbar_size: 64,
+            ..Default::default()
+        });
+        let large = InMemory::with_params(InMemoryParams {
+            crossbar_size: 1024,
+            ..Default::default()
+        });
+        let p = dense_matmul();
+        let prof = matmul_profile();
+        assert!(large.cost(&p, &prof).joules_per_op < small.cost(&p, &prof).joules_per_op);
     }
 }

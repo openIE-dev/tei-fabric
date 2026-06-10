@@ -14,7 +14,10 @@ use axum::{
     body::Bytes,
     extract::{DefaultBodyLimit, State},
     http::{HeaderMap, StatusCode},
-    response::{IntoResponse, sse::{Event, KeepAlive, Sse}},
+    response::{
+        IntoResponse,
+        sse::{Event, KeepAlive, Sse},
+    },
     routing::{get, post},
 };
 use futures::stream::Stream;
@@ -239,18 +242,28 @@ async fn post_import_onnx_chunk(
     body: Bytes,
 ) -> Result<Json<ChunkResponse>, (StatusCode, String)> {
     let hdr_str = |name: &str| -> Option<String> {
-        headers.get(name).and_then(|h| h.to_str().ok()).map(|s| s.to_string())
+        headers
+            .get(name)
+            .and_then(|h| h.to_str().ok())
+            .map(|s| s.to_string())
     };
     let hdr_u32 = |name: &str| hdr_str(name).and_then(|s| s.parse::<u32>().ok());
 
     let upload_id = hdr_str("x-upload-id")
         .ok_or((StatusCode::BAD_REQUEST, "missing X-Upload-Id header".into()))?;
-    let chunk_index = hdr_u32("x-chunk-index")
-        .ok_or((StatusCode::BAD_REQUEST, "missing/invalid X-Chunk-Index header".into()))?;
-    let chunk_total = hdr_u32("x-chunk-total")
-        .ok_or((StatusCode::BAD_REQUEST, "missing/invalid X-Chunk-Total header".into()))?;
+    let chunk_index = hdr_u32("x-chunk-index").ok_or((
+        StatusCode::BAD_REQUEST,
+        "missing/invalid X-Chunk-Index header".into(),
+    ))?;
+    let chunk_total = hdr_u32("x-chunk-total").ok_or((
+        StatusCode::BAD_REQUEST,
+        "missing/invalid X-Chunk-Total header".into(),
+    ))?;
     if chunk_total == 0 || chunk_index >= chunk_total {
-        return Err((StatusCode::BAD_REQUEST, format!("bad chunk indexing: {chunk_index}/{chunk_total}")));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("bad chunk indexing: {chunk_index}/{chunk_total}"),
+        ));
     }
 
     let body_len = body.len();
@@ -261,37 +274,54 @@ async fn post_import_onnx_chunk(
         map.retain(|_, b| now.duration_since(b.started) < UPLOAD_TTL);
 
         if map.len() >= MAX_CONCURRENT_UPLOADS && !map.contains_key(&upload_id) {
-            return Err((StatusCode::TOO_MANY_REQUESTS,
-                format!("too many concurrent uploads ({MAX_CONCURRENT_UPLOADS} max); retry shortly")));
+            return Err((
+                StatusCode::TOO_MANY_REQUESTS,
+                format!(
+                    "too many concurrent uploads ({MAX_CONCURRENT_UPLOADS} max); retry shortly"
+                ),
+            ));
         }
 
-        let buf = map.entry(upload_id.clone()).or_insert_with(|| UploadBuffer {
-            chunks: BTreeMap::new(),
-            total: chunk_total,
-            received_bytes: 0,
-            started: now,
-        });
+        let buf = map
+            .entry(upload_id.clone())
+            .or_insert_with(|| UploadBuffer {
+                chunks: BTreeMap::new(),
+                total: chunk_total,
+                received_bytes: 0,
+                started: now,
+            });
 
         if buf.total != chunk_total {
             let prev_total = buf.total;
             map.remove(&upload_id);
-            return Err((StatusCode::BAD_REQUEST,
-                format!("chunk_total disagreement: previous {prev_total} vs incoming {chunk_total}")));
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "chunk_total disagreement: previous {prev_total} vs incoming {chunk_total}"
+                ),
+            ));
         }
 
         // Accept the chunk (idempotent on re-send).
         buf.received_bytes = buf.received_bytes.saturating_add(body_len);
         if buf.received_bytes > MAX_UPLOAD_BYTES {
             map.remove(&upload_id);
-            return Err((StatusCode::PAYLOAD_TOO_LARGE,
-                format!("upload exceeded server cap of {} MB", MAX_UPLOAD_BYTES / (1024 * 1024))));
+            return Err((
+                StatusCode::PAYLOAD_TOO_LARGE,
+                format!(
+                    "upload exceeded server cap of {} MB",
+                    MAX_UPLOAD_BYTES / (1024 * 1024)
+                ),
+            ));
         }
         buf.chunks.insert(chunk_index, body);
 
         // Final chunk? Snapshot bytes + drop buffer; otherwise yield progress.
         if (buf.chunks.len() as u32) == buf.total {
             let mut full = Vec::with_capacity(buf.received_bytes);
-            for c in buf.chunks.values() { full.extend_from_slice(c); }
+            for c in buf.chunks.values() {
+                full.extend_from_slice(c);
+            }
             map.remove(&upload_id);
             Some(full)
         } else {

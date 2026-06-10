@@ -68,9 +68,9 @@ impl Default for PhotonicParams {
         Self {
             wdm_channels: 1,
             modulator_j_per_bit: 1.0e-15,
-            adc_j_per_sample:    1.0e-12,
-            laser_efficiency:    0.10,
-            optical_j_per_mac:   0.5e-15,
+            adc_j_per_sample: 1.0e-12,
+            laser_efficiency: 0.10,
+            optical_j_per_mac: 0.5e-15,
         }
     }
 }
@@ -99,7 +99,7 @@ fn primitive_is_photonic_native(p: &Primitive) -> bool {
         48 |  // Tensor network contraction           (TEN · L2)
         53 |  // Photonic MZI transform               (ANALOG)
         76 |  // Matrix decomposition (QR/LU/SVD …)   (LA · L2)
-        77    // Eigendecomposition                   (LA · L2)
+        77 // Eigendecomposition                   (LA · L2)
     )
 }
 
@@ -110,7 +110,9 @@ pub struct Photonic {
 }
 
 impl Photonic {
-    pub fn with_params(params: PhotonicParams) -> Self { Self { params } }
+    pub fn with_params(params: PhotonicParams) -> Self {
+        Self { params }
+    }
 
     /// First-principles cost for a matmul-class primitive.
     ///
@@ -128,9 +130,9 @@ impl Photonic {
         let result_elems = (profile.shape.elements() as u64) * (profile.batch as u64);
         let operand_bits = profile.dtype.bits() as u64;
 
-        let optical_j   = (macs as f64) * p.optical_j_per_mac / p.laser_efficiency.max(0.01);
+        let optical_j = (macs as f64) * p.optical_j_per_mac / p.laser_efficiency.max(0.01);
         let modulator_j = 2.0 * (macs as f64) * (operand_bits as f64) * p.modulator_j_per_bit;
-        let adc_j       = (result_elems as f64) * p.adc_j_per_sample;
+        let adc_j = (result_elems as f64) * p.adc_j_per_sample;
 
         let joules_per_op = optical_j + modulator_j + adc_j;
         // WDM channels parallelize the ADC pipeline, shrinking wall-clock.
@@ -154,8 +156,12 @@ impl Photonic {
 }
 
 impl Substrate for Photonic {
-    fn name(&self) -> &str { "photonic" }
-    fn display_name(&self) -> &str { "Photonic (MZI mesh)" }
+    fn name(&self) -> &str {
+        "photonic"
+    }
+    fn display_name(&self) -> &str {
+        "Photonic (MZI mesh)"
+    }
 
     fn supports(&self, primitive: &Primitive) -> bool {
         primitive_is_photonic_native(primitive)
@@ -180,5 +186,81 @@ impl Substrate for Photonic {
             "Bandyopadhyay et al. 2022, Optica 9: 1364 — energy-resolved photonic NN.",
             "Murmann ADC survey 2020-2024 — ADC energy floor.",
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tei_ir::{Dtype, TensorShape};
+
+    fn matmul_profile() -> OpProfile {
+        OpProfile {
+            shape: TensorShape {
+                dims: vec![512, 2048],
+            },
+            reduce_dim: Some(768),
+            batch: 1,
+            dtype: Dtype::F16,
+            sparsity: 0.0,
+            sweeps: None,
+            variables: None,
+        }
+    }
+
+    fn dense_matmul() -> tei_stack::Primitive {
+        serde_json::from_str(
+            r#"{
+            "id": 18, "name": "Dense MatMul", "family": "LA",
+            "B": "kernel", "C": "L2", "D": "data-parallel",
+            "existing": "HW", "silicon_target": null, "wave": null
+        }"#,
+        )
+        .unwrap()
+    }
+
+    /// Anchor: with default params (TFLN 1 fJ/bit · 1 pJ/sample ADC · 10%
+    /// laser · 0.5 fJ/MAC optical) the 512×768×2048 f16 matmul lands at
+    /// ~38 fJ/MAC system-level — inside the published Lightmatter /
+    /// Lightelligence 10-100 fJ/MAC band.
+    #[test]
+    fn photonic_mac_in_published_band() {
+        let s = Photonic::default();
+        let macs = (512u64 * 768 * 2048) as f64;
+        let cost = s.cost(&dense_matmul(), &matmul_profile());
+        let per_mac = cost.joules_per_op / macs;
+        assert!(
+            per_mac > 10e-15 && per_mac < 100e-15,
+            "photonic per-MAC {per_mac:.3e} outside 10-100 fJ band"
+        );
+    }
+
+    /// Exact decomposition: optical + modulator + ADC terms.
+    #[test]
+    fn photonic_term_decomposition() {
+        let s = Photonic::default();
+        let macs = (512u64 * 768 * 2048) as f64;
+        let result_elems = (512u64 * 2048) as f64;
+        let expected = macs * 0.5e-15 / 0.10           // optical / laser η
+            + 2.0 * macs * 16.0 * 1.0e-15              // modulator (f16 = 16 bits)
+            + result_elems * 1.0e-12; // ADC per output
+        let cost = s.cost(&dense_matmul(), &matmul_profile());
+        assert!((cost.joules_per_op - expected).abs() / expected < 1e-9);
+    }
+
+    /// WDM channels shrink wall-clock 1/N but leave energy unchanged.
+    #[test]
+    fn wdm_parallelizes_time_not_energy() {
+        let base = Photonic::default();
+        let wide = Photonic::with_params(PhotonicParams {
+            wdm_channels: 16,
+            ..Default::default()
+        });
+        let p = dense_matmul();
+        let prof = matmul_profile();
+        let c1 = base.cost(&p, &prof);
+        let c16 = wide.cost(&p, &prof);
+        assert!((c1.joules_per_op - c16.joules_per_op).abs() / c1.joules_per_op < 1e-12);
+        assert!((c1.seconds_per_op / c16.seconds_per_op - 16.0).abs() < 1e-9);
     }
 }

@@ -11,3 +11,6 @@ description = "Reversible substrate dialect — adiabatic CMOS / S2LAL physics +
 tei-stack.workspace = true
 tei-ir.workspace = true
 tei-substrate-traits.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

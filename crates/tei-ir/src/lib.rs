@@ -48,7 +48,11 @@ pub struct TensorShape {
 
 impl TensorShape {
     pub fn elements(&self) -> usize {
-        if self.dims.is_empty() { 0 } else { self.dims.iter().product() }
+        if self.dims.is_empty() {
+            0
+        } else {
+            self.dims.iter().product()
+        }
     }
 }
 
@@ -88,8 +92,12 @@ pub struct OpProfile {
     pub variables: Option<usize>,
 }
 
-fn default_batch() -> usize { 1 }
-fn default_dtype() -> Dtype { Dtype::F16 }
+fn default_batch() -> usize {
+    1
+}
+fn default_dtype() -> Dtype {
+    Dtype::F16
+}
 
 impl OpProfile {
     /// MAC count for a dense matmul `(m × k) × (k × n)`.
@@ -138,7 +146,9 @@ pub struct Constraints {
     pub volume: u64,
 }
 
-fn default_volume() -> u64 { 10_000 }
+fn default_volume() -> u64 {
+    10_000
+}
 
 /// A full workload spec.
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -125,10 +125,10 @@ fn reversible_fraction(p: &Primitive, has_bennett: bool) -> f64 {
         34 => 0.20, // Softmax — exp is bijective, normalization is reductive
         35 => 0.30, // Normalization — centering reversible, sigma discarded
         // Other Bennett-decomposable primitives.
-        6  => 0.50, // Sort — comparison network is reversible, perm-apply is L₂
-        36 => 0.50, // Hash — mixing permutation is bijective, truncation is L₂
-        15 => 0.50, // Modular exponentiation
-        43 => 0.60, // Relational join — Cartesian product reversible, predicate L₂
+        6 => 0.50,   // Sort — comparison network is reversible, perm-apply is L₂
+        36 => 0.50,  // Hash — mixing permutation is bijective, truncation is L₂
+        15 => 0.50,  // Modular exponentiation
+        43 => 0.60,  // Relational join — Cartesian product reversible, predicate L₂
         109 => 0.70, // Kalman step — linear predict reversible, innovation L₂
         118 => 0.50, // Convex hull
         132 => 0.70, // Exponential map (diffgeo)
@@ -148,8 +148,12 @@ impl Reversible {
 }
 
 impl Substrate for Reversible {
-    fn name(&self) -> &str { "reversible" }
-    fn display_name(&self) -> &str { "Reversible (adiabatic CMOS)" }
+    fn name(&self) -> &str {
+        "reversible"
+    }
+    fn display_name(&self) -> &str {
+        "Reversible (adiabatic CMOS)"
+    }
 
     fn supports(&self, primitive: &Primitive) -> bool {
         // The catalog says which primitives have a reversible kernel.
@@ -189,5 +193,58 @@ impl Substrate for Reversible {
             "Vaire Computing 2024 — commercial reversible-CMOS prototype.",
             "16-bit adiabatic microprocessor on FDSOI 90nm — DeBenedictis group.",
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tei_ir::{Dtype, TensorShape};
+
+    fn load_stack() -> Arc<Stack> {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/stack.json");
+        Stack::load_from_path(path).expect("catalog loads")
+    }
+
+    fn matmul_profile() -> OpProfile {
+        OpProfile {
+            shape: TensorShape {
+                dims: vec![512, 2048],
+            },
+            reduce_dim: Some(768),
+            batch: 1,
+            dtype: Dtype::F16,
+            sparsity: 0.0,
+            sweeps: None,
+            variables: None,
+        }
+    }
+
+    /// Anchor: Dense MatMul (reversible fraction 0.9) per-MAC =
+    /// 0.9 × 10³ × floor + 0.1 × 2×10⁸ × floor with floor = 64·kT·ln2.
+    #[test]
+    fn matmul_two_phase_anchor() {
+        let stack = load_stack();
+        let s = Reversible::new(stack.clone());
+        let matmul = stack.get(18).unwrap();
+        let macs = (512u64 * 768 * 2048) as f64;
+        let cost = s.cost(matmul, &matmul_profile());
+        let floor = 64.0 * K_T_LN2_300K;
+        let expected_per_mac = 0.9 * 1.0e3 * floor + 0.1 * 2.0e8 * floor;
+        let per_mac = cost.joules_per_op / macs;
+        assert!(
+            (per_mac - expected_per_mac).abs() / expected_per_mac < 1e-9,
+            "{per_mac:.4e} != {expected_per_mac:.4e}"
+        );
+    }
+
+    /// supports() is catalog-driven: exactly the Bennett-decomposable set.
+    #[test]
+    fn claims_bennett_set() {
+        let stack = load_stack();
+        let s = Reversible::new(stack.clone());
+        assert!(s.supports(stack.get(18).unwrap())); // MatMul has Bennett edge
+        assert!(s.supports(stack.get(79).unwrap())); // DCT
+        assert!(!s.supports(stack.get(39).unwrap())); // MCMC — no Bennett edge
     }
 }

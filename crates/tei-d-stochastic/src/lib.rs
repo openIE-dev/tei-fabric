@@ -68,7 +68,7 @@ fn primitive_is_stochastic_native(p: &Primitive) -> bool {
         245 |  // Discrete Gaussian sampling
         251 |  // Bootstrap resampling
         258 |  // Simulated annealing
-        274    // Lattice Boltzmann step
+        274 // Lattice Boltzmann step
     )
 }
 
@@ -80,9 +80,9 @@ impl Stochastic {
         let (sweeps, variables) = match (profile.sweeps, profile.variables) {
             (Some(s), Some(v)) => (s, v as u64),
             // Sensible defaults if the workload didn't say.
-            (Some(s), None)    => (s, 64),
-            (None,    Some(v)) => (1000, v as u64),
-            (None,    None)    => (1000, 64),
+            (Some(s), None) => (s, 64),
+            (None, Some(v)) => (1000, v as u64),
+            (None, None) => (1000, 64),
         };
         let batch = profile.batch as u64;
 
@@ -102,8 +102,12 @@ impl Stochastic {
 }
 
 impl Substrate for Stochastic {
-    fn name(&self) -> &str { "stochastic" }
-    fn display_name(&self) -> &str { "Stochastic (sMTJ p-bits)" }
+    fn name(&self) -> &str {
+        "stochastic"
+    }
+    fn display_name(&self) -> &str {
+        "Stochastic (sMTJ p-bits)"
+    }
 
     fn supports(&self, primitive: &Primitive) -> bool {
         primitive_is_stochastic_native(primitive)
@@ -121,5 +125,45 @@ impl Substrate for Stochastic {
             "Extropic Z1 architecture announcement (Oct 2025) + thrml v0.1.3.",
             "thrml (github.com/extropic-ai/thrml) — JAX reference sampler.",
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tei_ir::{Dtype, TensorShape};
+
+    fn mcmc() -> tei_stack::Primitive {
+        serde_json::from_str(
+            r#"{
+            "id": 39, "name": "MCMC / Langevin step", "family": "PROB",
+            "B": "kernel", "C": "L2+L3", "D": "sequential",
+            "existing": "EM", "silicon_target": null, "wave": null
+        }"#,
+        )
+        .unwrap()
+    }
+
+    /// Anchor: 1024 p-bits × 10k sweeps = 1.024e7 p-bit events × 1 fJ
+    /// + 1e4 sweeps × 1 pJ readout = 20.24 nJ exactly.
+    #[test]
+    fn ising_anchor_20_24_nj() {
+        let s = Stochastic;
+        let prof = OpProfile {
+            shape: TensorShape { dims: vec![1024] },
+            reduce_dim: None,
+            batch: 1,
+            dtype: Dtype::I8,
+            sparsity: 0.0,
+            sweeps: Some(10_000),
+            variables: Some(1024),
+        };
+        let cost = s.cost(&mcmc(), &prof);
+        let expected = 1024.0 * 10_000.0 * 1.0e-15 + 10_000.0 * 1.0e-12;
+        assert!(
+            (cost.joules_per_op - expected).abs() / expected < 1e-9,
+            "{:.4e} != {expected:.4e}",
+            cost.joules_per_op
+        );
     }
 }

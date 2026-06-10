@@ -162,8 +162,8 @@ pub enum LoadError {
 impl Stack {
     /// Load and index the catalog from a JSON file.
     pub fn load_from_path(path: &str) -> Result<Arc<Self>, LoadError> {
-        let text = std::fs::read_to_string(path)
-            .map_err(|e| LoadError::Read(path.to_string(), e))?;
+        let text =
+            std::fs::read_to_string(path).map_err(|e| LoadError::Read(path.to_string(), e))?;
         Self::load_from_str(&text)
     }
 
@@ -201,7 +201,9 @@ impl Stack {
     }
 
     pub fn get(&self, id: u32) -> Option<&Primitive> {
-        self.by_id.get(&id).and_then(|i| self.data.primitives.get(*i))
+        self.by_id
+            .get(&id)
+            .and_then(|i| self.data.primitives.get(*i))
     }
 
     pub fn count(&self) -> usize {
@@ -209,7 +211,10 @@ impl Stack {
     }
 
     pub fn family(&self, code: &str) -> &[usize] {
-        self.by_family.get(code).map(|v| v.as_slice()).unwrap_or(&[])
+        self.by_family
+            .get(code)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
     pub fn primitives(&self) -> &[Primitive] {
@@ -218,12 +223,18 @@ impl Stack {
 
     /// Composition sources for a primitive — what it depends on.
     pub fn deps_of(&self, id: u32) -> &[u32] {
-        self.dependencies.get(&id).map(|v| v.as_slice()).unwrap_or(&[])
+        self.dependencies
+            .get(&id)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
     /// Composition targets for a primitive — what depends on it (the leverage list).
     pub fn dependents_of(&self, id: u32) -> &[u32] {
-        self.dependents.get(&id).map(|v| v.as_slice()).unwrap_or(&[])
+        self.dependents
+            .get(&id)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
     /// Bennett decomposition for a primitive, if one exists.
@@ -250,5 +261,59 @@ impl Stack {
         let mut result: Vec<u32> = visited.into_keys().collect();
         result.sort();
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn load() -> Arc<Stack> {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/stack.json");
+        Stack::load_from_path(path).expect("catalog loads")
+    }
+
+    /// Catalog invariants the whole workspace depends on.
+    #[test]
+    fn catalog_shape() {
+        let s = load();
+        assert_eq!(s.count(), 258, "primitive count");
+        assert_eq!(s.data.families.len(), 33, "family count");
+        assert_eq!(
+            s.data.edges.bennett_decomposition.len(),
+            26,
+            "bennett edges"
+        );
+    }
+
+    /// IDs the dialects hard-reference must exist and keep their identities.
+    #[test]
+    fn load_bearing_primitives() {
+        let s = load();
+        for (id, name) in [
+            (18, "Dense MatMul"),
+            (20, "Attention"),
+            (24, "Convolution"),
+            (34, "Softmax"),
+            (35, "Normalization"),
+            (39, "MCMC / Langevin step"),
+            (50, "Spike / LIF neuron"),
+            (51, "STDP"),
+            (79, "DCT"),
+            (258, "Simulated annealing"),
+        ] {
+            let p = s
+                .get(id)
+                .unwrap_or_else(|| panic!("primitive {id} missing"));
+            assert_eq!(p.name, name, "primitive {id} renamed");
+        }
+    }
+
+    /// Dependency closure walks composition edges transitively.
+    #[test]
+    fn dependency_closure_includes_target() {
+        let s = load();
+        let closure = s.dependency_closure(18);
+        assert!(closure.contains(&18));
     }
 }

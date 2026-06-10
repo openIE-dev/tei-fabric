@@ -79,7 +79,9 @@ fn get<'a>(shapes: &'a HashMap<String, Vec<i64>>, name: &str) -> Option<&'a Vec<
 fn conv_out(node: &proto::NodeProto, shapes: &HashMap<String, Vec<i64>>) -> Option<Vec<i64>> {
     let x = get(shapes, &node.input[0])?;
     let w = get(shapes, &node.input[1])?;
-    if x.len() < 3 || w.len() < 3 { return None; }
+    if x.len() < 3 || w.len() < 3 {
+        return None;
+    }
     let rank = x.len() - 2; // spatial dims
     let n = x[0];
     let m = w[0];
@@ -106,7 +108,9 @@ fn conv_out(node: &proto::NodeProto, shapes: &HashMap<String, Vec<i64>>) -> Opti
     let mut out = vec![n, m];
     for i in 0..rank {
         let dim_in = x[i + 2];
-        if dim_in <= 0 { return None; }
+        if dim_in <= 0 {
+            return None;
+        }
         let k = kernel[i];
         let s = strides[i];
         let d = dilations.get(i).copied().unwrap_or(1);
@@ -114,7 +118,9 @@ fn conv_out(node: &proto::NodeProto, shapes: &HashMap<String, Vec<i64>>) -> Opti
         // ONNX formula: floor((dim_in + pad - dilation*(k-1) - 1) / stride + 1)
         let numer = dim_in + pad - d * (k - 1) - 1;
         let dim_out = numer / s + 1;
-        if dim_out <= 0 { return None; }
+        if dim_out <= 0 {
+            return None;
+        }
         out.push(dim_out);
     }
     Some(out)
@@ -123,10 +129,14 @@ fn conv_out(node: &proto::NodeProto, shapes: &HashMap<String, Vec<i64>>) -> Opti
 /// Pool ops (Max/Average): NCHW → NC × pooled.
 fn pool_out(node: &proto::NodeProto, shapes: &HashMap<String, Vec<i64>>) -> Option<Vec<i64>> {
     let x = get(shapes, &node.input[0])?;
-    if x.len() < 3 { return None; }
+    if x.len() < 3 {
+        return None;
+    }
     let rank = x.len() - 2;
     let kernel = attr_ints(node, "kernel_shape");
-    if kernel.is_empty() { return None; }
+    if kernel.is_empty() {
+        return None;
+    }
     let strides: Vec<i64> = {
         let s = attr_ints(node, "strides");
         if s.is_empty() { vec![1; rank] } else { s }
@@ -138,12 +148,16 @@ fn pool_out(node: &proto::NodeProto, shapes: &HashMap<String, Vec<i64>>) -> Opti
     let mut out = vec![x[0], x[1]];
     for i in 0..rank {
         let dim_in = x[i + 2];
-        if dim_in <= 0 { return None; }
+        if dim_in <= 0 {
+            return None;
+        }
         let k = kernel[i];
         let s = strides[i];
         let pad = pads.get(i).copied().unwrap_or(0) + pads.get(i + rank).copied().unwrap_or(0);
         let dim_out = (dim_in + pad - k) / s + 1;
-        if dim_out <= 0 { return None; }
+        if dim_out <= 0 {
+            return None;
+        }
         out.push(dim_out);
     }
     Some(out)
@@ -159,10 +173,14 @@ fn pool_out(node: &proto::NodeProto, shapes: &HashMap<String, Vec<i64>>) -> Opti
 /// resolves to the wrong shape and propagates incorrectly through softmax,
 /// DQL, and the second matmul of the attention head.
 fn matmul_out(node: &proto::NodeProto, shapes: &HashMap<String, Vec<i64>>) -> Option<Vec<i64>> {
-    if node.input.len() < 2 { return None; }
+    if node.input.len() < 2 {
+        return None;
+    }
     let a_raw = get(shapes, &node.input[0])?.clone();
     let mut b = get(shapes, &node.input[1])?.clone();
-    if a_raw.len() < 2 || b.len() < 2 { return None; }
+    if a_raw.len() < 2 || b.len() < 2 {
+        return None;
+    }
 
     let mut a = a_raw;
     if node.op_type == "FusedMatMul" {
@@ -184,8 +202,14 @@ fn matmul_out(node: &proto::NodeProto, shapes: &HashMap<String, Vec<i64>>) -> Op
     let b_batch = &b[..b.len() - 2];
     let n_batch = a_batch.len().max(b_batch.len());
     for i in 0..n_batch {
-        let av = a_batch.get(a_batch.len().wrapping_sub(n_batch - i)).copied().unwrap_or(1);
-        let bv = b_batch.get(b_batch.len().wrapping_sub(n_batch - i)).copied().unwrap_or(1);
+        let av = a_batch
+            .get(a_batch.len().wrapping_sub(n_batch - i))
+            .copied()
+            .unwrap_or(1);
+        let bv = b_batch
+            .get(b_batch.len().wrapping_sub(n_batch - i))
+            .copied()
+            .unwrap_or(1);
         out.push(av.max(bv));
     }
     out.push(a[a.len() - 2]);
@@ -197,7 +221,9 @@ fn matmul_out(node: &proto::NodeProto, shapes: &HashMap<String, Vec<i64>>) -> Op
 fn gemm_out(node: &proto::NodeProto, shapes: &HashMap<String, Vec<i64>>) -> Option<Vec<i64>> {
     let a = get(shapes, &node.input[0])?;
     let b = get(shapes, &node.input[1])?;
-    if a.len() != 2 || b.len() != 2 { return None; }
+    if a.len() != 2 || b.len() != 2 {
+        return None;
+    }
     let trans_a = attr_int(node, "transA").unwrap_or(0) != 0;
     let trans_b = attr_int(node, "transB").unwrap_or(0) != 0;
     let m = if trans_a { a[1] } else { a[0] };
@@ -217,14 +243,20 @@ fn gemm_out(node: &proto::NodeProto, shapes: &HashMap<String, Vec<i64>>) -> Opti
 fn build_constants(g: &proto::GraphProto) -> HashMap<String, Vec<i64>> {
     let mut consts: HashMap<String, Vec<i64>> = HashMap::new();
     for t in &g.initializer {
-        if t.name.is_empty() { continue; }
+        if t.name.is_empty() {
+            continue;
+        }
         if let Some(v) = tensor_as_i64s(t) {
             consts.insert(t.name.clone(), v);
         }
     }
     for node in &g.node {
-        if node.op_type != "Constant" { continue; }
-        if node.output.is_empty() { continue; }
+        if node.op_type != "Constant" {
+            continue;
+        }
+        if node.output.is_empty() {
+            continue;
+        }
         if let Some(t) = attr_tensor(node, "value") {
             if let Some(v) = tensor_as_i64s(t) {
                 consts.insert(node.output[0].clone(), v);
@@ -247,10 +279,14 @@ fn reshape_out(
     shapes: &HashMap<String, Vec<i64>>,
     consts: &HashMap<String, Vec<i64>>,
 ) -> Option<Vec<i64>> {
-    if node.input.len() < 2 { return None; }
+    if node.input.len() < 2 {
+        return None;
+    }
     let input_shape = shapes.get(&node.input[0])?;
     let target = consts.get(&node.input[1])?;
-    if target.is_empty() { return None; }
+    if target.is_empty() {
+        return None;
+    }
 
     let mut out: Vec<i64> = target.iter().copied().collect();
 
@@ -259,7 +295,9 @@ fn reshape_out(
     if !allow_zero {
         for (i, d) in out.iter_mut().enumerate() {
             if *d == 0 {
-                if let Some(&keep) = input_shape.get(i) { *d = keep; }
+                if let Some(&keep) = input_shape.get(i) {
+                    *d = keep;
+                }
             }
         }
     }
@@ -268,7 +306,9 @@ fn reshape_out(
     let total_in: i64 = input_shape.iter().filter(|&&d| d > 0).product();
     let neg_idx = out.iter().position(|&d| d == -1);
     if let Some(i) = neg_idx {
-        let rest: i64 = out.iter().enumerate()
+        let rest: i64 = out
+            .iter()
+            .enumerate()
             .filter(|(j, _)| *j != i)
             .map(|(_, &d)| d.max(1))
             .product();
@@ -281,10 +321,7 @@ fn reshape_out(
 
 /// Transpose: permute the input's dims according to `perm` (or reverse if
 /// no `perm` attribute).
-fn transpose_out(
-    node: &proto::NodeProto,
-    shapes: &HashMap<String, Vec<i64>>,
-) -> Option<Vec<i64>> {
+fn transpose_out(node: &proto::NodeProto, shapes: &HashMap<String, Vec<i64>>) -> Option<Vec<i64>> {
     let x = shapes.get(&node.input[0])?.clone();
     let perm = attr_ints(node, "perm");
     if perm.is_empty() {
@@ -312,15 +349,18 @@ fn squeeze_out(
         attr_ints(node, "axes")
     };
     let rank = x.len() as i64;
-    let axes: Vec<usize> = axes_raw.iter().map(|&a| {
-        (if a < 0 { a + rank } else { a }) as usize
-    }).collect();
+    let axes: Vec<usize> = axes_raw
+        .iter()
+        .map(|&a| (if a < 0 { a + rank } else { a }) as usize)
+        .collect();
     let out: Vec<i64> = if axes.is_empty() {
         x.into_iter().filter(|&d| d != 1).collect()
     } else {
-        x.into_iter().enumerate()
+        x.into_iter()
+            .enumerate()
             .filter(|(i, _)| !axes.contains(i))
-            .map(|(_, d)| d).collect()
+            .map(|(_, d)| d)
+            .collect()
     };
     Some(out)
 }
@@ -338,9 +378,10 @@ fn unsqueeze_out(
         attr_ints(node, "axes")
     };
     let target_rank = (x.len() + axes_raw.len()) as i64;
-    let mut axes: Vec<usize> = axes_raw.iter().map(|&a| {
-        (if a < 0 { a + target_rank } else { a }) as usize
-    }).collect();
+    let mut axes: Vec<usize> = axes_raw
+        .iter()
+        .map(|&a| (if a < 0 { a + target_rank } else { a }) as usize)
+        .collect();
     axes.sort();
     let mut out = x;
     for a in axes {
@@ -354,16 +395,15 @@ fn unsqueeze_out(
 /// Gather along an axis. Output shape is:
 ///   input.shape[..axis] + indices.shape + input.shape[axis+1..]
 /// We don't know `indices.shape` unless it's a known tensor.
-fn gather_out(
-    node: &proto::NodeProto,
-    shapes: &HashMap<String, Vec<i64>>,
-) -> Option<Vec<i64>> {
+fn gather_out(node: &proto::NodeProto, shapes: &HashMap<String, Vec<i64>>) -> Option<Vec<i64>> {
     let x = shapes.get(&node.input[0])?.clone();
     let idx = shapes.get(&node.input[1])?.clone();
     let axis = attr_int(node, "axis").unwrap_or(0);
     let rank = x.len() as i64;
     let axis = (if axis < 0 { axis + rank } else { axis }) as usize;
-    if axis >= x.len() { return None; }
+    if axis >= x.len() {
+        return None;
+    }
     let mut out: Vec<i64> = Vec::with_capacity(x.len() + idx.len() - 1);
     out.extend_from_slice(&x[..axis]);
     out.extend_from_slice(&idx);
@@ -390,32 +430,54 @@ fn slice_out(
         starts = consts.get(&node.input[1]).cloned()?;
         ends = consts.get(&node.input[2]).cloned()?;
         axes = if node.input.len() >= 4 {
-            consts.get(&node.input[3]).cloned().unwrap_or((0..rank as i64).collect())
-        } else { (0..rank as i64).collect() };
+            consts
+                .get(&node.input[3])
+                .cloned()
+                .unwrap_or((0..rank as i64).collect())
+        } else {
+            (0..rank as i64).collect()
+        };
         steps = if node.input.len() >= 5 {
-            consts.get(&node.input[4]).cloned().unwrap_or(vec![1; starts.len()])
-        } else { vec![1; starts.len()] };
+            consts
+                .get(&node.input[4])
+                .cloned()
+                .unwrap_or(vec![1; starts.len()])
+        } else {
+            vec![1; starts.len()]
+        };
     } else {
         starts = attr_ints(node, "starts");
         ends = attr_ints(node, "ends");
         axes = if attr_ints(node, "axes").is_empty() {
             (0..starts.len() as i64).collect()
-        } else { attr_ints(node, "axes") };
+        } else {
+            attr_ints(node, "axes")
+        };
         steps = vec![1; starts.len()];
     }
-    if starts.len() != ends.len() || starts.len() != axes.len() { return None; }
+    if starts.len() != ends.len() || starts.len() != axes.len() {
+        return None;
+    }
 
     let mut out = x.clone();
     for i in 0..starts.len() {
         let mut ax = axes[i];
-        if ax < 0 { ax += rank as i64; }
+        if ax < 0 {
+            ax += rank as i64;
+        }
         let ax = ax as usize;
-        if ax >= rank { return None; }
+        if ax >= rank {
+            return None;
+        }
         let dim = out[ax];
         let mut s = starts[i];
         let mut e = ends[i];
-        if s < 0 { s += dim; }
-        if e < 0 { e += dim; }
+        if s < 0 {
+            s += dim;
+        }
+        if e < 0 {
+            e += dim;
+        }
         s = s.clamp(0, dim);
         e = e.clamp(0, dim);
         let step = steps[i].max(1);
@@ -466,7 +528,9 @@ fn try_fold_const(
         // Concat of 1-d constants is straight concatenation.
         "Concat" => {
             let axis = attr_int(node, "axis").unwrap_or(0);
-            if axis != 0 && axis != -1 { return None; }
+            if axis != 0 && axis != -1 {
+                return None;
+            }
             let mut out = Vec::new();
             for input in &node.input {
                 let v = consts.get(input)?;
@@ -479,7 +543,9 @@ fn try_fold_const(
             let data = get_c(0)?;
             let idx = get_c(1)?;
             let axis = attr_int(node, "axis").unwrap_or(0);
-            if axis != 0 { return None; }
+            if axis != 0 {
+                return None;
+            }
             let mut out = Vec::new();
             for &i in &idx {
                 let ii = if i < 0 { i + data.len() as i64 } else { i };
@@ -493,15 +559,23 @@ fn try_fold_const(
         // applied to the value list (since 1-D const + 1-D slice).
         "Slice" => {
             let data = get_c(0)?;
-            if node.input.len() < 3 { return None; }
+            if node.input.len() < 3 {
+                return None;
+            }
             let starts = get_c(1)?;
             let ends = get_c(2)?;
-            if starts.len() != 1 || ends.len() != 1 { return None; }
+            if starts.len() != 1 || ends.len() != 1 {
+                return None;
+            }
             let mut s = starts[0];
             let mut e = ends[0];
             let n = data.len() as i64;
-            if s < 0 { s += n; }
-            if e < 0 { e += n; }
+            if s < 0 {
+                s += n;
+            }
+            if e < 0 {
+                e += n;
+            }
             s = s.clamp(0, n);
             e = e.clamp(0, n);
             Some(data[s as usize..e as usize].to_vec())
@@ -520,14 +594,17 @@ fn onehot_out(
 ) -> Option<Vec<i64>> {
     let idx = shapes.get(&node.input[0])?.clone();
     let depth_const = consts.get(&node.input[1])?;
-    if depth_const.is_empty() { return None; }
+    if depth_const.is_empty() {
+        return None;
+    }
     let d = depth_const[0];
     let axis_attr = attr_int(node, "axis").unwrap_or(-1);
     let pos = if axis_attr < 0 {
         (idx.len() as i64 + axis_attr + 1) as usize
     } else {
         axis_attr as usize
-    }.min(idx.len());
+    }
+    .min(idx.len());
     let mut out = idx;
     out.insert(pos, d);
     Some(out)
@@ -550,11 +627,21 @@ fn where_out(node: &proto::NodeProto, shapes: &HashMap<String, Vec<i64>>) -> Opt
 
 /// Range: output is a 1-D tensor of length `ceil((limit - start) / delta)`.
 fn range_out(node: &proto::NodeProto, consts: &HashMap<String, Vec<i64>>) -> Option<Vec<i64>> {
-    if node.input.len() < 3 { return None; }
-    let start = consts.get(&node.input[0]).and_then(|v| v.first().copied())?;
-    let limit = consts.get(&node.input[1]).and_then(|v| v.first().copied())?;
-    let delta = consts.get(&node.input[2]).and_then(|v| v.first().copied())?;
-    if delta == 0 { return None; }
+    if node.input.len() < 3 {
+        return None;
+    }
+    let start = consts
+        .get(&node.input[0])
+        .and_then(|v| v.first().copied())?;
+    let limit = consts
+        .get(&node.input[1])
+        .and_then(|v| v.first().copied())?;
+    let delta = consts
+        .get(&node.input[2])
+        .and_then(|v| v.first().copied())?;
+    if delta == 0 {
+        return None;
+    }
     let n = ((limit - start + delta - 1) / delta).max(0);
     Some(vec![n])
 }
@@ -573,7 +660,9 @@ pub fn propagate(g: &proto::GraphProto, shapes: &mut HashMap<String, Vec<i64>>) 
     for _ in 0..max_iters {
         let before = shapes.len() + consts.len();
         propagate_pass(g, shapes, &mut consts);
-        if shapes.len() + consts.len() == before { break; }
+        if shapes.len() + consts.len() == before {
+            break;
+        }
     }
 }
 
@@ -583,7 +672,9 @@ fn propagate_pass(
     consts: &mut HashMap<String, Vec<i64>>,
 ) {
     for node in &g.node {
-        if node.output.is_empty() || node.output[0].is_empty() { continue; }
+        if node.output.is_empty() || node.output[0].is_empty() {
+            continue;
+        }
 
         // Constant folding — try every node, in case its inputs are known
         // even when its shape rule isn't (e.g. Shape op outputs a constant
@@ -594,72 +685,111 @@ fn propagate_pass(
             }
         }
 
-        if shapes.contains_key(&node.output[0]) { continue; }
+        if shapes.contains_key(&node.output[0]) {
+            continue;
+        }
 
         let computed: Option<Vec<i64>> = match node.op_type.as_str() {
             "Conv" | "ConvInteger" | "QLinearConv" | "ConvTranspose" => conv_out(node, shapes),
             "MaxPool" | "AveragePool" => pool_out(node, shapes),
-            "GlobalMaxPool" | "GlobalAveragePool" => {
-                get(shapes, &node.input[0]).map(|x| {
-                    let mut out = vec![x[0], x[1]];
-                    for _ in 2..x.len() { out.push(1); }
-                    out
-                })
+            "GlobalMaxPool" | "GlobalAveragePool" => get(shapes, &node.input[0]).map(|x| {
+                let mut out = vec![x[0], x[1]];
+                for _ in 2..x.len() {
+                    out.push(1);
+                }
+                out
+            }),
+            "MatMul" | "MatMulInteger" | "QLinearMatMul" | "FusedMatMul" => {
+                matmul_out(node, shapes)
             }
-            "MatMul" | "MatMulInteger" | "QLinearMatMul" | "FusedMatMul" => matmul_out(node, shapes),
             "Gemm" => gemm_out(node, shapes),
             // Fused attention: output is the same shape as Q (input[0]) for
             // the standard self-attention case; just pass Q's shape through.
-            "MultiHeadAttention" | "Attention" | "QAttention"
-            | "GroupQueryAttention" | "FusedAttention" => {
-                get(shapes, &node.input[0]).cloned()
-            }
+            "MultiHeadAttention"
+            | "Attention"
+            | "QAttention"
+            | "GroupQueryAttention"
+            | "FusedAttention" => get(shapes, &node.input[0]).cloned(),
             // Identity-shape ops — pass first input through.
-            "BatchNormalization" | "LayerNormalization" | "GroupNormalization"
-            | "GroupNorm" | "InstanceNormalization" | "RMSNormalization"
-            | "SkipLayerNormalization" | "SkipSimplifiedLayerNormalization"
+            "BatchNormalization"
+            | "LayerNormalization"
+            | "GroupNormalization"
+            | "GroupNorm"
+            | "InstanceNormalization"
+            | "RMSNormalization"
+            | "SkipLayerNormalization"
+            | "SkipSimplifiedLayerNormalization"
             | "SimplifiedLayerNormalization"
-            | "BiasGelu" | "FastGelu" | "QuickGelu" | "BiasAdd"
-            | "Relu" | "Sigmoid" | "Tanh" | "Erf" | "Gelu" | "Selu" | "Elu" | "LeakyRelu"
-            | "HardSigmoid" | "HardSwish" | "Softplus" | "Softsign" | "Mish"
-            | "Sin" | "Cos" | "Tan" | "Asin" | "Acos" | "Atan"
-            | "Clip" | "Exp" | "Log" | "Neg" | "Reciprocal" | "Sqrt" | "Abs" | "Floor"
-            | "Ceil" | "Round" | "Cast" | "Identity" | "Dropout" | "Softmax" | "LogSoftmax"
-            => get(shapes, &node.input[0]).cloned(),
+            | "BiasGelu"
+            | "FastGelu"
+            | "QuickGelu"
+            | "BiasAdd"
+            | "Relu"
+            | "Sigmoid"
+            | "Tanh"
+            | "Erf"
+            | "Gelu"
+            | "Selu"
+            | "Elu"
+            | "LeakyRelu"
+            | "HardSigmoid"
+            | "HardSwish"
+            | "Softplus"
+            | "Softsign"
+            | "Mish"
+            | "Sin"
+            | "Cos"
+            | "Tan"
+            | "Asin"
+            | "Acos"
+            | "Atan"
+            | "Clip"
+            | "Exp"
+            | "Log"
+            | "Neg"
+            | "Reciprocal"
+            | "Sqrt"
+            | "Abs"
+            | "Floor"
+            | "Ceil"
+            | "Round"
+            | "Cast"
+            | "Identity"
+            | "Dropout"
+            | "Softmax"
+            | "LogSoftmax" => get(shapes, &node.input[0]).cloned(),
             // Elementwise binary — pick the higher-rank input shape so
             // broadcasts like `[1] + [B, S, H]` resolve to `[B, S, H]` instead
             // of `[1]`. Doesn't simulate full numpy broadcasting; covers the
             // common case where one operand is a scalar/vector.
             "Add" | "Sub" | "Mul" | "Div" | "Pow" | "Min" | "Max" | "Where" | "Equal"
-                if !node.input.is_empty() => {
-                    let a = node.input.first().and_then(|n| get(shapes, n)).cloned();
-                    let b = node.input.get(1).and_then(|n| get(shapes, n)).cloned();
-                    match (a, b) {
-                        (Some(a), Some(b)) if b.len() > a.len() => Some(b),
-                        (Some(a), _) => Some(a),
-                        (None, Some(b)) => Some(b),
-                        (None, None) => None,
-                    }
+                if !node.input.is_empty() =>
+            {
+                let a = node.input.first().and_then(|n| get(shapes, n)).cloned();
+                let b = node.input.get(1).and_then(|n| get(shapes, n)).cloned();
+                match (a, b) {
+                    (Some(a), Some(b)) if b.len() > a.len() => Some(b),
+                    (Some(a), _) => Some(a),
+                    (None, Some(b)) => Some(b),
+                    (None, None) => None,
                 }
-            "Flatten" => {
-                get(shapes, &node.input[0]).map(|x| {
-                    let axis = attr_int(node, "axis").unwrap_or(1) as usize;
-                    let pre: i64 = x[..axis.min(x.len())].iter().product();
-                    let post: i64 = x[axis.min(x.len())..].iter().product();
-                    vec![pre.max(1), post.max(1)]
-                })
             }
-            "Reshape"   => reshape_out(node, shapes, consts),
+            "Flatten" => get(shapes, &node.input[0]).map(|x| {
+                let axis = attr_int(node, "axis").unwrap_or(1) as usize;
+                let pre: i64 = x[..axis.min(x.len())].iter().product();
+                let post: i64 = x[axis.min(x.len())..].iter().product();
+                vec![pre.max(1), post.max(1)]
+            }),
+            "Reshape" => reshape_out(node, shapes, consts),
             "Transpose" => transpose_out(node, shapes),
-            "Squeeze"   => squeeze_out(node, shapes, consts),
+            "Squeeze" => squeeze_out(node, shapes, consts),
             "Unsqueeze" => unsqueeze_out(node, shapes, consts),
-            "Gather"    => gather_out(node, shapes),
-            "Slice"     => slice_out(node, shapes, consts),
+            "Gather" => gather_out(node, shapes),
+            "Slice" => slice_out(node, shapes, consts),
             // Reductive ops. Output = input shape with reduced axes either
             // removed or set to 1 (when keepdims=1, the ONNX default).
-            "ReduceMean" | "ReduceSum" | "ReduceMax" | "ReduceMin"
-            | "ReduceProd" | "ReduceL1" | "ReduceL2" | "ReduceLogSum"
-            | "ReduceLogSumExp" | "ReduceSumSquare" => {
+            "ReduceMean" | "ReduceSum" | "ReduceMax" | "ReduceMin" | "ReduceProd" | "ReduceL1"
+            | "ReduceL2" | "ReduceLogSum" | "ReduceLogSumExp" | "ReduceSumSquare" => {
                 let x = get(shapes, &node.input[0]).cloned();
                 x.map(|mut s| {
                     let keepdims = attr_int(node, "keepdims").unwrap_or(1) != 0;
@@ -669,19 +799,26 @@ fn propagate_pass(
                         attr_ints(node, "axes")
                     };
                     let rank = s.len() as i64;
-                    let axes: Vec<usize> = axes_raw.iter().map(|&a| {
-                        (if a < 0 { a + rank } else { a }) as usize
-                    }).collect();
+                    let axes: Vec<usize> = axes_raw
+                        .iter()
+                        .map(|&a| (if a < 0 { a + rank } else { a }) as usize)
+                        .collect();
                     if axes.is_empty() {
                         // Reduce over all axes — output is a scalar (or [1,…,1] with keepdims).
                         if keepdims { vec![1; s.len()] } else { vec![] }
                     } else if keepdims {
-                        for &a in &axes { if a < s.len() { s[a] = 1; } }
+                        for &a in &axes {
+                            if a < s.len() {
+                                s[a] = 1;
+                            }
+                        }
                         s
                     } else {
-                        s.into_iter().enumerate()
-                         .filter(|(i, _)| !axes.contains(i))
-                         .map(|(_, d)| d).collect()
+                        s.into_iter()
+                            .enumerate()
+                            .filter(|(i, _)| !axes.contains(i))
+                            .map(|(_, d)| d)
+                            .collect()
                     }
                 })
             }
@@ -707,28 +844,27 @@ fn propagate_pass(
                 }
                 s
             }
-            "QuantizeLinear" | "DequantizeLinear" => {
-                get(shapes, &node.input[0]).cloned()
-            }
+            "QuantizeLinear" | "DequantizeLinear" => get(shapes, &node.input[0]).cloned(),
             // Data-dependent ops — the user's "Where / Equal style"
             // round-3 coverage. These appear in attention masks, mask
             // construction, dynamic range generation, OneHot-based
             // embedding lookups.
             "OneHot" => onehot_out(node, shapes, &consts),
             "Where" => where_out(node, shapes),
-            "Equal" | "Less" | "LessOrEqual" | "Greater" | "GreaterOrEqual"
-            | "Not" | "And" | "Or" | "Xor"
-                if !node.input.is_empty() => {
-                    // Boolean output — same shape as the first input (or
-                    // higher-rank if available).
-                    let a = node.input.first().and_then(|n| get(shapes, n)).cloned();
-                    let b = node.input.get(1).and_then(|n| get(shapes, n)).cloned();
-                    match (a, b) {
-                        (Some(a), Some(b)) if b.len() > a.len() => Some(b),
-                        (Some(a), _) => Some(a),
-                        (None, b) => b,
-                    }
+            "Equal" | "Less" | "LessOrEqual" | "Greater" | "GreaterOrEqual" | "Not" | "And"
+            | "Or" | "Xor"
+                if !node.input.is_empty() =>
+            {
+                // Boolean output — same shape as the first input (or
+                // higher-rank if available).
+                let a = node.input.first().and_then(|n| get(shapes, n)).cloned();
+                let b = node.input.get(1).and_then(|n| get(shapes, n)).cloned();
+                match (a, b) {
+                    (Some(a), Some(b)) if b.len() > a.len() => Some(b),
+                    (Some(a), _) => Some(a),
+                    (None, b) => b,
                 }
+            }
             "Range" => range_out(node, &consts),
             // Resize: output shape from the `sizes` input (input[3]) when
             // constant, else input shape × `scales` (input[2]) when constant.
@@ -737,7 +873,9 @@ fn propagate_pass(
             "Resize" | "Upsample" => {
                 let x = get(shapes, &node.input[0]).cloned();
                 // Prefer explicit sizes (input[3]).
-                let sizes = node.input.get(3)
+                let sizes = node
+                    .input
+                    .get(3)
                     .filter(|n| !n.is_empty())
                     .and_then(|n| consts.get(n.as_str()))
                     .cloned();
@@ -760,7 +898,9 @@ fn propagate_pass(
                 // Output is the second input (a shape tensor).
                 if node.input.len() >= 2 {
                     consts.get(&node.input[1]).cloned()
-                } else { None }
+                } else {
+                    None
+                }
             }
             "ConstantOfShape" => {
                 // Output shape is the first input (a shape tensor).

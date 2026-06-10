@@ -1,0 +1,115 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+const columns = [
+  {
+    name: 'Photonic',
+    code: 'tei-d-photonic',
+    color: 'text-brand-violet',
+    physics: 'Coherent light through a Mach-Zehnder interferometer mesh. Multiplication happens in amplitude; integration happens on a photodetector.',
+    owns: 'Dense linear algebra — matmul, convolution, attention products, unitary transforms.',
+    anchor: '~30 fJ per multiply-accumulate at the system level.',
+  },
+  {
+    name: 'Stochastic',
+    code: 'tei-d-stochastic',
+    color: 'text-brand-gold',
+    physics: 'Probabilistic bits built on stochastic magnetic tunnel junctions. The thermal bath does the sampling — the compute is the noise.',
+    owns: 'Sampling — MCMC, Gibbs, simulated annealing, Bayesian posteriors.',
+    anchor: '~1 fJ per p-bit update.',
+  },
+  {
+    name: 'Reversible',
+    code: 'tei-d-reversible',
+    color: 'text-emerald-400',
+    physics: 'Adiabatic CMOS recovers charge instead of dissipating it. The bijective phase of a computation approaches the Landauer floor.',
+    owns: 'Every primitive with a Bennett decomposition in the catalog — the reversible kernel runs nearly free; only the irreversible projection pays.',
+    anchor: '~10³ above the Landauer floor for the reversible phase.',
+  },
+  {
+    name: 'Neuromorphic',
+    code: 'tei-d-neuromorphic',
+    color: 'text-brand-cyan',
+    physics: 'Leaky integrate-and-fire neurons spend energy per spike event, not per clock. A silent neuron is nearly free.',
+    owns: 'Spiking networks — LIF inference, STDP learning, event-driven workloads.',
+    anchor: '~20 pJ per synaptic operation.',
+  },
+  {
+    name: 'In-memory',
+    code: 'tei-d-in-memory',
+    color: 'text-brand-amber',
+    physics: "Resistive crossbars compute matrix-vector products with Ohm's law and Kirchhoff's current law — the weights are conductances, the multiply is physics.",
+    owns: 'Matrix-vector multiply and small dense matmuls, at the array.',
+    anchor: '~2-5 fJ per multiply-accumulate on a 256×256 array.',
+  },
+];
+---
+<Layout title="About" description="What tei-fabric is: a cost-surface dispatcher that routes each compute primitive to the physical substrate that performs it at the lowest joule cost.">
+
+<section class="max-w-4xl mx-auto px-6 pt-20 pb-12">
+  <p class="section-label mb-5">About</p>
+  <h1 class="font-display text-5xl md:text-6xl font-bold text-brand-white leading-[1.05] tracking-tight mb-8">
+    Every operation has a <span class="text-brand-amber italic">physics</span> that performs it best.
+  </h1>
+  <div class="space-y-5 text-brand-light text-lg leading-relaxed max-w-3xl">
+    <p>
+      A matrix multiply is cheapest as light through an interferometer mesh. A random sample is cheapest as thermal noise in a magnetic junction. A reversible transform is cheapest on logic that recovers its charge instead of burning it. A spiking network is cheapest on silicon that only spends energy when a neuron fires.
+    </p>
+    <p>
+      General-purpose processors run all of these on one substrate and pay one price: roughly eight orders of magnitude above the thermodynamic floor. <strong class="text-brand-white">tei-fabric</strong> is the orchestration layer that ends that flat tax — it reads a workload, decomposes it into primitives from the <a href="https://compute.openie.dev" class="text-brand-amber underline decoration-brand-amber/30 hover:decoration-brand-amber">Periodic Stack of Computation</a>, and dispatches each primitive to the substrate whose physics performs it at the lowest joule cost.
+    </p>
+  </div>
+</section>
+
+<section class="max-w-6xl mx-auto px-6 py-12">
+  <p class="section-label mb-6">The five substrate columns</p>
+  <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+    {columns.map((c) => (
+      <div class="glass-card p-6 flex flex-col">
+        <h3 class={`font-display text-xl font-bold mb-1 ${c.color}`}>{c.name}</h3>
+        <p class="font-mono text-[10px] text-brand-gray tracking-wider mb-4">{c.code}</p>
+        <p class="text-brand-light text-sm leading-relaxed mb-3">{c.physics}</p>
+        <p class="text-brand-light text-sm leading-relaxed mb-4 flex-1"><span class="text-brand-gray">Owns:</span> {c.owns}</p>
+        <p class="font-mono text-[11px] text-brand-amber border-t border-brand-border pt-3">{c.anchor}</p>
+      </div>
+    ))}
+    <div class="glass-card p-6 flex flex-col border-brand-border">
+      <h3 class="font-display text-xl font-bold mb-1 text-brand-slate">Baseline</h3>
+      <p class="font-mono text-[10px] text-brand-gray tracking-wider mb-4">tei-d-baseline</p>
+      <p class="text-brand-light text-sm leading-relaxed mb-3">A modern CPU/GPU, anchored to measured silicon. The comparator every other substrate is priced against.</p>
+      <p class="text-brand-light text-sm leading-relaxed mb-4 flex-1"><span class="text-brand-gray">Owns:</span> everything, universally — at the general-purpose price.</p>
+      <p class="font-mono text-[11px] text-brand-amber border-t border-brand-border pt-3">~36 pJ per multiply-accumulate.</p>
+    </div>
+  </div>
+</section>
+
+<section class="max-w-4xl mx-auto px-6 py-12">
+  <p class="section-label mb-6">How the dispatcher works</p>
+  <div class="space-y-5 text-brand-light text-base md:text-lg leading-relaxed">
+    <p>
+      Drop in an ONNX model — or build a workload by hand — and the importer maps each operator to a Periodic Stack primitive, resolving tensor shapes through the graph. The dispatcher then prices every primitive on every substrate from first principles: laser efficiency and ADC samples for the photonic column, crossbar tiling for the in-memory column, spike counts for the neuromorphic column, Bennett fractions for the reversible column. The lowest-joule supported substrate wins, and the full considered set is reported so you can see exactly why.
+    </p>
+    <p>
+      Every constant in every model carries a citation to the published literature — Landauer 1961, Shen 2017, Davies 2018, Wan 2022, the Murmann ADC survey, and the rest. The constants are also engineering knobs: drag the wavelength-channel count or the crossbar size and watch the cost surface re-route in real time.
+    </p>
+  </div>
+</section>
+
+<section class="max-w-4xl mx-auto px-6 py-12">
+  <p class="section-label mb-6">Open by design</p>
+  <div class="space-y-5 text-brand-light text-base md:text-lg leading-relaxed">
+    <p>
+      tei-fabric is Apache-2.0 Rust, built to compose the open substrate-simulation ecosystem — gdsfactory and SAX for photonics, thrml for thermodynamic sampling, CrossSim for crossbars, Lava and NIR for spiking networks, the DeBenedictis adiabatic-analysis flow for reversible CMOS. The fabric's job is the orchestration above all of them: joule-aware dispatch across columns those tools individually validate.
+    </p>
+    <p class="font-mono text-sm text-brand-gray">
+      Built by <a href="https://thermoedge.ai" class="text-brand-amber underline decoration-brand-amber/30 hover:decoration-brand-amber">Thermodynamic Edge Intelligence Corp.</a> — a subsidiary of Open Interface Engineering. Sibling instruments: <a href="https://orbit.thermoedge.ai" class="text-brand-amber underline decoration-brand-amber/30 hover:decoration-brand-amber">orbit.thermoedge.ai</a> · <a href="https://tesilicon.thermoedge.ai" class="text-brand-amber underline decoration-brand-amber/30 hover:decoration-brand-amber">tesilicon.thermoedge.ai</a> · <a href="https://corridor.thermoedge.ai" class="text-brand-amber underline decoration-brand-amber/30 hover:decoration-brand-amber">corridor.thermoedge.ai</a>
+    </p>
+  </div>
+  <div class="mt-10">
+    <a href="/" class="px-6 py-3 bg-brand-amber/15 border border-brand-amber/45 text-brand-amber font-mono text-sm rounded-md no-underline hover:bg-brand-amber/25 hover:border-brand-amber transition-all">
+      Open the dispatcher →
+    </a>
+  </div>
+</section>
+
+</Layout>

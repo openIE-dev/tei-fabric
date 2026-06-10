@@ -11,3 +11,6 @@ description = "Stochastic substrate dialect — sMTJ / p-bit thermodynamic-sampl
 tei-stack.workspace = true
 tei-ir.workspace = true
 tei-substrate-traits.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

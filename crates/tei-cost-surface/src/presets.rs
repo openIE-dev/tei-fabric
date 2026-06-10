@@ -63,7 +63,9 @@ fn default_profile_for(p: &Primitive) -> OpProfile {
     } else if matches!(p.id, 24) {
         // Convolution — a ResNet conv stage default.
         OpProfile {
-            shape: TensorShape { dims: vec![56 * 56, 64] },
+            shape: TensorShape {
+                dims: vec![56 * 56, 64],
+            },
             reduce_dim: Some(64 * 3 * 3),
             batch: 1,
             dtype: Dtype::F16,
@@ -74,7 +76,9 @@ fn default_profile_for(p: &Primitive) -> OpProfile {
     } else {
         // Everything else: a transformer-style matmul.
         OpProfile {
-            shape: TensorShape { dims: vec![512, 2048] },
+            shape: TensorShape {
+                dims: vec![512, 2048],
+            },
             reduce_dim: Some(768),
             batch: 1,
             dtype: Dtype::F16,
@@ -95,10 +99,7 @@ fn build_invocation(p: &Primitive) -> Invocation {
 }
 
 /// Build all catalog-driven showcase presets for the given substrate set.
-pub fn enumerate_presets(
-    stack: &Stack,
-    substrates: &[Arc<dyn Substrate>],
-) -> Vec<Preset> {
+pub fn enumerate_presets(stack: &Stack, substrates: &[Arc<dyn Substrate>]) -> Vec<Preset> {
     let mut out = Vec::new();
 
     for s in substrates {
@@ -143,20 +144,34 @@ pub fn enumerate_presets(
     // so the user can stress the dispatcher across categories at once.
     out.extend(family_preset(stack, "LA", "Linear algebra family",
         "Every native LA primitive at matmul defaults. Tests photonic vs in-memory vs reversible head-to-head."));
-    out.extend(family_preset(stack, "PROB", "Probabilistic family",
-        "Sampling-class primitives. Routes everything to the stochastic substrate."));
-    out.extend(family_preset(stack, "TR", "Transforms family",
-        "Bijective transforms (FFT, wavelet, …). Where the reversible substrate is at its best."));
+    out.extend(family_preset(
+        stack,
+        "PROB",
+        "Probabilistic family",
+        "Sampling-class primitives. Routes everything to the stochastic substrate.",
+    ));
+    out.extend(family_preset(
+        stack,
+        "TR",
+        "Transforms family",
+        "Bijective transforms (FFT, wavelet, …). Where the reversible substrate is at its best.",
+    ));
 
     out
 }
 
-fn family_preset(stack: &Stack, family_code: &str, label: &str, description: &str) -> Option<Preset> {
+fn family_preset(
+    stack: &Stack,
+    family_code: &str,
+    label: &str,
+    description: &str,
+) -> Option<Preset> {
     let idxs = stack.family(family_code);
     if idxs.is_empty() {
         return None;
     }
-    let invocations: Vec<Invocation> = idxs.iter()
+    let invocations: Vec<Invocation> = idxs
+        .iter()
         .filter_map(|&i| stack.primitives().get(i))
         .take(MAX_OPS_PER_PRESET)
         .map(|p| build_invocation(p))
@@ -177,4 +192,3 @@ fn family_preset(stack: &Stack, family_code: &str, label: &str, description: &st
         },
     })
 }
-

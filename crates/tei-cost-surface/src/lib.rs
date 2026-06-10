@@ -15,6 +15,7 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tei_d_in_memory::InMemoryParams;
+use tei_d_neuromorphic::NeuromorphicParams;
 use tei_d_photonic::PhotonicParams;
 use tei_ir::{Constraints, Invocation, Workload};
 use tei_stack::Stack;
@@ -31,18 +32,31 @@ pub struct SubstrateParams {
     pub photonic: PhotonicParams,
     #[serde(default)]
     pub in_memory: InMemoryParams,
+    #[serde(default)]
+    pub neuromorphic: NeuromorphicParams,
 }
 
 /// Build the default substrate set with custom engineering parameters for
 /// the dialects that expose them. The non-parameterized dialects (baseline,
 /// stochastic, reversible) construct with their literature defaults.
-pub fn substrates_with_params(stack: Arc<Stack>, params: &SubstrateParams) -> Vec<Arc<dyn Substrate>> {
+pub fn substrates_with_params(
+    stack: Arc<Stack>,
+    params: &SubstrateParams,
+) -> Vec<Arc<dyn Substrate>> {
     vec![
         Arc::new(tei_d_baseline::Baseline) as Arc<dyn Substrate>,
-        Arc::new(tei_d_photonic::Photonic::with_params(params.photonic.clone())) as Arc<dyn Substrate>,
-        Arc::new(tei_d_in_memory::InMemory::with_params(params.in_memory.clone())) as Arc<dyn Substrate>,
+        Arc::new(tei_d_photonic::Photonic::with_params(
+            params.photonic.clone(),
+        )) as Arc<dyn Substrate>,
+        Arc::new(tei_d_in_memory::InMemory::with_params(
+            params.in_memory.clone(),
+        )) as Arc<dyn Substrate>,
         Arc::new(tei_d_stochastic::Stochastic) as Arc<dyn Substrate>,
-        Arc::new(tei_d_reversible::Reversible::new(stack)) as Arc<dyn Substrate>,
+        Arc::new(tei_d_reversible::Reversible::new(stack.clone())) as Arc<dyn Substrate>,
+        Arc::new(tei_d_neuromorphic::Neuromorphic::with_params(
+            stack,
+            params.neuromorphic.clone(),
+        )) as Arc<dyn Substrate>,
     ]
 }
 
@@ -137,19 +151,26 @@ pub fn dispatch_invocation(
         } else {
             (None, None)
         };
-        considered.push((idx, SubstrateOption {
-            substrate: s.name().to_string(),
-            display: s.display_name().to_string(),
-            supported,
-            cost,
-            joules_total,
-        }));
+        considered.push((
+            idx,
+            SubstrateOption {
+                substrate: s.name().to_string(),
+                display: s.display_name().to_string(),
+                supported,
+                cost,
+                joules_total,
+            },
+        ));
     }
 
     let chosen_idx = considered
         .iter()
         .filter(|(_, o)| o.supported)
-        .min_by(|a, b| a.1.joules_total.unwrap().total_cmp(&b.1.joules_total.unwrap()))
+        .min_by(|a, b| {
+            a.1.joules_total
+                .unwrap()
+                .total_cmp(&b.1.joules_total.unwrap())
+        })
         .map(|(i, _)| *i)
         .unwrap_or(baseline_idx);
 
@@ -162,11 +183,16 @@ pub fn dispatch_invocation(
     let baseline_joules_total = baseline_cost.joules_total(inv.count);
 
     let justification = if chosen_idx == baseline_idx {
-        format!("No specialized substrate supports {} — stays on baseline.", p.name)
+        format!(
+            "No specialized substrate supports {} — stays on baseline.",
+            p.name
+        )
     } else {
         let speedup = if chosen_joules_total > 0.0 {
             baseline_joules_total / chosen_joules_total
-        } else { f64::INFINITY };
+        } else {
+            f64::INFINITY
+        };
         format!(
             "{} @ {:.2e} J/op vs baseline {:.2e} J/op — {:.0}× fewer joules.",
             chosen_s.display_name(),
@@ -236,7 +262,10 @@ pub fn summarize(
     let mut baseline_total_seconds = 0.0;
 
     for a in assignments {
-        if let Some(agg) = per_substrate.iter_mut().find(|s| s.substrate == a.chosen_substrate) {
+        if let Some(agg) = per_substrate
+            .iter_mut()
+            .find(|s| s.substrate == a.chosen_substrate)
+        {
             agg.joules += a.chosen_joules_total;
             agg.op_count += a.count;
         }
@@ -248,7 +277,11 @@ pub fn summarize(
     let cps = constraints.cycles_per_second.max(1e-9);
     let power_w = total_joules * cps;
     let baseline_power_w = baseline_total_joules * cps;
-    let savings_factor = if total_joules > 0.0 { baseline_total_joules / total_joules } else { 1.0 };
+    let savings_factor = if total_joules > 0.0 {
+        baseline_total_joules / total_joules
+    } else {
+        1.0
+    };
     DispatchSummary {
         workload_goal: workload_goal.to_string(),
         total_joules,
@@ -266,15 +299,16 @@ pub fn summarize(
 }
 
 /// Default substrate set — baseline + photonic + in-memory + stochastic +
-/// reversible. The reversible dialect needs the catalog at construction
-/// time so it can consult Bennett-decomposition edges.
+/// reversible + neuromorphic. The reversible and neuromorphic dialects need
+/// the catalog at construction time (Bennett edges / NEURO family).
 pub fn default_substrates(stack: Arc<Stack>) -> Vec<Arc<dyn Substrate>> {
     vec![
         Arc::new(tei_d_baseline::Baseline) as Arc<dyn Substrate>,
         Arc::new(tei_d_photonic::Photonic::default()) as Arc<dyn Substrate>,
         Arc::new(tei_d_in_memory::InMemory::default()) as Arc<dyn Substrate>,
         Arc::new(tei_d_stochastic::Stochastic) as Arc<dyn Substrate>,
-        Arc::new(tei_d_reversible::Reversible::new(stack)) as Arc<dyn Substrate>,
+        Arc::new(tei_d_reversible::Reversible::new(stack.clone())) as Arc<dyn Substrate>,
+        Arc::new(tei_d_neuromorphic::Neuromorphic::new(stack)) as Arc<dyn Substrate>,
     ]
 }
 
@@ -290,7 +324,12 @@ pub fn dispatch(
         .iter()
         .filter_map(|inv| dispatch_invocation(stack, inv, substrates))
         .collect();
-    let summary = summarize(&workload.goal, &workload.constraints, substrates, &assignments);
+    let summary = summarize(
+        &workload.goal,
+        &workload.constraints,
+        substrates,
+        &assignments,
+    );
     DispatchPlan {
         workload_goal: summary.workload_goal,
         assignments,

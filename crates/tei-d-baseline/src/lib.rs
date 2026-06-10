@@ -88,12 +88,18 @@ fn overhead_for(p: &Primitive) -> f64 {
 pub struct Baseline;
 
 impl Substrate for Baseline {
-    fn name(&self) -> &str { "baseline" }
-    fn display_name(&self) -> &str { "CPU / GPU baseline" }
+    fn name(&self) -> &str {
+        "baseline"
+    }
+    fn display_name(&self) -> &str {
+        "CPU / GPU baseline"
+    }
 
     /// Universal substrate — supports every primitive (general-purpose silicon
     /// can in principle run anything).
-    fn supports(&self, _primitive: &Primitive) -> bool { true }
+    fn supports(&self, _primitive: &Primitive) -> bool {
+        true
+    }
 
     fn cost(&self, primitive: &Primitive, profile: &OpProfile) -> Cost {
         // bits_erased_per_op is per ATOMIC op (per MAC for matmul-class,
@@ -115,8 +121,14 @@ impl Substrate for Baseline {
             // (Stochastic rounding · MC accept/reject · MCMC step ·
             //  Bayesian posterior · Discrete-Gaussian sampling ·
             //  Bootstrap resampling · Simulated annealing · Lattice Boltzmann.)
-            8 | 38 | 39 | 99 | 245 | 251 | 258 | 274 => {
-                profile.sample_events().unwrap_or(1)
+            8 | 38 | 39 | 99 | 245 | 251 | 258 | 274 => profile.sample_events().unwrap_or(1),
+            // Spiking-class (NEURO family: LIF neuron · STDP). Dense GPU
+            // simulation can't exploit spike sparsity: it pays a MAC for
+            // every synapse of every neuron at every timestep, regardless of
+            // whether the neuron fired. atomic = neurons × timesteps × fanout.
+            50 | 51 => {
+                let fanout = profile.reduce_dim.unwrap_or(128) as u64;
+                profile.sample_events().unwrap_or(1).saturating_mul(fanout)
             }
             _ => 1,
         };
@@ -136,5 +148,59 @@ impl Substrate for Baseline {
             "Landauer 1961, IBM J. Res. Dev. 5(3): 183.",
             "Bérut et al. 2012, Nature 483: 187 (experimental verification of kT·ln(2)).",
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tei_ir::{Dtype, TensorShape};
+
+    fn matmul_profile() -> OpProfile {
+        OpProfile {
+            shape: TensorShape {
+                dims: vec![512, 2048],
+            },
+            reduce_dim: Some(768),
+            batch: 1,
+            dtype: Dtype::F16,
+            sparsity: 0.0,
+            sweeps: None,
+            variables: None,
+        }
+    }
+
+    fn dense_matmul_primitive() -> tei_stack::Primitive {
+        serde_json::from_str(
+            r#"{
+            "id": 18, "name": "Dense MatMul", "family": "LA",
+            "B": "kernel", "C": "L2", "D": "data-parallel",
+            "existing": "HW", "silicon_target": null, "wave": null
+        }"#,
+        )
+        .unwrap()
+    }
+
+    /// Anchor: L₂ MAC on Orin Nano-class silicon = 64 bits erased ×
+    /// kT·ln(2) × 2×10⁸ overhead = 36.48 pJ/MAC exactly.
+    #[test]
+    fn l2_mac_anchor_36_48_pj() {
+        let s = Baseline;
+        let p = dense_matmul_primitive();
+        let macs = 512u64 * 768 * 2048;
+        let cost = s.cost(&p, &matmul_profile());
+        let per_mac = cost.joules_per_op / macs as f64;
+        let expected = 64.0 * K_T_LN2_300K * 2.0e8; // 3.648e-11
+        assert!(
+            (per_mac - expected).abs() / expected < 1e-9,
+            "per-MAC {per_mac:.4e} != anchor {expected:.4e}"
+        );
+    }
+
+    /// Baseline supports every primitive (universal substrate).
+    #[test]
+    fn universal_support() {
+        let s = Baseline;
+        assert!(s.supports(&dense_matmul_primitive()));
     }
 }

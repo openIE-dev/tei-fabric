@@ -856,6 +856,7 @@ dependencies = [
  "serde",
  "tei-d-baseline",
  "tei-d-in-memory",
+ "tei-d-neuromorphic",
  "tei-d-photonic",
  "tei-d-reversible",
  "tei-d-stochastic",
@@ -868,6 +869,7 @@ dependencies = [
 name = "tei-d-baseline"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "tei-ir",
  "tei-stack",
  "tei-substrate-traits",
@@ -878,6 +880,18 @@ name = "tei-d-in-memory"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
+ "tei-ir",
+ "tei-stack",
+ "tei-substrate-traits",
+]
+
+[[package]]
+name = "tei-d-neuromorphic"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
  "tei-ir",
  "tei-stack",
  "tei-substrate-traits",
@@ -888,6 +902,7 @@ name = "tei-d-photonic"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
  "tei-ir",
  "tei-stack",
  "tei-substrate-traits",
@@ -897,6 +912,7 @@ dependencies = [
 name = "tei-d-reversible"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "tei-ir",
  "tei-stack",
  "tei-substrate-traits",
@@ -906,6 +922,7 @@ dependencies = [
 name = "tei-d-stochastic"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "tei-ir",
  "tei-stack",
  "tei-substrate-traits",
