@@ -161,6 +161,24 @@ fn resolve_matmul(
     Some((m, k_a, n))
 }
 
+/// Resolve a fused-attention node (`MultiHeadAttention`, `Attention`,
+/// `QAttention`, `GroupQueryAttention`, etc.) into the equivalent
+/// `(m, k, n)` for the dominant matmul. ONNX MHA's first input is Q with
+/// shape `[batch, seq, hidden]`; the dominant compute is `Q × Kᵀ` giving
+/// `B · S · S · H` MACs. We pick `m = B·S`, `k = H`, `n = S` so it routes
+/// through the same matmul-class cost models as plain MatMul.
+fn resolve_mha(
+    node: &proto::NodeProto,
+    shapes: &HashMap<String, Vec<i64>>,
+) -> Option<(usize, usize, usize)> {
+    let q = coerce_dims(shapes.get(&node.input[0])?)?;
+    if q.len() < 3 { return None; }
+    let batch: usize = q[..q.len() - 2].iter().product::<usize>().max(1);
+    let s = q[q.len() - 2];
+    let h = q[q.len() - 1];
+    Some((batch * s, h, s))
+}
+
 /// Look up shapes for the inputs of a Conv node and derive a matmul-equivalent
 /// `(m, k, n)`. For Conv(X[N,C,H,W], W[M,C,kH,kW]) producing Y[N,M,H',W'],
 /// the canonical matmul-equivalent is `m = N*H'*W', k = C*kH*kW, n = M`.
@@ -237,6 +255,23 @@ pub fn parse_onnx(bytes: &[u8]) -> Result<ImportReport, ImportError> {
         let profile = match kind {
             "matmul" => {
                 match resolve_matmul(node, &shapes) {
+                    Some((m, k, n)) => OpProfile {
+                        shape: TensorShape { dims: vec![m, n] },
+                        reduce_dim: Some(k),
+                        batch: 1,
+                        dtype,
+                        sparsity: 0.0,
+                        sweeps: None,
+                        variables: None,
+                    },
+                    None => {
+                        skipped_unresolved.push(label);
+                        continue;
+                    }
+                }
+            }
+            "mha" => {
+                match resolve_mha(node, &shapes) {
                     Some((m, k, n)) => OpProfile {
                         shape: TensorShape { dims: vec![m, n] },
                         reduce_dim: Some(k),

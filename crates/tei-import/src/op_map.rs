@@ -24,14 +24,13 @@ pub fn map_op(op_type: &str) -> Option<(u32, &'static str)> {
         "MatMulInteger"   => Some((18, "matmul")),
         "QLinearMatMul"   => Some((18, "matmul")),
         "FusedMatMul"     => Some((18, "matmul")),
-        "Attention"       => Some((20, "matmul")),
-        "MultiHeadAttention" => Some((20, "matmul")),
 
         // ── Convolution ──────────────────────────────────────────────
         "Conv"            => Some((24, "conv")),
         "ConvInteger"     => Some((24, "conv")),
         "QLinearConv"     => Some((24, "conv")),
         "ConvTranspose"   => Some((24, "conv")),
+        "FusedConv"       => Some((24, "conv")),     // ORT-contrib fused Conv + bias + activation
 
         // ── Linear transforms ────────────────────────────────────────
         "DFT"             => Some((23, "scalar")),
@@ -43,8 +42,22 @@ pub fn map_op(op_type: &str) -> Option<(u32, &'static str)> {
         "LayerNormalization"    => Some((35, "scalar")),
         "BatchNormalization"    => Some((35, "scalar")),
         "GroupNormalization"    => Some((35, "scalar")),
+        "GroupNorm"             => Some((35, "scalar")),  // ORT contrib alias
         "InstanceNormalization" => Some((35, "scalar")),
         "RMSNormalization"      => Some((35, "scalar")),
+        // ORT-contrib fused-norm ops — wrap a residual + layernorm in one op.
+        "SkipLayerNormalization"           => Some((35, "scalar")),
+        "SkipSimplifiedLayerNormalization" => Some((35, "scalar")),
+        "SimplifiedLayerNormalization"     => Some((35, "scalar")),
+        // ORT-contrib fused attention / GQA / MHA.
+        // Fused attention takes Q/K/V as three separate inputs (not the
+        // standard MatMul [A,B] pair), so it needs a different shape +
+        // MAC-count resolver — kind "mha".
+        "MultiHeadAttention"    => Some((20, "mha")),
+        "GroupQueryAttention"   => Some((20, "mha")),
+        "QAttention"            => Some((20, "mha")),
+        "FusedAttention"        => Some((20, "mha")),
+        "Attention"             => Some((20, "mha")),
 
         // ── Pooling ──────────────────────────────────────────────────
         "MaxPool"              => Some((26, "scalar")),

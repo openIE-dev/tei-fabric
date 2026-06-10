@@ -85,6 +85,11 @@ import Layout from '../layouts/Layout.astro';
           </p>
 
           <p class="font-mono text-[10px] text-brand-violet tracking-wider uppercase mb-2">Photonic (MZI mesh)</p>
+          <!-- live MZI mesh diagram — WDM channels render as parallel waveguides -->
+          <div class="mb-3 rounded-lg border border-brand-border bg-brand-navy/40 p-2">
+            <svg id="viz-photonic" viewBox="0 0 300 80" class="w-full" aria-label="MZI mesh with WDM channels"></svg>
+            <p id="viz-photonic-caption" class="font-mono text-[9px] text-brand-gray tracking-wider uppercase text-center mt-1"></p>
+          </div>
           <div class="grid grid-cols-2 gap-3 mb-4">
             <div>
               <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">WDM channels</label>
@@ -105,6 +110,11 @@ import Layout from '../layouts/Layout.astro';
           </div>
 
           <p class="font-mono text-[10px] text-brand-amber tracking-wider uppercase mb-2">In-memory (RRAM crossbar)</p>
+          <!-- live crossbar diagram — grid + tile count for the reference matmul -->
+          <div class="mb-3 rounded-lg border border-brand-border bg-brand-navy/40 p-2">
+            <svg id="viz-crossbar" viewBox="0 0 300 80" class="w-full" aria-label="RRAM crossbar tiling"></svg>
+            <p id="viz-crossbar-caption" class="font-mono text-[9px] text-brand-gray tracking-wider uppercase text-center mt-1"></p>
+          </div>
           <div class="grid grid-cols-2 gap-3 mb-2">
             <div>
               <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1">Crossbar size</label>
@@ -991,6 +1001,120 @@ $('dispatch-btn').addEventListener('click', dispatch);
 // morphing as the user drags a slider value.
 const LIVE_PARAM_IDS = ['p-wdm','p-mod','p-laser','p-adc','m-size','m-dev','m-adc','m-dac'];
 let liveTimer = null;
+
+// ────────────────────────────────────────────────────────────────────
+// Physical-parameter visualizations.
+// Tiny SVG diagrams that re-render as the user drags the inputs, so the
+// engineering knob maps to a physical picture, not just a number.
+// ────────────────────────────────────────────────────────────────────
+
+// WDM channel hues: spread across the C-band rainbow (red → violet).
+function wdmColor(i, n) {
+  const hue = 0 + (270 * i / Math.max(1, n - 1 || 1));
+  return `hsl(${hue}, 85%, 62%)`;
+}
+
+// Photonic viz: an MZI lattice crossed by N wavelength channels.
+// More channels → more parallel colored waveguides through the same mesh.
+// Modulator energy shrinks the input-coupler dots; laser η sets the
+// brightness of the source bar.
+function renderPhotonicViz() {
+  const svg = document.getElementById('viz-photonic');
+  if (!svg) return;
+  const wdm   = Math.max(1, Math.min(64, parseInt($('p-wdm').value, 10) || 1));
+  const modFj = parseFloat($('p-mod').value) || 1.0;
+  const laserPct = Math.max(1, Math.min(80, parseFloat($('p-laser').value) || 10));
+
+  const W = 300, H = 80;
+  const shown = Math.min(wdm, 12);             // draw at most 12 guides
+  const laneGap = (H - 20) / Math.max(1, shown);
+  const els = [];
+
+  // Laser source bar at left — opacity tracks efficiency.
+  els.push(`<rect x="4" y="8" width="6" height="${H - 16}" rx="2"
+    fill="#F59E0B" opacity="${0.25 + 0.75 * laserPct / 80}"/>`);
+
+  // Waveguides.
+  for (let i = 0; i < shown; i++) {
+    const y = 12 + i * laneGap + laneGap / 2;
+    const c = wdmColor(i, shown);
+    els.push(`<line x1="12" y1="${y}" x2="${W - 30}" y2="${y}" stroke="${c}" stroke-width="1.4" opacity="0.85"/>`);
+    // Modulator dot — radius tracks modulator energy (bigger = more J/bit).
+    const r = Math.max(1.2, Math.min(4, 1.2 + Math.log10(modFj + 0.1) + 1));
+    els.push(`<circle cx="26" cy="${y}" r="${r}" fill="${c}"/>`);
+  }
+
+  // MZI lattice: diagonal couplers between adjacent lanes.
+  for (let col = 0; col < 4; col++) {
+    const x = 60 + col * 52;
+    for (let i = 0; i + 1 < shown; i += 2) {
+      const y1 = 12 + i * laneGap + laneGap / 2;
+      const y2 = 12 + (i + 1) * laneGap + laneGap / 2;
+      els.push(`<path d="M ${x},${y1} L ${x + 16},${y2} M ${x},${y2} L ${x + 16},${y1}"
+        stroke="rgba(167,139,250,0.65)" stroke-width="1" fill="none"/>`);
+    }
+  }
+
+  // Photodetector column at right.
+  for (let i = 0; i < shown; i++) {
+    const y = 12 + i * laneGap + laneGap / 2;
+    els.push(`<rect x="${W - 26}" y="${y - 2.5}" width="8" height="5" rx="1" fill="#94A3B8" opacity="0.8"/>`);
+  }
+
+  svg.innerHTML = els.join('');
+  const cap = document.getElementById('viz-photonic-caption');
+  if (cap) cap.textContent =
+    `${wdm} λ channel${wdm === 1 ? '' : 's'}${wdm > 12 ? ' (12 shown)' : ''} · ${modFj} fJ/bit modulators · ${laserPct}% laser η`;
+}
+
+// Crossbar viz: the array as a grid; a reference 768×2048 matmul overlaid
+// as tiles. Bigger crossbar → fewer, larger tiles → fewer ADC samples.
+function renderCrossbarViz() {
+  const svg = document.getElementById('viz-crossbar');
+  if (!svg) return;
+  const size = Math.max(16, Math.min(4096, parseInt($('m-size').value, 10) || 256));
+  const REF_K = 768, REF_N = 2048;             // the WQ-projection reference matmul
+  const kTiles = Math.ceil(REF_K / size);
+  const nTiles = Math.ceil(REF_N / size);
+
+  const W = 300, H = 80;
+  const gridX = 10, gridY = 8, gw = 120, gh = H - 16;
+  const els = [];
+
+  // Crossbar array: wordlines + bitlines density ∝ log2(size).
+  const lines = Math.max(4, Math.min(14, Math.round(Math.log2(size)) ));
+  for (let i = 0; i <= lines; i++) {
+    const y = gridY + gh * i / lines;
+    els.push(`<line x1="${gridX}" y1="${y}" x2="${gridX + gw}" y2="${y}" stroke="rgba(245,158,11,0.45)" stroke-width="0.7"/>`);
+    const x = gridX + gw * i / lines;
+    els.push(`<line x1="${x}" y1="${gridY}" x2="${x}" y2="${gridY + gh}" stroke="rgba(245,158,11,0.45)" stroke-width="0.7"/>`);
+  }
+  els.push(`<rect x="${gridX}" y="${gridY}" width="${gw}" height="${gh}" fill="none" stroke="#F59E0B" stroke-width="1" rx="2"/>`);
+
+  // Tile map: the reference matmul partitioned into k×n tiles.
+  const mapX = 160, mapY = 8, mw = 128, mh = H - 16;
+  const showK = Math.min(kTiles, 8), showN = Math.min(nTiles, 16);
+  const tw = mw / showN, th = mh / showK;
+  for (let r = 0; r < showK; r++) {
+    for (let c = 0; c < showN; c++) {
+      els.push(`<rect x="${mapX + c * tw + 0.5}" y="${mapY + r * th + 0.5}"
+        width="${Math.max(0.5, tw - 1)}" height="${Math.max(0.5, th - 1)}"
+        fill="rgba(245,158,11,${0.25 + 0.5 * ((r + c) % 2 === 0 ? 1 : 0.4)})" rx="1"/>`);
+    }
+  }
+  els.push(`<rect x="${mapX}" y="${mapY}" width="${mw}" height="${mh}" fill="none" stroke="rgba(148,163,184,0.5)" stroke-width="0.7" rx="2"/>`);
+
+  svg.innerHTML = els.join('');
+  const cap = document.getElementById('viz-crossbar-caption');
+  const totalTiles = kTiles * nTiles;
+  if (cap) cap.textContent =
+    `${size}×${size} array · 768×2048 matmul → ${kTiles}×${nTiles} = ${totalTiles} tile${totalTiles === 1 ? '' : 's'}${(kTiles > 8 || nTiles > 16) ? ' (clipped)' : ''} · ADC samples ∝ tiles`;
+}
+
+function renderParamViz() {
+  renderPhotonicViz();
+  renderCrossbarViz();
+}
 async function liveDispatch() {
   if (state.invocations.length === 0) return;
   if (!$('r-header')) return;   // no result panel yet — full dispatch will populate it
@@ -1032,10 +1156,13 @@ for (const id of LIVE_PARAM_IDS) {
   const el = document.getElementById(id);
   if (!el) continue;
   el.addEventListener('input', () => {
+    renderParamViz();                       // physical diagram: instant
     clearTimeout(liveTimer);
-    liveTimer = setTimeout(liveDispatch, 200);
+    liveTimer = setTimeout(liveDispatch, 200);  // cost surface: debounced
   });
 }
+// Initial draw.
+renderParamViz();
 
 // ────────────────────────────────────────────────────────────────────
 // ONNX import

@@ -608,11 +608,21 @@ fn propagate_pass(
             }
             "MatMul" | "MatMulInteger" | "QLinearMatMul" | "FusedMatMul" => matmul_out(node, shapes),
             "Gemm" => gemm_out(node, shapes),
+            // Fused attention: output is the same shape as Q (input[0]) for
+            // the standard self-attention case; just pass Q's shape through.
+            "MultiHeadAttention" | "Attention" | "QAttention"
+            | "GroupQueryAttention" | "FusedAttention" => {
+                get(shapes, &node.input[0]).cloned()
+            }
             // Identity-shape ops — pass first input through.
             "BatchNormalization" | "LayerNormalization" | "GroupNormalization"
-            | "InstanceNormalization" | "RMSNormalization"
+            | "GroupNorm" | "InstanceNormalization" | "RMSNormalization"
+            | "SkipLayerNormalization" | "SkipSimplifiedLayerNormalization"
+            | "SimplifiedLayerNormalization"
+            | "BiasGelu" | "FastGelu" | "QuickGelu" | "BiasAdd"
             | "Relu" | "Sigmoid" | "Tanh" | "Erf" | "Gelu" | "Selu" | "Elu" | "LeakyRelu"
             | "HardSigmoid" | "HardSwish" | "Softplus" | "Softsign" | "Mish"
+            | "Sin" | "Cos" | "Tan" | "Asin" | "Acos" | "Atan"
             | "Clip" | "Exp" | "Log" | "Neg" | "Reciprocal" | "Sqrt" | "Abs" | "Floor"
             | "Ceil" | "Round" | "Cast" | "Identity" | "Dropout" | "Softmax" | "LogSoftmax"
             => get(shapes, &node.input[0]).cloned(),
@@ -720,6 +730,32 @@ fn propagate_pass(
                     }
                 }
             "Range" => range_out(node, &consts),
+            // Resize: output shape from the `sizes` input (input[3]) when
+            // constant, else input shape × `scales` (input[2]) when constant.
+            // SD UNets upsample the decoder via Resize(scales=[1,1,2,2]) —
+            // without this rule the whole decoder half loses shapes.
+            "Resize" | "Upsample" => {
+                let x = get(shapes, &node.input[0]).cloned();
+                // Prefer explicit sizes (input[3]).
+                let sizes = node.input.get(3)
+                    .filter(|n| !n.is_empty())
+                    .and_then(|n| consts.get(n.as_str()))
+                    .cloned();
+                if let Some(sz) = sizes {
+                    Some(sz)
+                } else if let Some(x) = x {
+                    // scales are float32 raw_data which tensor_as_i64s doesn't
+                    // decode; fall back to the canonical UNet 2× spatial
+                    // upsample on rank-4 inputs (N, C stay fixed).
+                    if x.len() == 4 {
+                        Some(vec![x[0], x[1], x[2] * 2, x[3] * 2])
+                    } else {
+                        Some(x)
+                    }
+                } else {
+                    None
+                }
+            }
             "Expand" => {
                 // Output is the second input (a shape tensor).
                 if node.input.len() >= 2 {
