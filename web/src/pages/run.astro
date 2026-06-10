@@ -1,0 +1,273 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+<Layout title="Run" description="Execute a workload on a native substrate simulator and watch it happen — live Max-Cut annealing on the thrml-class stochastic column, in pure Rust.">
+
+<section class="max-w-5xl mx-auto px-6 pt-20 pb-10">
+  <p class="section-label mb-5">Execute &middot; the stochastic column</p>
+  <h1 class="font-display text-5xl md:text-6xl font-bold text-brand-white leading-[1.05] tracking-tight mb-6">
+    Watch the substrate <span class="text-brand-amber italic">compute</span>.
+  </h1>
+  <p class="text-brand-light text-lg md:text-xl max-w-3xl leading-relaxed">
+    This is not a cost estimate — it&rsquo;s the computation itself. A Max-Cut instance is annealed by chromatic block Gibbs sampling on the thrml-class stochastic simulator, in pure Rust, streamed sweep by sweep. The event ledger it returns is what recalibrates the cost surface.
+  </p>
+</section>
+
+<section class="max-w-7xl mx-auto px-6 pb-24">
+  <div class="grid lg:grid-cols-[380px_1fr] gap-6">
+
+    <!-- controls -->
+    <div class="glass-card p-6 self-start">
+      <p class="section-label mb-4">Problem</p>
+      <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Instance</label>
+      <select id="instance" class="mb-4">
+        <option value="random" selected>Random d-regular graph</option>
+        <option value="complete">Complete Kₙ (optimum = ⌊n²/4⌋)</option>
+        <option value="cycle">Cycle Cₙ (optimum known)</option>
+        <option value="petersen">Petersen graph (optimum = 12)</option>
+      </select>
+
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <div>
+          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Nodes</label>
+          <input id="nodes" type="number" value="400" min="4" max="20000" />
+        </div>
+        <div>
+          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Degree</label>
+          <input id="degree" type="number" value="4" min="2" max="16" />
+        </div>
+        <div>
+          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Sweeps</label>
+          <input id="sweeps" type="number" value="4000" min="100" max="200000" />
+        </div>
+        <div>
+          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Seed</label>
+          <input id="seed" type="number" value="42" min="0" />
+        </div>
+      </div>
+
+      <p class="section-label mb-3">Schedule</p>
+      <div class="grid grid-cols-2 gap-3 mb-5">
+        <div>
+          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">β start</label>
+          <input id="beta0" type="number" step="0.05" value="0.1" min="0.001" />
+        </div>
+        <div>
+          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">β end</label>
+          <input id="beta1" type="number" step="0.5" value="6" min="0.01" />
+        </div>
+      </div>
+
+      <button id="run-btn" class="primary w-full">ANNEAL →</button>
+
+      <div id="stats" class="mt-6 space-y-2 font-mono text-[12px] text-brand-light" style="display:none;">
+        <div class="flex justify-between"><span class="text-brand-gray">BEST CUT</span><span id="s-best" class="text-brand-amber font-bold"></span></div>
+        <div class="flex justify-between"><span class="text-brand-gray">KNOWN OPTIMUM</span><span id="s-opt"></span></div>
+        <div class="flex justify-between"><span class="text-brand-gray">EDGES</span><span id="s-edges"></span></div>
+        <div class="flex justify-between"><span class="text-brand-gray">SPIN UPDATES</span><span id="s-updates"></span></div>
+        <div class="flex justify-between"><span class="text-brand-gray">FLIPS</span><span id="s-flips"></span></div>
+        <div class="flex justify-between"><span class="text-brand-gray">WALL TIME</span><span id="s-wall"></span></div>
+        <div class="flex justify-between"><span class="text-brand-gray">UPDATE RATE</span><span id="s-rate" class="text-brand-cyan"></span></div>
+      </div>
+    </div>
+
+    <!-- live chart -->
+    <div class="glass-card p-6">
+      <div class="flex items-baseline justify-between mb-4">
+        <p class="section-label">Cut value vs sweep &middot; live</p>
+        <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider">chromatic block gibbs &middot; pure rust</p>
+      </div>
+      <div class="relative aspect-[16/9]">
+        <canvas id="chart" class="absolute inset-0 w-full h-full"></canvas>
+      </div>
+      <p id="status-line" class="font-mono text-[11px] text-brand-gray tracking-wider uppercase mt-3 text-center">idle — configure and anneal</p>
+    </div>
+  </div>
+</section>
+
+<script is:inline>
+const API_BASE = (() => {
+  const url = new URL(window.location.href);
+  const o = url.searchParams.get('api');
+  if (o) return o;
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return 'http://localhost:9651';
+  return '';
+})();
+
+function $(id) { return document.getElementById(id); }
+
+// ── canvas chart ──────────────────────────────────────────────────────
+const canvas = $('chart');
+const ctx = canvas.getContext('2d');
+let points = [];      // {sweep, cut, best}
+let optimum = null;
+
+function resizeCanvas() {
+  const r = canvas.getBoundingClientRect();
+  canvas.width = r.width * devicePixelRatio;
+  canvas.height = r.height * devicePixelRatio;
+}
+new ResizeObserver(() => { resizeCanvas(); draw(); }).observe(canvas);
+
+function draw() {
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  if (points.length < 2) return;
+  const padL = 70 * devicePixelRatio, padB = 34 * devicePixelRatio,
+        padT = 12 * devicePixelRatio, padR = 16 * devicePixelRatio;
+  const xs = points.map(p => p.sweep);
+  const ys = points.flatMap(p => [p.cut, p.best]);
+  if (optimum != null) ys.push(optimum);
+  const xMin = xs[0], xMax = xs[xs.length - 1];
+  let yMin = Math.min(...ys), yMax = Math.max(...ys);
+  if (yMax === yMin) { yMax += 1; yMin -= 1; }
+  const yPad = (yMax - yMin) * 0.06;
+  yMin -= yPad; yMax += yPad;
+  const px = s => padL + (s - xMin) / (xMax - xMin || 1) * (W - padL - padR);
+  const py = c => H - padB - (c - yMin) / (yMax - yMin) * (H - padT - padB);
+
+  ctx.strokeStyle = 'rgba(148,163,184,0.12)';
+  ctx.fillStyle = '#64748B';
+  ctx.font = `${11 * devicePixelRatio}px "JetBrains Mono", monospace`;
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const v = yMin + (yMax - yMin) * i / 4;
+    const y = py(v);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.fillText(v.toFixed(0), 8 * devicePixelRatio, y + 4 * devicePixelRatio);
+  }
+  ctx.fillText(`sweep ${xMax}`, W - 120 * devicePixelRatio, H - 10 * devicePixelRatio);
+
+  if (optimum != null) {
+    ctx.strokeStyle = 'rgba(52,211,153,0.8)';
+    ctx.setLineDash([6 * devicePixelRatio, 5 * devicePixelRatio]);
+    ctx.beginPath(); ctx.moveTo(padL, py(optimum)); ctx.lineTo(W - padR, py(optimum)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#34d399';
+    ctx.fillText(`optimum ${optimum}`, padL + 8 * devicePixelRatio, py(optimum) - 6 * devicePixelRatio);
+  }
+
+  // instantaneous cut (faint cyan)
+  ctx.strokeStyle = 'rgba(14,165,233,0.45)';
+  ctx.lineWidth = 1.5 * devicePixelRatio;
+  ctx.beginPath();
+  points.forEach((p, i) => i ? ctx.lineTo(px(p.sweep), py(p.cut)) : ctx.moveTo(px(p.sweep), py(p.cut)));
+  ctx.stroke();
+
+  // best-so-far (amber, bold)
+  ctx.strokeStyle = '#F59E0B';
+  ctx.lineWidth = 2.5 * devicePixelRatio;
+  ctx.beginPath();
+  points.forEach((p, i) => i ? ctx.lineTo(px(p.sweep), py(p.best)) : ctx.moveTo(px(p.sweep), py(p.best)));
+  ctx.stroke();
+}
+
+// ── run ───────────────────────────────────────────────────────────────
+function problemSpec() {
+  const n = parseInt($('nodes').value, 10);
+  switch ($('instance').value) {
+    case 'complete':  return { kind: 'complete', n: Math.min(n, 200) };
+    case 'cycle':     return { kind: 'cycle', n };
+    case 'petersen':  return { kind: 'petersen' };
+    default: return {
+      kind: 'random_regular', n,
+      degree: parseInt($('degree').value, 10),
+      seed: parseInt($('seed').value, 10),
+    };
+  }
+}
+
+async function run() {
+  const btn = $('run-btn');
+  btn.disabled = true; btn.textContent = 'ANNEALING…';
+  points = []; optimum = null; draw();
+  $('stats').style.display = 'none';
+  $('status-line').textContent = 'connecting…';
+
+  const body = {
+    substrate: 'stochastic',
+    problem: problemSpec(),
+    schedule: {
+      sweeps: parseInt($('sweeps').value, 10),
+      beta0: parseFloat($('beta0').value),
+      beta1: parseFloat($('beta1').value),
+      kind: 'geometric',
+    },
+    seed: parseInt($('seed').value, 10),
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/api/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n\n')) >= 0) {
+        handleBlock(buf.slice(0, i).trim());
+        buf = buf.slice(i + 2);
+      }
+    }
+  } catch (e) {
+    $('status-line').textContent = `failed: ${e.message} — is tei-serve running?`;
+  } finally {
+    btn.disabled = false; btn.textContent = 'ANNEAL →';
+  }
+}
+
+function handleBlock(block) {
+  let evt = 'message';
+  const data = [];
+  for (const line of block.split('\n')) {
+    if (line.startsWith('event:')) evt = line.slice(6).trim();
+    else if (line.startsWith('data:')) data.push(line.slice(5).trim());
+  }
+  if (!data.length) return;
+  let payload;
+  try { payload = JSON.parse(data.join('')); } catch { return; }
+
+  if (evt === 'progress') {
+    const m = payload.metrics || {};
+    if (m.cut != null) {
+      points.push({ sweep: m.sweep, cut: m.cut, best: m.best_cut });
+      draw();
+      $('status-line').textContent =
+        `sweep ${m.sweep} · cut ${m.cut.toFixed(0)} · best ${m.best_cut.toFixed(0)} · β ${m.beta.toFixed(2)}`;
+    }
+  } else if (evt === 'result') {
+    const o = payload.outputs || {};
+    const l = payload.ledger || {};
+    optimum = o.known_optimum ?? null;
+    draw();
+    $('stats').style.display = '';
+    $('s-best').textContent = (o.best_cut ?? 0).toFixed(0)
+      + (optimum != null && o.best_cut >= optimum ? '  ✓ OPTIMUM' : '');
+    $('s-opt').textContent = optimum != null ? optimum.toFixed(0) : '— (open instance)';
+    $('s-edges').textContent = o.n_edges ?? '';
+    $('s-updates').textContent = (l.spin_updates ?? 0).toLocaleString();
+    $('s-flips').textContent = (l.flips ?? 0).toLocaleString();
+    const w = l.wall_seconds ?? 0;
+    $('s-wall').textContent = w < 1 ? `${(w * 1000).toFixed(0)} ms` : `${w.toFixed(2)} s`;
+    $('s-rate').textContent = w > 0
+      ? `${((l.spin_updates ?? 0) / w / 1e6).toFixed(1)} M updates/s`
+      : '—';
+    $('status-line').textContent = 'done';
+  }
+}
+
+$('run-btn').addEventListener('click', run);
+window.addEventListener('DOMContentLoaded', () => {
+  resizeCanvas();
+  fetch(`${API_BASE}/health`).then(r => r.ok && run()).catch(() => {});
+});
+</script>
+
+</Layout>

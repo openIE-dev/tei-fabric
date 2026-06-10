@@ -11,6 +11,8 @@ members = [
     "crates/tei-d-reversible",
     "crates/tei-d-neuromorphic",
     "crates/tei-cost-surface",
+    "crates/sim/tei-sim-core",
+    "crates/sim/tei-sim-stochastic",
     "crates/tei-import",
     "bin/tei-serve",
 ]
@@ -35,6 +37,8 @@ tei-d-stochastic = { path = "crates/tei-d-stochastic" }
 tei-d-reversible = { path = "crates/tei-d-reversible" }
 tei-d-neuromorphic = { path = "crates/tei-d-neuromorphic" }
 tei-cost-surface = { path = "crates/tei-cost-surface" }
+tei-sim-core = { path = "crates/sim/tei-sim-core" }
+tei-sim-stochastic = { path = "crates/sim/tei-sim-stochastic" }
 tei-import = { path = "crates/tei-import" }
 
 # External

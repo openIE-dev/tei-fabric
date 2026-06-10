@@ -200,6 +200,58 @@ async fn post_dispatch_stream(
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
+/// Execute request — substrate-tagged simulator job.
+/// v1 carries the stochastic column; later columns add variants.
+#[derive(Deserialize)]
+#[serde(tag = "substrate", rename_all = "snake_case")]
+enum ExecuteRequest {
+    Stochastic(tei_sim_stochastic::StochasticJob),
+}
+
+/// POST /api/execute — run a workload on a native simulator, streaming
+/// progress over SSE: `started` → `progress`×N → `result`.
+/// The simulator runs on a blocking thread; progress crosses to the SSE
+/// stream over an unbounded channel.
+async fn post_execute(
+    State(_state): State<AppState>,
+    Json(req): Json<ExecuteRequest>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    use tei_sim_core::exec::Executor;
+
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Event>();
+
+    tokio::task::spawn_blocking(move || {
+        let _ = tx.send(Event::default().event("started").data("{}"));
+        match req {
+            ExecuteRequest::Stochastic(job) => {
+                let exec = tei_sim_stochastic::StochasticExecutor;
+                let tx_progress = tx.clone();
+                let mut on_progress = move |p: tei_sim_core::exec::Progress| {
+                    let payload = serde_json::json!({
+                        "fraction": p.fraction,
+                        "metrics": p.metrics,
+                    });
+                    let _ = tx_progress
+                        .send(Event::default().event("progress").data(payload.to_string()));
+                };
+                let result = exec.execute(&job, &mut on_progress);
+                let _ = tx.send(
+                    Event::default()
+                        .event("result")
+                        .data(serde_json::to_string(&result).unwrap_or_default()),
+                );
+            }
+        }
+    });
+
+    let stream = async_stream::stream! {
+        while let Some(event) = rx.recv().await {
+            yield Ok(event);
+        }
+    };
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
 async fn post_import_onnx(
     State(_state): State<AppState>,
     body: Bytes,
@@ -391,6 +443,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/presets", get(list_presets))
         .route("/api/dispatch", post(post_dispatch))
         .route("/api/dispatch/stream", post(post_dispatch_stream))
+        .route("/api/execute", post(post_execute))
         .route("/api/import/onnx", post(post_import_onnx))
         .route("/api/import/onnx/chunk", post(post_import_onnx_chunk))
         // ONNX models can be hundreds of MB — lift the default 2 MB body limit.

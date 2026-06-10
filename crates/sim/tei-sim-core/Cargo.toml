@@ -1,0 +1,12 @@
+[package]
+name = "tei-sim-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared numerics for the tei-sim layer — RNG, linalg, sparse graphs, event queue, ODE integrators, event ledger, Executor trait. Hand-rolled, dependency-light, WASM-friendly."
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

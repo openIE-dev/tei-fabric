@@ -962,12 +962,31 @@ dependencies = [
  "tei-cost-surface",
  "tei-import",
  "tei-ir",
+ "tei-sim-core",
+ "tei-sim-stochastic",
  "tei-stack",
  "tei-substrate-traits",
  "tokio",
  "tower-http",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "tei-sim-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "tei-sim-stochastic"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tei-sim-core",
 ]
 
 [[package]]

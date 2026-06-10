@@ -17,6 +17,8 @@ tei-ir.workspace = true
 tei-substrate-traits.workspace = true
 tei-cost-surface.workspace = true
 tei-import.workspace = true
+tei-sim-core.workspace = true
+tei-sim-stochastic.workspace = true
 
 tokio.workspace = true
 axum.workspace = true

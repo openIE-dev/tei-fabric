@@ -1,0 +1,13 @@
+[package]
+name = "tei-sim-stochastic"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "thrml-class (Extropic) stochastic simulator — Ising/EBM factor graphs, chromatic block Gibbs, simulated annealing, Max-Cut. Pure Rust."
+
+[dependencies]
+tei-sim-core = { path = "../tei-sim-core" }
+serde.workspace = true
+serde_json.workspace = true
