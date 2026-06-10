@@ -13,6 +13,12 @@ members = [
     "crates/tei-cost-surface",
     "crates/sim/tei-sim-core",
     "crates/sim/tei-sim-stochastic",
+    "crates/sim/tei-sim-spiking",
+    "crates/sim/tei-sim-crossbar",
+    "crates/sim/tei-sim-photonic",
+    "crates/sim/tei-sim-gaussian",
+    "crates/sim/tei-sim-circuit",
+    "crates/sim/tei-sim-field",
     "crates/tei-import",
     "bin/tei-serve",
 ]
@@ -39,6 +45,12 @@ tei-d-neuromorphic = { path = "crates/tei-d-neuromorphic" }
 tei-cost-surface = { path = "crates/tei-cost-surface" }
 tei-sim-core = { path = "crates/sim/tei-sim-core" }
 tei-sim-stochastic = { path = "crates/sim/tei-sim-stochastic" }
+tei-sim-spiking = { path = "crates/sim/tei-sim-spiking" }
+tei-sim-crossbar = { path = "crates/sim/tei-sim-crossbar" }
+tei-sim-photonic = { path = "crates/sim/tei-sim-photonic" }
+tei-sim-gaussian = { path = "crates/sim/tei-sim-gaussian" }
+tei-sim-circuit = { path = "crates/sim/tei-sim-circuit" }
+tei-sim-field = { path = "crates/sim/tei-sim-field" }
 tei-import = { path = "crates/tei-import" }
 
 # External

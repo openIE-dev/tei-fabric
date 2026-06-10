@@ -19,6 +19,12 @@ tei-cost-surface.workspace = true
 tei-import.workspace = true
 tei-sim-core.workspace = true
 tei-sim-stochastic.workspace = true
+tei-sim-spiking.workspace = true
+tei-sim-crossbar.workspace = true
+tei-sim-photonic.workspace = true
+tei-sim-gaussian.workspace = true
+tei-sim-circuit.workspace = true
+tei-sim-field.workspace = true
 
 tokio.workspace = true
 axum.workspace = true

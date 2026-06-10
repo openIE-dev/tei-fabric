@@ -962,7 +962,13 @@ dependencies = [
  "tei-cost-surface",
  "tei-import",
  "tei-ir",
+ "tei-sim-circuit",
  "tei-sim-core",
+ "tei-sim-crossbar",
+ "tei-sim-field",
+ "tei-sim-gaussian",
+ "tei-sim-photonic",
+ "tei-sim-spiking",
  "tei-sim-stochastic",
  "tei-stack",
  "tei-substrate-traits",
@@ -973,11 +979,65 @@ dependencies = [
 ]
 
 [[package]]
+name = "tei-sim-circuit"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tei-sim-core",
+]
+
+[[package]]
 name = "tei-sim-core"
 version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "tei-sim-crossbar"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tei-sim-core",
+]
+
+[[package]]
+name = "tei-sim-field"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tei-sim-core",
+]
+
+[[package]]
+name = "tei-sim-gaussian"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tei-sim-core",
+]
+
+[[package]]
+name = "tei-sim-photonic"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tei-sim-core",
+]
+
+[[package]]
+name = "tei-sim-spiking"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tei-sim-core",
 ]
 
 [[package]]

@@ -200,12 +200,38 @@ async fn post_dispatch_stream(
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
-/// Execute request — substrate-tagged simulator job.
-/// v1 carries the stochastic column; later columns add variants.
+/// Execute request — substrate-tagged simulator job, one variant per
+/// native simulator column.
 #[derive(Deserialize)]
 #[serde(tag = "substrate", rename_all = "snake_case")]
 enum ExecuteRequest {
     Stochastic(tei_sim_stochastic::StochasticJob),
+    Spiking(tei_sim_spiking::SpikingJob),
+    Crossbar(tei_sim_crossbar::CrossbarJob),
+    Photonic(tei_sim_photonic::PhotonicJob),
+    Gaussian(tei_sim_gaussian::GaussianJob),
+    Circuit(tei_sim_circuit::CircuitJob),
+    Field(tei_sim_field::FieldJob),
+}
+
+/// Run one executor on the blocking thread, forwarding progress ticks and
+/// the final result over the SSE channel.
+fn run_streaming<E: tei_sim_core::exec::Executor>(
+    exec: E,
+    job: &E::Job,
+    tx: &tokio::sync::mpsc::UnboundedSender<Event>,
+) {
+    let tx_progress = tx.clone();
+    let mut on_progress = move |p: tei_sim_core::exec::Progress| {
+        let payload = serde_json::json!({ "fraction": p.fraction, "metrics": p.metrics });
+        let _ = tx_progress.send(Event::default().event("progress").data(payload.to_string()));
+    };
+    let result = exec.execute(job, &mut on_progress);
+    let _ = tx.send(
+        Event::default()
+            .event("result")
+            .data(serde_json::to_string(&result).unwrap_or_default()),
+    );
 }
 
 /// POST /api/execute — run a workload on a native simulator, streaming
@@ -216,31 +242,30 @@ async fn post_execute(
     State(_state): State<AppState>,
     Json(req): Json<ExecuteRequest>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    use tei_sim_core::exec::Executor;
-
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Event>();
 
     tokio::task::spawn_blocking(move || {
         let _ = tx.send(Event::default().event("started").data("{}"));
         match req {
             ExecuteRequest::Stochastic(job) => {
-                let exec = tei_sim_stochastic::StochasticExecutor;
-                let tx_progress = tx.clone();
-                let mut on_progress = move |p: tei_sim_core::exec::Progress| {
-                    let payload = serde_json::json!({
-                        "fraction": p.fraction,
-                        "metrics": p.metrics,
-                    });
-                    let _ = tx_progress
-                        .send(Event::default().event("progress").data(payload.to_string()));
-                };
-                let result = exec.execute(&job, &mut on_progress);
-                let _ = tx.send(
-                    Event::default()
-                        .event("result")
-                        .data(serde_json::to_string(&result).unwrap_or_default()),
-                );
+                run_streaming(tei_sim_stochastic::StochasticExecutor, &job, &tx)
             }
+            ExecuteRequest::Spiking(job) => {
+                run_streaming(tei_sim_spiking::SpikingExecutor, &job, &tx)
+            }
+            ExecuteRequest::Crossbar(job) => {
+                run_streaming(tei_sim_crossbar::CrossbarExecutor, &job, &tx)
+            }
+            ExecuteRequest::Photonic(job) => {
+                run_streaming(tei_sim_photonic::PhotonicExecutor, &job, &tx)
+            }
+            ExecuteRequest::Gaussian(job) => {
+                run_streaming(tei_sim_gaussian::GaussianExecutor, &job, &tx)
+            }
+            ExecuteRequest::Circuit(job) => {
+                run_streaming(tei_sim_circuit::CircuitExecutor, &job, &tx)
+            }
+            ExecuteRequest::Field(job) => run_streaming(tei_sim_field::FieldExecutor, &job, &tx),
         }
     });
 
