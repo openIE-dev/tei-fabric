@@ -15,7 +15,12 @@ import Layout from '../layouts/Layout.astro';
 
 <section class="max-w-7xl mx-auto px-6 pb-24">
   <!-- substrate picker -->
-  <div id="picker" class="flex flex-wrap gap-2 mb-6"></div>
+  <div id="picker" class="flex flex-wrap gap-2 mb-3"></div>
+  <p id="cal-badge" class="font-mono text-[11px] tracking-wider mb-4" style="display:none;">
+    <span class="text-brand-amber">●</span> <span class="text-brand-light">fabric is pricing with measured constants</span>
+    <span id="cal-detail" class="text-brand-gray"></span>
+    <button id="cal-clear" class="ml-2 text-brand-gray hover:text-brand-light underline decoration-dotted">revert to literature defaults</button>
+  </p>
 
   <div class="grid lg:grid-cols-[380px_1fr] gap-6">
     <!-- controls -->
@@ -720,12 +725,39 @@ async function repriceDispatch(patch, atRatio) {
     add('PLAN (ASSUMED 10³)', `${before.total_joules.toExponential(2)} J`);
     add(`PLAN (MEASURED @ T/RC ${atRatio?.toFixed(0) ?? ''})`, `${after.total_joules.toExponential(2)} J`, AMBER);
     add('PLAN CHANGE', `${(before.total_joules / after.total_joules).toFixed(1)}× cheaper`, GREEN);
+    const btn = document.createElement('button');
+    btn.textContent = 'APPLY TO FABRIC → every /api/dispatch prices with this';
+    btn.className = 'w-full mt-2 font-mono text-[11px] tracking-wider px-3 py-2 rounded-lg border border-brand-amber/40 text-brand-amber hover:bg-brand-amber/10 transition-colors';
+    btn.onclick = async () => {
+      btn.disabled = true; btn.textContent = 'SAVING…';
+      const r = await fetch(`${API_BASE}/api/calibration`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
+      });
+      btn.textContent = r.ok ? 'SAVED — fabric now prices with the measured constant' : 'SAVE FAILED';
+      refreshCalBadge();
+    };
+    el.appendChild(btn);
   } catch { /* dispatch unavailable — leave stats as-is */ }
 }
 
+async function refreshCalBadge() {
+  try {
+    const c = await fetch(`${API_BASE}/api/calibration`).then(r => r.json());
+    $('cal-badge').style.display = c.calibrated ? '' : 'none';
+    if (c.calibrated) {
+      const ov = c.substrate_params?.reversible?.overhead_l0;
+      $('cal-detail').textContent = ov != null ? ` · reversible overhead_l0 = ${Number(ov).toPrecision(4)} (literature: 1000)` : '';
+    }
+  } catch { /* server unreachable */ }
+}
+$('cal-clear').addEventListener('click', async () => {
+  await fetch(`${API_BASE}/api/calibration`, { method: 'DELETE' });
+  refreshCalBadge();
+});
+
 $('run-btn').addEventListener('click', run);
 window.addEventListener('DOMContentLoaded', () => {
-  renderPicker(); renderFields(); resizeCanvas();
+  renderPicker(); renderFields(); resizeCanvas(); refreshCalBadge();
   fetch(`${API_BASE}/health`).then(r => r.ok && run()).catch(() => {});
 });
 </script>

@@ -27,8 +27,8 @@ use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tei_cost_surface::{
-    DispatchPlan, Preset, SubstrateParams, default_substrates, dispatch, dispatch_invocation,
-    enumerate_presets, substrates_with_params, summarize,
+    Preset, SubstrateParams, default_substrates, dispatch, dispatch_invocation, enumerate_presets,
+    substrates_with_params, summarize,
 };
 use tei_ir::Workload;
 use tei_stack::{Stack, StackData};
@@ -57,6 +57,34 @@ struct AppState {
     stack: Arc<Stack>,
     substrates: Arc<Vec<Arc<dyn Substrate>>>,
     uploads: Arc<UploadState>,
+    /// Persisted measured-constant overrides (the calibration loop's
+    /// output). When set, /api/dispatch prices with these by default.
+    calibration: Arc<Mutex<Option<SubstrateParams>>>,
+    calibration_path: Arc<std::path::PathBuf>,
+}
+
+impl AppState {
+    /// Effective substrate set for a dispatch request: explicit request
+    /// params win, then the persisted calibration, then literature
+    /// defaults. Returns (substrates, used_calibrated_defaults).
+    fn dispatch_substrates(
+        &self,
+        explicit: Option<&SubstrateParams>,
+    ) -> (Arc<Vec<Arc<dyn Substrate>>>, bool) {
+        if let Some(p) = explicit {
+            return (
+                Arc::new(substrates_with_params(self.stack.clone(), p)),
+                false,
+            );
+        }
+        if let Some(p) = self.calibration.lock().unwrap().as_ref() {
+            return (
+                Arc::new(substrates_with_params(self.stack.clone(), p)),
+                true,
+            );
+        }
+        (self.substrates.clone(), false)
+    }
 }
 
 /// Hard cap on total bytes any single upload can accumulate before we drop
@@ -122,19 +150,51 @@ struct DispatchRequest {
     substrate_params: Option<SubstrateParams>,
 }
 
+/// GET /api/calibration — the persisted measured-constant overrides.
+async fn get_calibration(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let cal = state.calibration.lock().unwrap().clone();
+    Json(serde_json::json!({ "calibrated": cal.is_some(), "substrate_params": cal }))
+}
+
+/// POST /api/calibration — persist measured constants (a SubstrateParams;
+/// omitted fields fall back to literature defaults). Survives restarts via
+/// CALIBRATION_PATH (default `calibration.json` in the server CWD, outside
+/// the deploy-synced data/ tree).
+async fn post_calibration(
+    State(state): State<AppState>,
+    Json(params): Json<SubstrateParams>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let json = serde_json::to_string_pretty(&params)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    std::fs::write(state.calibration_path.as_ref(), json).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("persist failed: {e}"),
+        )
+    })?;
+    *state.calibration.lock().unwrap() = Some(params);
+    info!("calibration saved to {}", state.calibration_path.display());
+    Ok(Json(serde_json::json!({ "calibrated": true })))
+}
+
+/// DELETE /api/calibration — revert to literature defaults.
+async fn delete_calibration(State(state): State<AppState>) -> Json<serde_json::Value> {
+    *state.calibration.lock().unwrap() = None;
+    let _ = std::fs::remove_file(state.calibration_path.as_ref());
+    info!("calibration cleared");
+    Json(serde_json::json!({ "calibrated": false }))
+}
+
 async fn post_dispatch(
     State(state): State<AppState>,
     Json(req): Json<DispatchRequest>,
-) -> Result<Json<DispatchPlan>, (StatusCode, String)> {
-    let substrates_owned;
-    let substrates_ref: &[Arc<dyn Substrate>] = if let Some(p) = &req.substrate_params {
-        substrates_owned = substrates_with_params(state.stack.clone(), p);
-        &substrates_owned
-    } else {
-        &state.substrates
-    };
-    let plan = dispatch(&state.stack, &req.workload, substrates_ref);
-    Ok(Json(plan))
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let (substrates, calibrated) = state.dispatch_substrates(req.substrate_params.as_ref());
+    let plan = dispatch(&state.stack, &req.workload, &substrates);
+    let mut v = serde_json::to_value(&plan)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    v["calibrated_defaults"] = serde_json::Value::Bool(calibrated);
+    Ok(Json(v))
 }
 
 async fn post_dispatch_stream(
@@ -152,17 +212,14 @@ async fn post_dispatch_stream(
         .unwrap_or(30);
 
     let stack = state.stack.clone();
-    let substrates: Arc<Vec<Arc<dyn Substrate>>> = if let Some(p) = custom_params.as_ref() {
-        Arc::new(substrates_with_params(stack.clone(), p))
-    } else {
-        state.substrates.clone()
-    };
+    let (substrates, calibrated_defaults) = state.dispatch_substrates(custom_params.as_ref());
 
     let stream = async_stream::stream! {
         let started_payload = serde_json::json!({
             "goal": workload.goal,
             "total_invocations": workload.invocations.len(),
             "constraints": workload.constraints,
+            "calibrated_defaults": calibrated_defaults,
         });
         yield Ok(Event::default().event("started").data(started_payload.to_string()));
 
@@ -515,10 +572,22 @@ async fn main() -> anyhow::Result<()> {
             .join(", ")
     );
 
+    let calibration_path = std::path::PathBuf::from(
+        std::env::var("CALIBRATION_PATH").unwrap_or_else(|_| "calibration.json".to_string()),
+    );
+    let calibration: Option<SubstrateParams> = std::fs::read_to_string(&calibration_path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok());
+    if calibration.is_some() {
+        info!("loaded calibration from {}", calibration_path.display());
+    }
+
     let state = AppState {
         stack,
         substrates,
         uploads: Arc::new(UploadState::default()),
+        calibration: Arc::new(Mutex::new(calibration)),
+        calibration_path: Arc::new(calibration_path),
     };
 
     let cors = CorsLayer::new()
@@ -532,6 +601,12 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/substrates", get(list_substrates))
         .route("/api/presets", get(list_presets))
         .route("/api/dispatch", post(post_dispatch))
+        .route(
+            "/api/calibration",
+            get(get_calibration)
+                .post(post_calibration)
+                .delete(delete_calibration),
+        )
         .route("/api/dispatch/stream", post(post_dispatch_stream))
         .route("/api/execute", post(post_execute))
         .route("/api/field-gpu-pack", post(post_field_gpu_pack))
