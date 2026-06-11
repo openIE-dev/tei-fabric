@@ -44,8 +44,14 @@
 //!
 //! Deliberately out at F3 (the contract of roadmap §3.7): conductive
 //! (σ > 0) media, far-field transforms, 3D mode sources / port monitors /
-//! S-parameter extraction, nonuniform grids, subpixel averaging. The GPU
-//! kernel is F4.
+//! S-parameter extraction, nonuniform grids, subpixel averaging.
+//!
+//! **F4** (feature `gpu`) is the wgpu compute-shader kernel for the 2D TEz
+//! path: standalone WGSL kernels (`src/gpu/shaders/`) that a browser JS
+//! WebGPU driver reuses verbatim, plus a native host ([`gpu::GpuSim`])
+//! that validates them against this crate's f64 CPU core (tests/f4_gpu.rs
+//! — the cross-check column of roadmap §2). The default build carries no
+//! GPU dependencies.
 //!
 //! Lineage: MEEP-class — A.F. Oskooi et al., "MEEP: A flexible free-software
 //! package for electromagnetic simulations by the FDTD method", Comput.
@@ -58,6 +64,8 @@
 //! (1991) — slab mode relations.
 
 pub mod field3;
+#[cfg(feature = "gpu-pack")]
+pub mod gpu;
 pub mod grid;
 pub mod grid3;
 pub mod medium3;
@@ -71,6 +79,8 @@ pub use field3::{
     Dft3Monitor, Dipole3, EpsSpec3, Field3Executor, Field3Job, Probe3, Probe3Spec, SnapshotSpec,
     run_job3,
 };
+#[cfg(feature = "gpu")]
+pub use gpu::{GpuSim, gpu_available};
 pub use grid::{CpmlParams, Grid2d, GridSpec, yee_axis_wavenumber};
 pub use grid3::{Axis, Comp, Grid3Spec, Grid3d, SliceField};
 pub use medium3::{MaterialModel, MaterialRegion};

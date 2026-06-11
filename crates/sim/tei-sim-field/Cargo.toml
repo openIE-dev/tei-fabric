@@ -18,3 +18,13 @@ serde_json.workspace = true
 # F3: slab-parallel 3D updates (fixed slab boundaries, no reductions —
 # results are bit-identical at any thread count).
 rayon.workspace = true
+# F4 (feature `gpu`, native host only): the WGSL kernels in src/gpu/shaders/
+# are the shared artifact; a browser JS WebGPU driver reuses them verbatim.
+# The default build stays free of these dependencies.
+wgpu = { version = "29", optional = true }
+pollster = { version = "0.4", optional = true }
+bytemuck = { version = "1", features = ["derive"], optional = true }
+
+[features]
+gpu-pack = ["dep:bytemuck"]
+gpu = ["gpu-pack", "dep:wgpu", "dep:pollster"]

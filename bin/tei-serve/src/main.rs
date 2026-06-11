@@ -321,6 +321,27 @@ async fn post_execute(
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
+/// Pack a FieldJob into the exact f32 buffers the F4 WGSL kernels expect.
+/// The browser WebGPU driver uploads these verbatim — the packing math
+/// (CPML tables, ce = dt/ε, per-step source amplitudes) stays in Rust.
+async fn post_field_gpu_pack(
+    Json(job): Json<tei_sim_field::FieldJob>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    tei_sim_field::gpu::pack_job_json(&job)
+        .map(Json)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
+/// The three WGSL kernel sources, straight from the crate (single source
+/// of truth — the native validation suite proves these exact strings).
+async fn get_field_gpu_shaders() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "update_h": tei_sim_field::gpu::UPDATE_H_WGSL,
+        "update_e": tei_sim_field::gpu::UPDATE_E_WGSL,
+        "inject": tei_sim_field::gpu::INJECT_WGSL,
+    }))
+}
+
 async fn post_import_onnx(
     State(_state): State<AppState>,
     body: Bytes,
@@ -513,6 +534,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/dispatch", post(post_dispatch))
         .route("/api/dispatch/stream", post(post_dispatch_stream))
         .route("/api/execute", post(post_execute))
+        .route("/api/field-gpu-pack", post(post_field_gpu_pack))
+        .route("/api/field-gpu-shaders", get(get_field_gpu_shaders))
         .route("/api/import/onnx", post(post_import_onnx))
         .route("/api/import/onnx/chunk", post(post_import_onnx_chunk))
         // ONNX models can be hundreds of MB — lift the default 2 MB body limit.

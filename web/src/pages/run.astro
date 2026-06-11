@@ -1,10 +1,10 @@
 ---
 import Layout from '../layouts/Layout.astro';
 ---
-<Layout title="Run" description="Execute a workload on any of the eight native substrate simulators and watch it happen — annealing, spiking, analog MVM, photonic meshes, CV quantum, adiabatic circuits, full-wave fields. Pure Rust.">
+<Layout title="Run" description="Execute a workload on the native substrate simulators and watch it happen — annealing, spiking, analog MVM, photonic meshes, CV quantum, adiabatic circuits, full-wave fields in 2D, 3D, and live on your own GPU. Pure Rust + WGSL.">
 
 <section class="max-w-5xl mx-auto px-6 pt-20 pb-10">
-  <p class="section-label mb-5">Execute &middot; eight columns</p>
+  <p class="section-label mb-5">Execute &middot; ten live views</p>
   <h1 class="font-display text-5xl md:text-6xl font-bold text-brand-white leading-[1.05] tracking-tight mb-6">
     Watch the substrate <span class="text-brand-amber italic">compute</span>.
   </h1>
@@ -387,6 +387,169 @@ const SUBSTRATES = {
     },
   },
 
+  fieldgpu: {
+    label: 'FIELD GPU', blurb: 'The same 2D FDTD — but the Yee updates run as WGSL compute shaders on YOUR GPU, in this tab, live. The kernels are validated natively against the f64 CPU core to ~10⁻⁶; the buffer packing comes from the server so the contract is single-sourced. After the run, the same job executes on the CPU core and the probe traces are compared.',
+    viz: 'Ez field · live on your GPU · webgpu',
+    fields: [
+      ['n', 'Grid n²', 320], ['steps', 'Steps', 1600],
+      ['slab', 'Slab ε_r', 4, 0.5], ['chunk', 'Steps/frame', 6],
+    ],
+    init() {},
+    onProgress() {}, onResult() { return []; },
+    async customRun(v) {
+      if (!navigator.gpu) { status('webgpu not available in this browser'); return; }
+      const n = v.n | 0, steps = v.steps | 0;
+      const job = {
+        nx: n, ny: n, steps,
+        eps: { kind: 'slab', eps_r: v.slab, i0: Math.round(n * 0.7), i1: Math.round(n * 0.85) },
+        source: { shape: { shape: 'point', i: Math.round(n * 0.35), j: Math.round(n / 2) },
+          time: { type: 'gaussian', t0: 40.0, tau: 12.0 } },
+        probe: [Math.round(n * 0.9), Math.round(n / 2)],
+      };
+      status('packing buffers on server…');
+      const [shaders, pack] = await Promise.all([
+        fetch(`${API_BASE}/api/field-gpu-shaders`).then(r => r.json()),
+        fetch(`${API_BASE}/api/field-gpu-pack`, { method: 'POST',
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(job) }).then(r => {
+            if (!r.ok) throw new Error('pack failed'); return r.json(); }),
+      ]);
+      const adapter = await navigator.gpu.requestAdapter();
+      if (!adapter) { status('no gpu adapter'); return; }
+      const dev = await adapter.requestDevice();
+      const P = pack.params, nx = P.nx, ny = P.ny;
+
+      // Buffers — contract documented in tei-sim-field/src/gpu/mod.rs.
+      const f32buf = (arr, usage) => {
+        const b = dev.createBuffer({ size: Math.max(16, arr.length * 4), usage });
+        dev.queue.writeBuffer(b, 0, new Float32Array(arr)); return b;
+      };
+      const zeroed = len => dev.createBuffer({ size: Math.max(16, len * 4), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+      const ST = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
+      const paramsBuf = dev.createBuffer({ size: 48, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+      {
+        const dvw = new DataView(new ArrayBuffer(48));
+        [P.nx, P.ny, P.npml, P.src_kind, P.src_i, P.src_j0, P.src_j1, P.probe_idx]
+          .forEach((x, i) => dvw.setUint32(i * 4, x, true));
+        dvw.setFloat32(32, P.dt, true);
+        dev.queue.writeBuffer(paramsBuf, 0, dvw.buffer);
+      }
+      const ezBuf = zeroed(nx * ny), hxBuf = zeroed(nx * (ny - 1)), hyBuf = zeroed((nx - 1) * ny);
+      const ceBuf = f32buf(pack.ce, ST), coeffBuf = f32buf(pack.coeff, ST);
+      const psiE = zeroed(2 * nx * ny), psiH = zeroed(nx * (ny - 1) + (nx - 1) * ny);
+      const traceBuf = zeroed(steps);
+      const stepBuf = dev.createBuffer({ size: 256 * steps, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+      {
+        const slots = new ArrayBuffer(256 * steps), dvw = new DataView(slots);
+        for (let s = 0; s < steps; s++) { dvw.setFloat32(256 * s, pack.amps[s], true); dvw.setUint32(256 * s + 4, s, true); }
+        dev.queue.writeBuffer(stepBuf, 0, slots);
+      }
+
+      // One explicit layout superset shared by all four pipelines.
+      const rw = { type: 'storage' }, ro = { type: 'read-only-storage' };
+      const bgl0 = dev.createBindGroupLayout({ entries: [
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+        ...[1, 2, 3, 5, 6, 8].map(b => ({ binding: b, visibility: GPUShaderStage.COMPUTE, buffer: rw })),
+        ...[4, 7].map(b => ({ binding: b, visibility: GPUShaderStage.COMPUTE, buffer: ro })),
+      ]});
+      const bgl1 = dev.createBindGroupLayout({ entries: [
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform', hasDynamicOffset: true, minBindingSize: 16 } }]});
+      const layout = dev.createPipelineLayout({ bindGroupLayouts: [bgl0, bgl1] });
+      const pipe = (code, entry) => dev.createComputePipeline({ layout,
+        compute: { module: dev.createShaderModule({ code }), entryPoint: entry } });
+      const pH = pipe(shaders.update_h, 'update_h'), pE = pipe(shaders.update_e, 'update_e');
+      const pI = pipe(shaders.inject, 'inject'), pP = pipe(shaders.inject, 'record_probe');
+      const bg0 = dev.createBindGroup({ layout: bgl0, entries: [
+        { binding: 0, resource: { buffer: paramsBuf } }, { binding: 1, resource: { buffer: ezBuf } },
+        { binding: 2, resource: { buffer: hxBuf } }, { binding: 3, resource: { buffer: hyBuf } },
+        { binding: 4, resource: { buffer: ceBuf } }, { binding: 5, resource: { buffer: psiE } },
+        { binding: 6, resource: { buffer: psiH } }, { binding: 7, resource: { buffer: coeffBuf } },
+        { binding: 8, resource: { buffer: traceBuf } }]});
+      const bg1 = dev.createBindGroup({ layout: bgl1, entries: [
+        { binding: 0, resource: { buffer: stepBuf, size: 16 } }]});
+
+      const staging = dev.createBuffer({ size: nx * ny * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+      const wgx = Math.ceil(nx / 16), wgy = Math.ceil(ny / 16);
+      const srcWg = Math.ceil((P.src_j1 - P.src_j0 + 1) / 64);
+      const chunk = Math.max(1, v.chunk | 0);
+      const t0 = performance.now();
+      let step = 0;
+      while (step < steps) {
+        const k = Math.min(chunk, steps - step);
+        const enc = dev.createCommandEncoder();
+        const pass = enc.beginComputePass();
+        pass.setBindGroup(0, bg0);
+        for (let s = 0; s < k; s++) {
+          pass.setBindGroup(1, bg1, [256 * (step + s)]);
+          pass.setPipeline(pH); pass.dispatchWorkgroups(wgx, wgy);
+          pass.setPipeline(pE); pass.dispatchWorkgroups(wgx, wgy);
+          if (pack.has_source) { pass.setPipeline(pI); pass.dispatchWorkgroups(srcWg); }
+          pass.setPipeline(pP); pass.dispatchWorkgroups(1);
+        }
+        pass.end();
+        enc.copyBufferToBuffer(ezBuf, 0, staging, 0, nx * ny * 4);
+        dev.queue.submit([enc.finish()]);
+        await staging.mapAsync(GPUMapMode.READ);
+        const ez = new Float32Array(staging.getMappedRange().slice(0));
+        staging.unmap();
+        step += k;
+        view = { kind: 'heatmap', nx, ny, ez };
+        redraw();
+        const mc = (step * nx * ny) / ((performance.now() - t0) / 1000) / 1e6;
+        status(`step ${step}/${steps} · ${mc.toFixed(0)} MCells/s on your GPU`);
+        await new Promise(r => requestAnimationFrame(r));
+      }
+      const gpuSecs = (performance.now() - t0) / 1000;
+
+      // Read the probe trace, then cross-check against the CPU core.
+      status('cross-checking against the CPU core…');
+      const traceStage = dev.createBuffer({ size: steps * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+      { const enc = dev.createCommandEncoder(); enc.copyBufferToBuffer(traceBuf, 0, traceStage, 0, steps * 4);
+        dev.queue.submit([enc.finish()]); }
+      await traceStage.mapAsync(GPUMapMode.READ);
+      const gpuTrace = new Float32Array(traceStage.getMappedRange().slice(0));
+      traceStage.unmap();
+
+      let rows = [['GRID', `${nx}×${ny}`], ['STEPS', fmt(steps)],
+        ['GPU THROUGHPUT', `${((steps * nx * ny) / gpuSecs / 1e6).toFixed(0)} MCells/s`, AMBER]];
+      try {
+        const res = await fetch(`${API_BASE}/api/execute`, { method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ substrate: 'field', ...job, frequencies: [] }) });
+        const reader = res.body.getReader(), dec = new TextDecoder();
+        let buf = '', cpu = null;
+        while (true) {
+          const { value, done } = await reader.read(); if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let i; while ((i = buf.indexOf('\n\n')) >= 0) {
+            const block = buf.slice(0, i); buf = buf.slice(i + 2);
+            if (block.includes('event: result')) {
+              const data = block.split('\n').filter(l => l.startsWith('data:')).map(l => l.slice(5).trim()).join('');
+              cpu = JSON.parse(data);
+            }
+          }
+        }
+        const pr = cpu.outputs.probe, stride = pr.stride || 1;
+        let peak = 0, dmax = 0;
+        for (let k = 0; k < pr.trace.length; k++) {
+          const g = gpuTrace[k * stride]; if (g === undefined) break;
+          peak = Math.max(peak, Math.abs(pr.trace[k]));
+          dmax = Math.max(dmax, Math.abs(g - pr.trace[k]));
+        }
+        rows.push(['CPU WALL (server)', `${(cpu.ledger?.wall_seconds ?? 0).toFixed(2)} s`]);
+        rows.push(['GPU WALL (here)', `${gpuSecs.toFixed(2)} s`, AMBER]);
+        rows.push(['GPU vs CPU max |Δ|/peak', (dmax / peak).toExponential(1), GREEN]);
+      } catch { rows.push(['CPU CROSS-CHECK', 'unavailable']); }
+      const el = $('stats'); el.innerHTML = '';
+      for (const [k2, v2, color] of rows) {
+        const div = document.createElement('div'); div.className = 'flex justify-between';
+        div.innerHTML = `<span class="text-brand-gray">${k2}</span><span${color ? ` style="color:${color}" class="font-bold"` : ''}>${v2}</span>`;
+        el.appendChild(div);
+      }
+      el.style.display = '';
+      status('done — field computed on your GPU, verified against the CPU core');
+    },
+  },
+
   field3: {
     label: 'FIELD 3D', blurb: 'A dipole pulse in a full 3D Yee grid with CPML on all six faces and an ε_r=4 box — six field components, rayon-parallel slabs, bit-identical at any thread count. The heatmap is a |E| slice through the source plane.',
     viz: '|E| slice · z midplane · final step',
@@ -463,6 +626,12 @@ async function run() {
   $('stats').style.display = 'none';
   view = { kind: 'idle' }; redraw();
   s.init();
+  if (s.customRun) {
+    try { await s.customRun(values()); }
+    catch (e) { status(`failed: ${e.message}`); }
+    finally { btn.disabled = false; btn.textContent = 'RUN →'; }
+    return;
+  }
   status('connecting…');
   try {
     const res = await fetch(`${API_BASE}/api/execute`, {
