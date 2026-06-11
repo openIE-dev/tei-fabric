@@ -45,6 +45,7 @@ impl Executor for CircuitExecutor {
             dt: job.dt,
             method: job.method,
             store_stride: n_steps.div_ceil(job.max_points.max(1)).max(1),
+            solver: Default::default(),
         };
         match transient_with_progress(&job.netlist, &opts, on_progress) {
             Ok(res) => {
@@ -71,6 +72,7 @@ impl Executor for CircuitExecutor {
                         "steps": res.steps,
                         "dt": res.dt,
                         "method": job.method,
+                        "solver": res.solver,
                     }),
                 }
             }

@@ -15,6 +15,13 @@ pub enum TimeProfile {
     /// a Gaussian centred at ω = 0 with σ_ω = √2/τ; pick τ large enough
     /// that the significant band stays well-resolved on the grid.
     Gaussian { t0: f64, tau: f64 },
+    /// Modulated Gaussian pulse s(t) = exp(−((t − t0)/τ)²)·sin(ω(t − t0)):
+    /// spectrum is a Gaussian centred at ±ω with the same σ_ω = √2/τ as the
+    /// baseband pulse, and the sin carrier gives an exact null at ω = 0 (no
+    /// DC component left on the grid). This is the natural driver for
+    /// waveguide mode sources, whose band must sit on the guided dispersion
+    /// branch.
+    ModulatedGaussian { omega: f64, t0: f64, tau: f64 },
     /// Continuous wave s(t) = w(t)·sin(ωt), where w is a raised-cosine
     /// turn-on envelope over the first `ramp` time units (suppresses the
     /// broadband switch-on transient). `ramp = 0` means hard turn-on.
@@ -32,6 +39,10 @@ impl TimeProfile {
             TimeProfile::Gaussian { t0, tau } => {
                 let u = (t - t0) / tau;
                 (-u * u).exp()
+            }
+            TimeProfile::ModulatedGaussian { omega, t0, tau } => {
+                let u = (t - t0) / tau;
+                (-u * u).exp() * (omega * (t - t0)).sin()
             }
             TimeProfile::Cw { omega, ramp } => {
                 let w = if ramp <= 0.0 || t >= ramp {

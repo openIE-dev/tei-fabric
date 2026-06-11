@@ -30,6 +30,7 @@
 
 use crate::mna::{self, ElemState, Mode, Topology};
 use crate::netlist::{Element, Netlist, Node};
+use crate::solver::{SolverChoice, SolverKind, SystemSolver};
 use crate::{CircuitError, Method};
 use serde::Serialize;
 use tei_sim_core::exec::Progress;
@@ -37,12 +38,15 @@ use tei_sim_core::exec::Progress;
 /// Options for a transient run. `t_stop` is snapped to the step grid
 /// (`n = round(t_stop/dt)` steps of exactly `dt`). `store_stride` downsamples
 /// the stored traces (energy accumulation always uses every step).
+/// `solver` picks the linear-system path (default `Auto`: dense for small
+/// cells, sparse Markowitz LU with pattern-reuse refactor for large ones).
 #[derive(Debug, Clone)]
 pub struct TransientOpts {
     pub t_stop: f64,
     pub dt: f64,
     pub method: Method,
     pub store_stride: usize,
+    pub solver: SolverChoice,
 }
 
 impl TransientOpts {
@@ -52,6 +56,7 @@ impl TransientOpts {
             dt,
             method: Method::default(),
             store_stride: 1,
+            solver: SolverChoice::default(),
         }
     }
 }
@@ -82,6 +87,8 @@ pub struct TransientResult {
     pub steps: u64,
     /// Step size actually used.
     pub dt: f64,
+    /// Linear-solver path the stepping ran through (dense vs sparse).
+    pub solver: SolverKind,
 }
 
 impl TransientResult {
@@ -127,7 +134,8 @@ pub fn solve_dc(net: &Netlist) -> Result<DcSolution, CircuitError> {
     let topo = Topology::build(net, Mode::DcOp)?;
     let hist = vec![ElemState::default(); net.elements.len()];
     let mut dlin = mna::initial_dlin(net);
-    let solve_at = |scale: f64, dlin: &mut [f64]| {
+    let mut solver = SystemSolver::new(topo.n_nodes, SolverChoice::Auto);
+    let solve_at = |scale: f64, dlin: &mut [f64], solver: &mut SystemSolver| {
         mna::solve(
             net,
             &topo,
@@ -138,15 +146,16 @@ pub fn solve_dc(net: &Netlist) -> Result<DcSolution, CircuitError> {
             scale,
             &hist,
             dlin,
+            solver,
         )
     };
-    let x = match solve_at(1.0, &mut dlin) {
+    let x = match solve_at(1.0, &mut dlin, &mut solver) {
         Ok(x) => x,
         Err(CircuitError::NoConvergence) => {
             let mut dlin = mna::initial_dlin(net);
             let mut last = Err(CircuitError::NoConvergence);
             for step in 1..=10 {
-                last = solve_at(step as f64 / 10.0, &mut dlin);
+                last = solve_at(step as f64 / 10.0, &mut dlin, &mut solver);
                 if last.is_err() {
                     break;
                 }
@@ -220,6 +229,10 @@ pub fn transient_with_progress(
     let topo = Topology::build(net, Mode::Step)?;
     let topo_init = Topology::build(net, Mode::Init)?;
     let mut dlin = mna::initial_dlin(net);
+    // One solver per assembly mode: Init and Step systems differ in
+    // dimension and sparsity pattern, so each caches its own factorization.
+    let mut init_solver = SystemSolver::new(topo_init.n_nodes, opts.solver);
+    let mut step_solver = SystemSolver::new(topo.n_nodes, opts.solver);
 
     // t = 0: ICs imposed exactly; capacitor branch currents = i_C(0⁺).
     let dummy = vec![ElemState::default(); n_elems];
@@ -233,6 +246,7 @@ pub fn transient_with_progress(
         1.0,
         &dummy,
         &mut dlin,
+        &mut init_solver,
     )?;
     let mut states = mna::element_states(
         net,
@@ -266,6 +280,7 @@ pub fn transient_with_progress(
             1.0,
             &states,
             &mut dlin,
+            &mut step_solver,
         )?;
         let new_states =
             mna::element_states(net, &topo, Mode::Step, method, t, h, 1.0, &states, &x);
@@ -314,5 +329,6 @@ pub fn transient_with_progress(
         tellegen_max,
         steps: n_steps,
         dt: h,
+        solver: step_solver.kind(),
     })
 }

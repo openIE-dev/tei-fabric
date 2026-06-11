@@ -9,5 +9,9 @@ description = "tei-sim field column — see docs/SIM-ROADMAP.md."
 
 [dependencies]
 tei-sim-core = { path = "../tei-sim-core" }
+# F2 handoff target: extracted S-parameters become photonic circuit
+# components. The dependency is one-way (field → photonic); the photonic
+# crate stays FDTD-free.
+tei-sim-photonic = { path = "../tei-sim-photonic" }
 serde.workspace = true
 serde_json.workspace = true

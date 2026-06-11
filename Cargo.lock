@@ -1073,6 +1073,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tei-sim-core",
+ "tei-sim-photonic",
 ]
 
 [[package]]

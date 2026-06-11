@@ -15,10 +15,17 @@
 //! - **M2 (partial)** — Shockley diode with a Newton-Raphson inner loop and
 //!   SPICE-style junction-voltage limiting (`pnjlim`). MOSFET level-1 and
 //!   EKV-lite remain on the M2 ladder.
+//! - **M4** — sparse CSR + Markowitz-ordered LU (`tei_sim_core::sparse`)
+//!   behind a solver abstraction: cells at ≤ [`SPARSE_NODE_THRESHOLD`]
+//!   (16) nodes keep the dense rebuild-and-factor path bit-for-bit; larger cells
+//!   assemble triplets once, factor once, and every later step/Newton
+//!   iteration reuses the pivot order + fill pattern via a numeric-only
+//!   refactor. Unlocks cells beyond ~500 nodes within the roadmap §6 budget
+//!   (100-node adiabatic cell, 10⁶ timesteps < 10 s).
 //!
 //! Deliberately out (contract per the roadmap §3.5): BSIM model cards,
 //! RF / harmonic balance, noise analysis, PDK parsing. Adaptive-LTE stepping
-//! is deferred with M4 — fixed-step trapezoidal is second-order and exact
+//! is deferred — fixed-step trapezoidal is second-order and exact
 //! enough for cell-scale energy analytics, as the convergence tests measure.
 //!
 //! ## Energy accounting (the M3 contract)
@@ -41,10 +48,12 @@ use serde::{Deserialize, Serialize};
 pub mod exec;
 mod mna;
 pub mod netlist;
+mod solver;
 pub mod transient;
 
 pub use exec::{CircuitExecutor, CircuitJob};
 pub use netlist::{Element, Netlist, Node, VT_300K, Waveform};
+pub use solver::{SPARSE_NODE_THRESHOLD, SolverChoice, SolverKind};
 pub use transient::{
     DcSolution, TransientOpts, TransientResult, solve_dc, transient, transient_with_progress,
 };

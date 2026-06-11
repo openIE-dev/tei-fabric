@@ -80,14 +80,38 @@
 //! overflow; convergence requires every unknown to move less than
 //! `abstol + reltol·|x|` *and* the limiter to have been inactive.
 //!
-//! The system is rebuilt and dense-LU-factored from scratch every step and
-//! every Newton iteration. At the scales this crate targets (adiabatic cells,
-//! ≤ a few hundred nodes) the O(n³) factor costs microseconds; matrix reuse
-//! and sparse Markowitz LU are the M4 rung of the roadmap ladder.
+//! The system is rebuilt every step and every Newton iteration; *how* it is
+//! solved is the [`crate::solver::SystemSolver`]'s decision (M4): small
+//! systems assemble dense and LU-factor from scratch (O(n³) is microseconds
+//! at cell scale), large ones assemble triplets and go through the sparse
+//! Markowitz LU in `tei-sim-core`, refactoring the cached pivot order and
+//! fill pattern with each step's new values. The stamps below are generic
+//! over a [`MatrixSink`] so both paths share one assembly, entry for entry.
 
 use crate::netlist::{Element, Netlist, Node, VT_300K};
+use crate::solver::SystemSolver;
 use crate::{CircuitError, Method};
 use tei_sim_core::linalg::Mat;
+
+/// Accumulating sink for MNA matrix stamps — a dense [`Mat`] on the dense
+/// path, a triplet list on the sparse path. Every stamp is `+=`.
+pub(crate) trait MatrixSink {
+    fn add(&mut self, i: usize, j: usize, v: f64);
+}
+
+impl MatrixSink for Mat {
+    #[inline]
+    fn add(&mut self, i: usize, j: usize, v: f64) {
+        self[(i, j)] += v;
+    }
+}
+
+impl MatrixSink for Vec<(u32, u32, f64)> {
+    #[inline]
+    fn add(&mut self, i: usize, j: usize, v: f64) {
+        self.push((i as u32, j as u32, v));
+    }
+}
 
 /// Conductance keeping an off diode's Jacobian nonsingular (SPICE GMIN).
 pub(crate) const GMIN: f64 = 1e-12;
@@ -227,16 +251,16 @@ fn node_idx(k: Node) -> Option<usize> {
 }
 
 /// Resistor-style conductance stamp between (possibly grounded) terminals.
-fn stamp_g(a: &mut Mat, ip: Option<usize>, inn: Option<usize>, g: f64) {
+fn stamp_g<S: MatrixSink>(a: &mut S, ip: Option<usize>, inn: Option<usize>, g: f64) {
     if let Some(i) = ip {
-        a[(i, i)] += g;
+        a.add(i, i, g);
     }
     if let Some(j) = inn {
-        a[(j, j)] += g;
+        a.add(j, j, g);
     }
     if let (Some(i), Some(j)) = (ip, inn) {
-        a[(i, j)] -= g;
-        a[(j, i)] -= g;
+        a.add(i, j, -g);
+        a.add(j, i, -g);
     }
 }
 
@@ -253,8 +277,8 @@ fn inject(b: &mut [f64], ip: Option<usize>, inn: Option<usize>, j_pn: f64) {
 
 /// Extended-MNA voltage-constraint row `rb`: v_p − v_n = val, with the branch
 /// current (p→n) entering both KCL columns.
-fn stamp_vrow(
-    a: &mut Mat,
+fn stamp_vrow<S: MatrixSink>(
+    a: &mut S,
     b: &mut [f64],
     ip: Option<usize>,
     inn: Option<usize>,
@@ -262,12 +286,12 @@ fn stamp_vrow(
     val: f64,
 ) {
     if let Some(i) = ip {
-        a[(rb, i)] += 1.0;
-        a[(i, rb)] += 1.0;
+        a.add(rb, i, 1.0);
+        a.add(i, rb, 1.0);
     }
     if let Some(j) = inn {
-        a[(rb, j)] -= 1.0;
-        a[(j, rb)] -= 1.0;
+        a.add(rb, j, -1.0);
+        a.add(j, rb, -1.0);
     }
     b[rb] = val;
 }
@@ -320,14 +344,8 @@ pub(crate) fn initial_dlin(net: &Netlist) -> Vec<f64> {
         .collect()
 }
 
-/// Assemble the MNA system `A·x = b` for one solve.
-///
-/// `t` — time at which sources are evaluated (the *new* time point; the old
-/// source value enters through the companion history, which is exactly what
-/// makes the overall scheme trapezoidal in the input as well).
-/// `h` — step size (Step mode only). `src_scale` — source-stepping λ.
-/// `hist` — previous-step element states (Step mode only).
-/// `dlin` — per-element diode linearization voltages (Newton iterate).
+/// Assemble the dense MNA system `A·x = b` for one solve (the small-circuit
+/// path; see [`assemble_into`] for the shared stamping).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn assemble(
     net: &Netlist,
@@ -342,15 +360,48 @@ pub(crate) fn assemble(
 ) -> (Mat, Vec<f64>) {
     let mut a = Mat::zeros(topo.dim, topo.dim);
     let mut b = vec![0.0; topo.dim];
+    assemble_into(
+        net, topo, mode, method, t, h, src_scale, hist, dlin, &mut a, &mut b,
+    );
+    (a, b)
+}
+
+/// Assemble the MNA system `A·x = b` for one solve into a caller-provided
+/// [`MatrixSink`] and RHS.
+///
+/// `t` — time at which sources are evaluated (the *new* time point; the old
+/// source value enters through the companion history, which is exactly what
+/// makes the overall scheme trapezoidal in the input as well).
+/// `h` — step size (Step mode only). `src_scale` — source-stepping λ.
+/// `hist` — previous-step element states (Step mode only).
+/// `dlin` — per-element diode linearization voltages (Newton iterate).
+///
+/// The element walk is deterministic, so re-assembling the same
+/// (netlist, topology, mode) emits stamps in an identical sequence — the
+/// invariant the sparse path's triplet→slot map relies on.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn assemble_into<S: MatrixSink>(
+    net: &Netlist,
+    topo: &Topology,
+    mode: Mode,
+    method: Method,
+    t: f64,
+    h: f64,
+    src_scale: f64,
+    hist: &[ElemState],
+    dlin: &[f64],
+    a: &mut S,
+    b: &mut [f64],
+) {
     for (k, el) in net.elements.iter().enumerate() {
         let (p, n) = el.nodes();
         let (ip, inn) = (node_idx(p), node_idx(n));
         match el {
-            Element::Resistor { r, .. } => stamp_g(&mut a, ip, inn, 1.0 / r),
+            Element::Resistor { r, .. } => stamp_g(a, ip, inn, 1.0 / r),
             Element::Capacitor { c, ic, .. } => match mode {
                 Mode::DcOp => {} // open circuit
                 Mode::Init => {
-                    stamp_vrow(&mut a, &mut b, ip, inn, topo.branch[k].unwrap(), *ic);
+                    stamp_vrow(a, b, ip, inn, topo.branch[k].unwrap(), *ic);
                 }
                 Mode::Step => {
                     let geq = match method {
@@ -361,32 +412,32 @@ pub(crate) fn assemble(
                         Method::Trapezoidal => geq * hist[k].v + hist[k].i,
                         Method::BackwardEuler => geq * hist[k].v,
                     };
-                    stamp_g(&mut a, ip, inn, geq);
+                    stamp_g(a, ip, inn, geq);
                     // i_new = G_eq·v − I_hist: the constant −I_hist is a
                     // current source p→n of value −I_hist.
-                    inject(&mut b, ip, inn, -i_hist);
+                    inject(b, ip, inn, -i_hist);
                 }
             },
             Element::Inductor { l, ic, .. } => match mode {
                 Mode::DcOp => {
                     // Short: v_p − v_n = 0, branch current unknown.
-                    stamp_vrow(&mut a, &mut b, ip, inn, topo.branch[k].unwrap(), 0.0);
+                    stamp_vrow(a, b, ip, inn, topo.branch[k].unwrap(), 0.0);
                 }
-                Mode::Init => inject(&mut b, ip, inn, *ic),
+                Mode::Init => inject(b, ip, inn, *ic),
                 Mode::Step => {
                     let rb = topo.branch[k].unwrap();
                     let coef = match method {
                         Method::Trapezoidal => h / (2.0 * l),
                         Method::BackwardEuler => h / l,
                     };
-                    a[(rb, rb)] = 1.0;
+                    a.add(rb, rb, 1.0);
                     if let Some(i) = ip {
-                        a[(rb, i)] -= coef;
-                        a[(i, rb)] += 1.0;
+                        a.add(rb, i, -coef);
+                        a.add(i, rb, 1.0);
                     }
                     if let Some(j) = inn {
-                        a[(rb, j)] += coef;
-                        a[(j, rb)] -= 1.0;
+                        a.add(rb, j, coef);
+                        a.add(j, rb, -1.0);
                     }
                     b[rb] = hist[k].i
                         + match method {
@@ -397,8 +448,8 @@ pub(crate) fn assemble(
             },
             Element::VoltageSource { wave, .. } => {
                 stamp_vrow(
-                    &mut a,
-                    &mut b,
+                    a,
+                    b,
                     ip,
                     inn,
                     topo.branch[k].unwrap(),
@@ -406,23 +457,24 @@ pub(crate) fn assemble(
                 );
             }
             Element::CurrentSource { wave, .. } => {
-                inject(&mut b, ip, inn, src_scale * wave.at(t));
+                inject(b, ip, inn, src_scale * wave.at(t));
             }
             Element::Diode {
                 i_s, n_ideality, ..
             } => {
                 let (g, i_eq) = diode_companion(*i_s, *n_ideality, dlin[k]);
-                stamp_g(&mut a, ip, inn, g);
-                inject(&mut b, ip, inn, i_eq);
+                stamp_g(a, ip, inn, g);
+                inject(b, ip, inn, i_eq);
             }
         }
     }
-    (a, b)
 }
 
-/// Solve one MNA system. Linear netlists are a single assemble + LU; netlists
-/// with diodes run damped Newton-Raphson, warm-started from (and updating)
-/// `dlin` so consecutive transient steps converge in a couple of iterations.
+/// Solve one MNA system. Linear netlists are a single assemble + solve;
+/// netlists with diodes run damped Newton-Raphson, warm-started from (and
+/// updating) `dlin` so consecutive transient steps converge in a couple of
+/// iterations. The `solver` carries the dense-vs-sparse decision and, on the
+/// sparse path, the cached pivot order + fill pattern reused across calls.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn solve(
     net: &Netlist,
@@ -434,20 +486,19 @@ pub(crate) fn solve(
     src_scale: f64,
     hist: &[ElemState],
     dlin: &mut [f64],
+    solver: &mut SystemSolver,
 ) -> Result<Vec<f64>, CircuitError> {
     let has_diode = net
         .elements
         .iter()
         .any(|e| matches!(e, Element::Diode { .. }));
     if !has_diode {
-        let (a, b) = assemble(net, topo, mode, method, t, h, src_scale, hist, dlin);
-        return a.lu_solve(&b).ok_or(CircuitError::Singular);
+        return solver.solve_system(net, topo, mode, method, t, h, src_scale, hist, dlin);
     }
     let vn = |x: &[f64], node: Node| if node == 0 { 0.0 } else { x[node - 1] };
     let mut x_prev: Option<Vec<f64>> = None;
     for _ in 0..NR_MAX_ITERS {
-        let (a, b) = assemble(net, topo, mode, method, t, h, src_scale, hist, dlin);
-        let x = a.lu_solve(&b).ok_or(CircuitError::Singular)?;
+        let x = solver.solve_system(net, topo, mode, method, t, h, src_scale, hist, dlin)?;
         let mut limited = false;
         for (k, el) in net.elements.iter().enumerate() {
             if let Element::Diode {
