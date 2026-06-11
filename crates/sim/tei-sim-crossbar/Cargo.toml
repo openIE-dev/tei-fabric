@@ -9,6 +9,7 @@ description = "tei-sim crossbar column — see docs/SIM-ROADMAP.md."
 
 [dependencies]
 tei-sim-core = { path = "../tei-sim-core" }
+tei-sim-circuit = { path = "../tei-sim-circuit" }
 serde.workspace = true
 serde_json.workspace = true
 rayon.workspace = true

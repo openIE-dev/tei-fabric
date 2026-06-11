@@ -25,7 +25,10 @@
 //!   for a full-scale sinusoid is the classic `6.02·b + 1.76 dB`
 //!   (Bennett, "Spectra of quantized signals", Bell Syst. Tech. J. 27, 1948).
 //! - **IR drop** — three fidelity modes; see [`IrDropMode`]. The exact
-//!   resistive-mesh solve is deferred to `tei-sim-circuit` (roadmap §3.5 M1).
+//!   resistive-mesh mode builds each tile's parasitic wire network as a
+//!   resistor netlist and solves its DC operating point through
+//!   `tei-sim-circuit` (roadmap §2 cross-crate flow / §3.5 M1), factoring
+//!   the MNA matrix once per programmed tile and re-solving per input vector.
 //!
 //! Matrices larger than the physical array are tiled `⌈k/size⌉ × ⌈n/size⌉`
 //! with partial sums accumulated in the digital domain; the ADC fires once
@@ -104,11 +107,56 @@ pub enum IrDropMode {
     /// small (`N·Ḡ·R_wire ≪ 1`); it underestimates the degradation of a
     /// fully-active array. The coupled solve is [`IrDropMode::ExactMesh`].
     FirstOrder { r_wire: f64 },
-    /// Exact resistive-mesh solve (every wire segment a resistor, full MNA).
-    /// Deferred to `tei-sim-circuit` M1 per docs/SIM-ROADMAP.md §3.3/§3.5;
-    /// selecting it currently panics via `unimplemented!()`.
-    ExactMesh,
+    /// Exact resistive-mesh solve: every wire segment is a resistor and the
+    /// coupled network is solved by full MNA through `tei-sim-circuit`
+    /// (docs/SIM-ROADMAP.md §2 cross-crate flow, §3.3, §3.5 M1/M4).
+    ///
+    /// **Mesh model** (per physical tile of `r` rows × `c` cols, same wire
+    /// geometry as [`IrDropMode::FirstOrder`]): each row wire is a chain of
+    /// `r_wire` segments from the driver at the left edge through its
+    /// crosspoints; each column wire is a chain of `r_wire` segments from its
+    /// crosspoints down to the sense node at the bottom edge — an ideal TIA,
+    /// i.e. virtual ground, so the termination *is* circuit ground. Row
+    /// inputs are ideal voltage sources.
+    ///
+    /// **Signed weights.** The crate's collapsed signed conductance
+    /// `G = G⁺ − G⁻` is un-collapsed for the mesh: each logical column is a
+    /// balanced differential pair of physical column wires, the device
+    /// `|G|` sits on the `+` wire when `G > 0` and on the `−` wire when
+    /// `G < 0`, and the logical sense current is `I⁺ − I⁻`. (A literal
+    /// negative resistor would *amplify* under IR drop — `G/(1 − |G|R)` —
+    /// which is unphysical; the differential network reproduces the
+    /// `G/(1 + |G|R_path)` single-device closed form exactly.)
+    ///
+    /// `r_wire = 0` elides the mesh and behaves as [`IrDropMode::Ideal`],
+    /// matching `FirstOrder { r_wire: 0.0 }`.
+    ///
+    /// **Cost.** The tile's MNA matrix depends only on the programmed
+    /// conductances, so it is factored once at programming time and each
+    /// query is a cached-LU re-solve (`tei-sim-circuit::LinearDcSolver`);
+    /// one solve per (tile, MVM), counted in `EventLedger::mesh_solves`.
+    /// Tiles are capped at [`EXACT_MESH_MAX_ARRAY`]² devices — see the
+    /// constant's docs.
+    ///
+    /// Serde note: this variant gained `r_wire` when the mode was
+    /// implemented; jobs must now spell `{"exact_mesh": {"r_wire": …}}`
+    /// (the old bare `"exact_mesh"` string only ever panicked). `Ideal` and
+    /// `FirstOrder` encodings are unchanged.
+    ExactMesh { r_wire: f64 },
 }
+
+/// Largest `array_size` accepted for [`IrDropMode::ExactMesh`].
+///
+/// A fully-populated 64×64 tile is 8,320 MNA unknowns (64 drivers + 2·64²
+/// mesh nodes + 64 source branch rows). Measured on the M4 sparse Markowitz
+/// LU (release, Apple Silicon; `bench_exact_mesh_factor_and_solve_64`):
+/// ~2.3 s to factor — paid **once** per programmed tile — then ~0.4 ms per
+/// query re-solve, so steady-state queries are cheap. Fill growth makes the
+/// one-time factorization balloon super-linearly past this size, while
+/// wire-resistance current *redistribution* — the physics the mode exists
+/// for — is fully visible well below it; larger logical matrices should
+/// simply tile (`array_size ≤ 64`), exactly as physical chips do.
+pub const EXACT_MESH_MAX_ARRAY: usize = 64;
 
 /// Full device + periphery parameter set for a crossbar.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -187,6 +235,124 @@ struct Tile {
     g: Vec<f64>,
 }
 
+/// The parasitic resistive mesh of one programmed tile, with its MNA matrix
+/// factored once — the engine behind [`IrDropMode::ExactMesh`].
+///
+/// Network (see [`IrDropMode::ExactMesh`] for the physics): per row, a
+/// voltage-source-driven chain of `r_wire` segments through the row's
+/// crosspoint nodes; per logical column, a differential pair of column-wire
+/// chains terminated at ground (the ideal-TIA virtual ground); per device,
+/// `|G|` linking its row node to its `+` or `−` column node by sign.
+/// Pass-through nodes (zero-conductance crosspoints, device-free column
+/// levels) are merged into longer wire segments — they carry no branch
+/// current of their own, so the solve is unchanged and the system shrinks.
+///
+/// Column currents are read as `Σ_devices G·(v_row − v_col)` rather than from
+/// the termination-segment voltage drop: by KCL the sums are identical, but
+/// the device form stays well-conditioned as `r_wire → 0` (each `v_row −
+/// v_col` is O(drive), never a difference of near-equal tiny numbers).
+#[derive(Debug, Clone)]
+struct TileMesh {
+    /// Factor-once / solve-many DC solver over the tile netlist; one
+    /// voltage source per tile row, in row order.
+    solver: tei_sim_circuit::LinearDcSolver,
+    /// One tap per programmed device: (logical column, signed aged
+    /// conductance G, row-wire node, column-wire node). The device current
+    /// contribution to its logical column is `G·(v(row) − v(col))`.
+    taps: Vec<(usize, f64, usize, usize)>,
+    cols: usize,
+}
+
+impl TileMesh {
+    /// Build and factor the mesh for `tile`, conductances aged by `drift`.
+    /// `r_wire` must be positive (callers elide the mesh at 0).
+    fn build(tile: &Tile, drift: f64, r_wire: f64) -> Self {
+        use tei_sim_circuit::{Netlist, Waveform};
+        debug_assert!(r_wire > 0.0);
+        let (rows, cols) = (tile.rows, tile.cols);
+        let mut net = Netlist::new();
+        let mut next_node = 0usize;
+
+        // Row drivers: vsource k = row k, the order LinearDcSolver::solve
+        // expects its per-row drive voltages in.
+        let mut drivers = Vec::with_capacity(rows);
+        for i in 0..rows {
+            next_node += 1;
+            net.vsource(&format!("v{i}"), next_node, 0, Waveform::Dc { v: 0.0 });
+            drivers.push(next_node);
+        }
+
+        // Row wires: driver →(j+1 segments)→ first device, then segment runs
+        // between devices; the stub past the last device carries no current
+        // and is dropped. Records each device's row node.
+        let mut row_node = vec![0usize; rows * cols];
+        for i in 0..rows {
+            let (mut prev, mut prev_j) = (drivers[i], -1i64);
+            for j in 0..cols {
+                if tile.g[i * cols + j] == 0.0 {
+                    continue;
+                }
+                next_node += 1;
+                let seg = (j as i64 - prev_j) as f64 * r_wire;
+                net.resistor(&format!("rw{i}_{j}"), prev, next_node, seg);
+                row_node[i * cols + j] = next_node;
+                (prev, prev_j) = (next_node, j as i64);
+            }
+        }
+
+        // Column wires (one chain per polarity) + devices. Level i sits
+        // i segments below the top, (rows − i) above the ground termination.
+        let mut taps = Vec::with_capacity(rows * cols);
+        for j in 0..cols {
+            for sign in [1.0f64, -1.0] {
+                let tag = if sign > 0.0 { 'p' } else { 'n' };
+                let mut prev: Option<(usize, usize)> = None; // (node, level)
+                for i in 0..rows {
+                    let g = tile.g[i * cols + j] * drift;
+                    if g == 0.0 || (g > 0.0) != (sign > 0.0) {
+                        continue;
+                    }
+                    next_node += 1;
+                    net.resistor(
+                        &format!("d{tag}{i}_{j}"),
+                        row_node[i * cols + j],
+                        next_node,
+                        1.0 / g.abs(),
+                    );
+                    if let Some((pn, pi)) = prev {
+                        let seg = (i - pi) as f64 * r_wire;
+                        net.resistor(&format!("cw{tag}{i}_{j}"), pn, next_node, seg);
+                    }
+                    taps.push((j, g, row_node[i * cols + j], next_node));
+                    prev = Some((next_node, i));
+                }
+                if let Some((pn, pi)) = prev {
+                    let term = (rows - pi) as f64 * r_wire;
+                    net.resistor(&format!("ct{tag}{j}"), pn, 0, term);
+                }
+            }
+        }
+
+        let solver = tei_sim_circuit::LinearDcSolver::new(&net)
+            .expect("crossbar IR-drop mesh is a grounded linear network; must factor");
+        Self { solver, taps, cols }
+    }
+
+    /// One coupled DC solve: drive the rows with `x` (volts) and return every
+    /// logical column's sense current `I⁺ − I⁻` in amperes.
+    fn column_currents(&self, x: &[f64]) -> Vec<f64> {
+        let sol = self.solver.solve(x);
+        let mut currents = vec![0.0; self.cols];
+        for &(j, g, rn, cn) in &self.taps {
+            // Device |G| sits row→col on the polarity wire matching
+            // sign(G); its logical-column contribution is G·(v_r − v_c)
+            // for both signs (the − wire's current enters as −I⁻).
+            currents[j] += g * (sol.node(rn) - sol.node(cn));
+        }
+        currents
+    }
+}
+
 /// A weight matrix mapped onto tiled crossbar arrays with a programmable
 /// device model. Construction *programs* the devices (drawing lognormal
 /// write errors from `rng`); [`CrossbarArray::mvm`] then executes noisy
@@ -203,6 +369,10 @@ pub struct CrossbarArray {
     /// Ideal weights, row-major (the digital reference).
     w_ideal: Vec<f64>,
     tiles: Vec<Tile>,
+    /// Factored IR-drop meshes, parallel to `tiles`. Non-empty exactly when
+    /// `ir_drop` is `ExactMesh` with `r_wire > 0` (built — and the MNA LU
+    /// paid — once, at programming time).
+    meshes: Vec<TileMesh>,
 }
 
 impl CrossbarArray {
@@ -220,6 +390,18 @@ impl CrossbarArray {
     ) -> Self {
         assert_eq!(weights.len(), rows * cols, "weights must be rows×cols");
         assert!(array_size > 0, "array_size must be positive");
+        if let IrDropMode::ExactMesh { r_wire } = params.ir_drop {
+            assert!(
+                r_wire.is_finite() && r_wire >= 0.0,
+                "ExactMesh r_wire must be finite and ≥ 0, got {r_wire}"
+            );
+            assert!(
+                r_wire == 0.0 || array_size <= EXACT_MESH_MAX_ARRAY,
+                "ExactMesh tiles are capped at array_size {EXACT_MESH_MAX_ARRAY} \
+                 (got {array_size}): the per-tile MNA factorization grows \
+                 super-linearly in fill — tile larger matrices instead"
+            );
+        }
         let w_max = weights.iter().fold(0.0f64, |m, &w| m.max(w.abs()));
         let g_scale = if w_max > 0.0 {
             params.g_max / w_max
@@ -260,6 +442,24 @@ impl CrossbarArray {
             }
         }
 
+        // ExactMesh: build and LU-factor each tile's parasitic network now —
+        // the matrix depends only on the programmed (and aged) conductances,
+        // so every later query re-solves against the cached factorization.
+        let meshes = match params.ir_drop {
+            IrDropMode::ExactMesh { r_wire } if r_wire > 0.0 => {
+                let drift = if params.drift_nu == 0.0 {
+                    1.0
+                } else {
+                    params.age.powf(-params.drift_nu)
+                };
+                tiles
+                    .iter()
+                    .map(|t| TileMesh::build(t, drift, r_wire))
+                    .collect()
+            }
+            _ => Vec::new(),
+        };
+
         Self {
             rows,
             cols,
@@ -268,6 +468,7 @@ impl CrossbarArray {
             g_scale,
             w_ideal: weights.to_vec(),
             tiles,
+            meshes,
         }
     }
 
@@ -321,7 +522,10 @@ impl CrossbarArray {
     /// Noisy MVM through the full non-ideality stack. Per row-tile partial
     /// sums are digitized (one ADC sample per tile × output column) and
     /// accumulated in the digital domain. Ledger: `macs += rows·cols`,
-    /// `adc_samples += cols·⌈rows/array_size⌉`.
+    /// `adc_samples += cols·⌈rows/array_size⌉`, and under
+    /// [`IrDropMode::ExactMesh`] one `mesh_solves` per (tile, MVM) — the
+    /// `macs` convention is unchanged (the mesh realizes the same MACs,
+    /// coupled by the wire network).
     pub fn mvm(&self, x: &[f64], rng: &mut Rng, ledger: &mut EventLedger) -> Vec<f64> {
         assert_eq!(x.len(), self.rows);
 
@@ -337,34 +541,57 @@ impl CrossbarArray {
 
         let drift = self.drift_factor();
         let mut y = vec![0.0; self.cols];
-        for tile in &self.tiles {
+        for (ti, tile) in self.tiles.iter().enumerate() {
             let xs = &xq[tile.row0..tile.row0 + tile.rows];
+            // ExactMesh: one coupled DC solve per (tile, query) yields every
+            // column's noiseless sense current at once. The mesh replaces
+            // only the ideal-current computation — read noise and the
+            // ADC/digital stages below apply identically in the same order.
+            let mesh_currents = self.meshes.get(ti).map(|m| {
+                ledger.mesh_solves += 1;
+                m.column_currents(xs)
+            });
             for j in 0..tile.cols {
                 // Analog column current, normalized by g_scale into output
                 // (weight·input) units — identical math, friendlier numbers.
                 let mut acc = 0.0;
-                for (i, &xi) in xs.iter().enumerate() {
-                    let g0 = tile.g[i * tile.cols + j] * drift;
-                    let g_eff = match self.params.ir_drop {
-                        IrDropMode::Ideal => g0,
-                        IrDropMode::FirstOrder { r_wire } => {
-                            // See IrDropMode::FirstOrder for the derivation.
-                            let r_path = r_wire * ((j + 1) + (tile.rows - i)) as f64;
-                            g0 / (1.0 + g0.abs() * r_path)
+                match &mesh_currents {
+                    Some(currents) => {
+                        acc = currents[j];
+                        // Per-read conductance noise σ = σ_read·|G| on each
+                        // device, same statistics and draw order as the
+                        // uncoupled modes (noise × IR-drop cross terms are
+                        // second-order small and not modeled).
+                        if self.params.sigma_read > 0.0 {
+                            for (i, &xi) in xs.iter().enumerate() {
+                                let g0 = tile.g[i * tile.cols + j] * drift;
+                                acc += xi * self.params.sigma_read * g0.abs() * rng.normal();
+                            }
                         }
-                        IrDropMode::ExactMesh => unimplemented!(
-                            "exact resistive-mesh IR drop lands with tei-sim-circuit M1 \
-                             (docs/SIM-ROADMAP.md §3.5)"
-                        ),
-                    };
-                    // Per-read conductance noise σ = σ_read·|G| (a device
-                    // property — scaled by the aged programmed conductance).
-                    let g_read = if self.params.sigma_read > 0.0 {
-                        g_eff + self.params.sigma_read * g0.abs() * rng.normal()
-                    } else {
-                        g_eff
-                    };
-                    acc += xi * g_read;
+                    }
+                    None => {
+                        for (i, &xi) in xs.iter().enumerate() {
+                            let g0 = tile.g[i * tile.cols + j] * drift;
+                            let g_eff = match self.params.ir_drop {
+                                IrDropMode::Ideal => g0,
+                                IrDropMode::FirstOrder { r_wire } => {
+                                    // See IrDropMode::FirstOrder for the derivation.
+                                    let r_path = r_wire * ((j + 1) + (tile.rows - i)) as f64;
+                                    g0 / (1.0 + g0.abs() * r_path)
+                                }
+                                // Mesh elided (r_wire = 0): lossless wires.
+                                IrDropMode::ExactMesh { .. } => g0,
+                            };
+                            // Per-read conductance noise σ = σ_read·|G| (a device
+                            // property — scaled by the aged programmed conductance).
+                            let g_read = if self.params.sigma_read > 0.0 {
+                                g_eff + self.params.sigma_read * g0.abs() * rng.normal()
+                            } else {
+                                g_eff
+                            };
+                            acc += xi * g_read;
+                        }
+                    }
                 }
                 ledger.macs += tile.rows as u64;
                 ledger.adc_samples += 1;
@@ -409,6 +636,29 @@ impl Executor for CrossbarExecutor {
 
     fn execute(&self, job: &Self::Job, on_progress: &mut dyn FnMut(Progress)) -> ExecutionResult {
         let t0 = std::time::Instant::now();
+        // Validate job-level ExactMesh constraints here so HTTP callers get an
+        // error payload instead of a panicked worker (program() asserts).
+        if let IrDropMode::ExactMesh { r_wire } = job.device.ir_drop {
+            if !(r_wire.is_finite() && r_wire >= 0.0) {
+                return ExecutionResult {
+                    ledger: EventLedger::default(),
+                    outputs: serde_json::json!({
+                        "error": format!("exact_mesh r_wire must be finite and ≥ 0, got {r_wire}")
+                    }),
+                };
+            }
+            if r_wire > 0.0 && job.array_size > EXACT_MESH_MAX_ARRAY {
+                return ExecutionResult {
+                    ledger: EventLedger::default(),
+                    outputs: serde_json::json!({
+                        "error": format!(
+                            "exact_mesh tiles are capped at array_size {EXACT_MESH_MAX_ARRAY}                              (got {}); set array_size ≤ {EXACT_MESH_MAX_ARRAY}",
+                            job.array_size
+                        )
+                    }),
+                };
+            }
+        }
         let mut rng = Rng::new(job.seed);
 
         // Random weights in [−1, 1], programmed once.
@@ -467,6 +717,7 @@ impl Executor for CrossbarExecutor {
                 "snr_db": snr_db(sum_sig2, sum_err2),
                 "macs": ledger.macs,
                 "adc_samples": ledger.adc_samples,
+                "mesh_solves": ledger.mesh_solves,
             }),
         }
     }
@@ -517,6 +768,20 @@ mod tests {
         assert!((small - ideal).abs() / ideal < 1e-6, "{small} vs {ideal}");
         assert!(large < ideal, "{large} !< {ideal}");
         assert!(large > 0.9 * ideal, "first-order should stay small here");
+    }
+
+    /// IrDropMode serde: the pre-existing `Ideal`/`FirstOrder` encodings are
+    /// unchanged and `ExactMesh` round-trips with its `r_wire`.
+    #[test]
+    fn ir_drop_serde_encodings() {
+        let ideal: IrDropMode = serde_json::from_str(r#""ideal""#).unwrap();
+        assert!(matches!(ideal, IrDropMode::Ideal));
+        let fo: IrDropMode = serde_json::from_str(r#"{"first_order":{"r_wire":2.5}}"#).unwrap();
+        assert!(matches!(fo, IrDropMode::FirstOrder { r_wire } if r_wire == 2.5));
+        let em: IrDropMode = serde_json::from_str(r#"{"exact_mesh":{"r_wire":1.5}}"#).unwrap();
+        assert!(matches!(em, IrDropMode::ExactMesh { r_wire } if r_wire == 1.5));
+        let s = serde_json::to_string(&IrDropMode::ExactMesh { r_wire: 1.5 }).unwrap();
+        assert_eq!(s, r#"{"exact_mesh":{"r_wire":1.5}}"#);
     }
 
     /// CrossbarJob round-trips through serde with defaults filled in.

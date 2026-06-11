@@ -178,6 +178,128 @@ pub fn solve_dc(net: &Netlist) -> Result<DcSolution, CircuitError> {
     })
 }
 
+/// Repeated-DC solver for **linear** netlists with a fixed matrix and varying
+/// voltage-source values — the factor-once / solve-many fast path behind the
+/// crossbar's exact IR-drop mode (roadmap §2 cross-crate flow:
+/// "`tei-sim-circuit` provides the exact IR-drop mode for `tei-sim-crossbar`").
+///
+/// In MNA, element values enter the **matrix** while voltage-source values
+/// enter only the **RHS** (the constraint row reads `v_p − v_n = V`). So for
+/// a netlist whose elements never change between solves — a programmed
+/// crossbar tile, where only the row drive voltages vary per query — the
+/// sparse LU is factored once at construction and every later [`Self::solve`]
+/// just rewrites the source rows of the cached base RHS and runs the two
+/// triangular substitutions. No reassembly, no refactorization.
+///
+/// Restrictions (deliberate, keeps the export minimal): linear elements only —
+/// a diode would make the matrix iterate-dependent. Capacitors are open and
+/// inductors short, exactly as in [`solve_dc`]. The sparse path is used
+/// unconditionally: the dense path's whole reason to exist is bit-stability
+/// of the tiny pre-M4 validation cells, which never come through here.
+#[derive(Debug, Clone)]
+pub struct LinearDcSolver {
+    n_nodes: usize,
+    lu: tei_sim_core::sparse::SparseLu,
+    /// Base RHS assembled once from the netlist's own t = 0 source values.
+    b0: Vec<f64>,
+    /// Branch-row index of each voltage source, in element order.
+    vrows: Vec<usize>,
+    /// (name, branch row) of every element carrying a branch unknown.
+    branches: Vec<(String, usize)>,
+}
+
+impl LinearDcSolver {
+    /// Validate, assemble, and factor. Errors mirror [`solve_dc`]:
+    /// `Invalid` for malformed/nonlinear netlists, `Singular` if the MNA
+    /// matrix cannot be factored.
+    pub fn new(net: &Netlist) -> Result<Self, CircuitError> {
+        if net
+            .elements
+            .iter()
+            .any(|e| matches!(e, Element::Diode { .. }))
+        {
+            return Err(CircuitError::Invalid(
+                "LinearDcSolver requires a linear netlist (no diodes)".into(),
+            ));
+        }
+        let topo = Topology::build(net, Mode::DcOp)?;
+        let hist = vec![ElemState::default(); net.elements.len()];
+        let dlin = mna::initial_dlin(net);
+        let mut triplets: Vec<(u32, u32, f64)> = Vec::new();
+        let mut b0 = vec![0.0; topo.dim];
+        mna::assemble_into(
+            net,
+            &topo,
+            Mode::DcOp,
+            Method::Trapezoidal,
+            0.0,
+            1.0,
+            1.0,
+            &hist,
+            &dlin,
+            &mut triplets,
+            &mut b0,
+        );
+        let (csr, _map) =
+            tei_sim_core::sparse::Csr::from_triplets_with_map(topo.dim, topo.dim, &triplets);
+        let lu =
+            tei_sim_core::sparse::SparseLu::factor(&csr).map_err(|_| CircuitError::Singular)?;
+        let mut vrows = Vec::new();
+        let mut branches = Vec::new();
+        for (k, el) in net.elements.iter().enumerate() {
+            if let Some(rb) = topo.branch[k] {
+                branches.push((el.name().to_string(), rb));
+                if matches!(el, Element::VoltageSource { .. }) {
+                    vrows.push(rb);
+                }
+            }
+        }
+        Ok(Self {
+            n_nodes: topo.n_nodes,
+            lu,
+            b0,
+            vrows,
+            branches,
+        })
+    }
+
+    /// Non-ground node count N (solutions index nodes 1..=N).
+    pub fn n_nodes(&self) -> usize {
+        self.n_nodes
+    }
+
+    /// Number of voltage sources = the length [`Self::solve`] expects.
+    pub fn n_vsources(&self) -> usize {
+        self.vrows.len()
+    }
+
+    /// Solve the operating point with the k-th voltage source (in netlist
+    /// element order) set to `v_src[k]`, reusing the cached factorization.
+    /// Cost per call: one RHS rewrite + two sparse triangular substitutions.
+    pub fn solve(&self, v_src: &[f64]) -> DcSolution {
+        assert_eq!(
+            v_src.len(),
+            self.vrows.len(),
+            "one value per voltage source"
+        );
+        let mut b = self.b0.clone();
+        for (&rb, &v) in self.vrows.iter().zip(v_src) {
+            b[rb] = v;
+        }
+        let mut x = self.lu.solve(&b);
+        let branch_currents = self
+            .branches
+            .iter()
+            .map(|(n, rb)| (n.clone(), x[*rb]))
+            .collect();
+        x.truncate(self.n_nodes);
+        DcSolution {
+            v: x,
+            branch_currents,
+        }
+    }
+}
+
 /// Σ ½CV² + ½LI² over the reactive elements at a state snapshot.
 fn stored_energy(net: &Netlist, states: &[ElemState]) -> f64 {
     net.elements

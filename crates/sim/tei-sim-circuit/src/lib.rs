@@ -55,7 +55,8 @@ pub use exec::{CircuitExecutor, CircuitJob};
 pub use netlist::{Element, Netlist, Node, VT_300K, Waveform};
 pub use solver::{SPARSE_NODE_THRESHOLD, SolverChoice, SolverKind};
 pub use transient::{
-    DcSolution, TransientOpts, TransientResult, solve_dc, transient, transient_with_progress,
+    DcSolution, LinearDcSolver, TransientOpts, TransientResult, solve_dc, transient,
+    transient_with_progress,
 };
 
 /// Time-integration method for the transient loop.

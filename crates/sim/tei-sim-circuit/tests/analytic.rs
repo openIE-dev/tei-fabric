@@ -12,7 +12,8 @@
 //!      (M2), executor end-to-end with progress + ledger.
 
 use tei_sim_circuit::{
-    CircuitExecutor, CircuitJob, Method, Netlist, TransientOpts, Waveform, solve_dc, transient,
+    CircuitExecutor, CircuitJob, LinearDcSolver, Method, Netlist, TransientOpts, Waveform,
+    solve_dc, transient,
 };
 use tei_sim_core::exec::Executor;
 
@@ -61,6 +62,61 @@ fn dc_voltage_divider_exact() {
     // i.e. −1/3 mA p→n.
     let i = dc.branch_current("vs").unwrap();
     assert!((i + 1.0 / 3000.0).abs() < 1e-15);
+}
+
+/// LinearDcSolver — the factor-once / solve-many DC path behind the crossbar
+/// exact-IR-drop mode: for every voltage-source assignment it must agree with
+/// the from-scratch `solve_dc` on an equivalent netlist to LU precision,
+/// node voltages and branch currents alike.
+#[test]
+fn linear_dc_solver_matches_solve_dc_across_source_values() {
+    // Two sources driving a small resistive mesh with an inductor short and
+    // an open capacitor — exercises every linear DcOp stamp.
+    let build = |v1: f64, v2: f64| {
+        let mut net = Netlist::new();
+        net.vsource("vs1", 1, 0, Waveform::Dc { v: v1 })
+            .vsource("vs2", 2, 0, Waveform::Dc { v: v2 })
+            .resistor("r1", 1, 3, 1e3)
+            .resistor("r2", 2, 3, 2e3)
+            .resistor("r3", 3, 4, 5e2)
+            .resistor("r4", 4, 0, 1e3)
+            .inductor("l1", 3, 0, 1e-3, 0.0)
+            .capacitor("c1", 4, 0, 1e-9, 0.0);
+        net
+    };
+    let solver = LinearDcSolver::new(&build(0.0, 0.0)).unwrap();
+    assert_eq!(solver.n_vsources(), 2);
+    assert_eq!(solver.n_nodes(), 4);
+    for (v1, v2) in [(1.0, 0.0), (0.0, -2.5), (0.7, 0.3), (-1.0, 4.0)] {
+        let fast = solver.solve(&[v1, v2]);
+        let slow = solve_dc(&build(v1, v2)).unwrap();
+        for node in 1..=4 {
+            assert!(
+                (fast.node(node) - slow.node(node)).abs() < 1e-12,
+                "node {node} at ({v1},{v2}): {} vs {}",
+                fast.node(node),
+                slow.node(node)
+            );
+        }
+        for name in ["vs1", "vs2", "l1"] {
+            let (a, b) = (
+                fast.branch_current(name).unwrap(),
+                slow.branch_current(name).unwrap(),
+            );
+            assert!((a - b).abs() < 1e-12, "{name}: {a} vs {b}");
+        }
+    }
+}
+
+/// LinearDcSolver is linear-only: a diode (matrix depends on the iterate, so
+/// factor-once would be wrong) is rejected up front.
+#[test]
+fn linear_dc_solver_rejects_nonlinear_netlist() {
+    let mut net = Netlist::new();
+    net.vsource("vs", 1, 0, Waveform::Dc { v: 1.0 })
+        .resistor("r", 1, 2, 1e3)
+        .diode("d", 2, 0, 1e-14, 1.0);
+    assert!(LinearDcSolver::new(&net).is_err());
 }
 
 /// DC operating point semantics: capacitor open (v_C = V), inductor short

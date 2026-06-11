@@ -23,6 +23,10 @@ pub struct EventLedger {
     pub modulator_events: u64,
     /// Multiply-accumulates executed.
     pub macs: u64,
+    /// Exact IR-drop resistive-mesh DC solves (crossbar `ExactMesh` mode:
+    /// one per physical tile per MVM; the per-device `macs` convention is
+    /// unchanged — the mesh realizes the same MACs, coupled).
+    pub mesh_solves: u64,
     /// Integrated dissipation, joules (circuit column ∫i·v dt).
     pub joules: f64,
     /// Wall-clock seconds of the simulation run (None on wasm).
@@ -39,6 +43,7 @@ impl EventLedger {
         self.adc_samples += other.adc_samples;
         self.modulator_events += other.modulator_events;
         self.macs += other.macs;
+        self.mesh_solves += other.mesh_solves;
         self.joules += other.joules;
     }
 }

@@ -1666,6 +1666,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
+ "tei-sim-circuit",
  "tei-sim-core",
 ]
 

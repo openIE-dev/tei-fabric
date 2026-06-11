@@ -249,16 +249,304 @@ fn seed_determinism() {
     assert_eq!(y1, y2, "same seeds must give bit-identical outputs");
 }
 
-/// Exact-mesh IR drop is explicitly deferred to tei-sim-circuit M1.
-#[test]
-#[should_panic(expected = "tei-sim-circuit")]
-fn exact_mesh_is_deferred() {
+// ───────────────────── exact-mesh IR drop (ExactMesh) ─────────────────────
+//
+// The coupled resistive-mesh solve via tei-sim-circuit — validation per the
+// roadmap §3.3 table row "IR-drop first-order mode vs exact mesh mode
+// convergence | internal consistency", plus analytic single-device and
+// vanishing-wire limits and the IR-drop monotonicity signature.
+
+/// Noiseless MVM through the given IR-drop mode (all other non-idealities
+/// off, so outputs are deterministic functions of the wire model alone).
+fn ir_mvm(
+    w: &[f64],
+    rows: usize,
+    cols: usize,
+    size: usize,
+    ir_drop: IrDropMode,
+    x: &[f64],
+) -> Vec<f64> {
     let params = DeviceParams {
-        ir_drop: IrDropMode::ExactMesh,
+        ir_drop,
         ..Default::default()
     };
-    let arr = CrossbarArray::program(&[1.0], 1, 1, 8, params, &mut Rng::new(1));
-    arr.mvm(&[1.0], &mut Rng::new(2), &mut EventLedger::default());
+    let arr = CrossbarArray::program(w, rows, cols, size, params, &mut Rng::new(1));
+    arr.mvm(x, &mut Rng::new(2), &mut EventLedger::default())
+}
+
+/// (g) r_wire → 0 limit: the exact mesh must reproduce the ideal (lossless
+/// wire) outputs to 1e-9, with mixed-sign weights and inputs so both
+/// polarity wires of the differential column pairs are exercised.
+#[test]
+fn exact_mesh_matches_ideal_as_r_wire_vanishes() {
+    let (rows, cols) = (8, 8);
+    let mut rng = Rng::new(909);
+    let w: Vec<f64> = (0..rows * cols).map(|_| 2.0 * rng.f64() - 1.0).collect();
+    let x: Vec<f64> = (0..rows).map(|_| 2.0 * rng.f64() - 1.0).collect();
+
+    let y_ideal = ir_mvm(&w, rows, cols, 8, IrDropMode::Ideal, &x);
+    let y_mesh = ir_mvm(
+        &w,
+        rows,
+        cols,
+        8,
+        IrDropMode::ExactMesh { r_wire: 1e-9 },
+        &x,
+    );
+    for (j, (a, b)) in y_mesh.iter().zip(&y_ideal).enumerate() {
+        assert!((a - b).abs() < 1e-9, "col {j}: mesh {a} vs ideal {b}");
+    }
+}
+
+/// (h) Single device with its series wire is an exact voltage divider:
+/// I = v·G/(1 + G·R_total) with R_total = 2·r_wire (one row segment from the
+/// driver + one column segment to the sense ground) — matched to 1e-12 for
+/// both weight signs (the negative device lives on the − polarity wire).
+#[test]
+fn exact_mesh_single_device_matches_voltage_divider() {
+    let (r_wire, x) = (5.0, 0.7);
+    let params = DeviceParams::default();
+    let g = params.g_max; // |w| = 1 → g_scale = g_max → |G| = g_max
+    for w in [1.0f64, -1.0] {
+        let y = ir_mvm(&[w], 1, 1, 8, IrDropMode::ExactMesh { r_wire }, &[x])[0];
+        // In weight·input units: y = x·w / (1 + |G|·2·r_wire).
+        let expected = x * w / (1.0 + g * 2.0 * r_wire);
+        assert!(
+            (y - expected).abs() < 1e-12,
+            "w={w}: mesh {y} vs divider closed form {expected}"
+        );
+    }
+}
+
+/// (i) THE §3.3 table row — first-order vs exact mesh convergence (internal
+/// consistency): on a 32×32 tile with realistic conductances, the
+/// first-order closed form must sit strictly closer to the exact mesh than
+/// the ideal model does, both errors must shrink as r_wire decreases, and
+/// the first-order error must shrink *faster* (it is exact to O(R²)).
+#[test]
+fn first_order_vs_exact_mesh_convergence() {
+    let (rows, cols) = (32, 32);
+    let mut rng = Rng::new(515);
+    // All-positive weights and inputs: the fully-active worst case where the
+    // shared-wire coupling the first-order model ignores is largest.
+    let w: Vec<f64> = (0..rows * cols).map(|_| 0.2 + 0.8 * rng.f64()).collect();
+    let x: Vec<f64> = (0..rows).map(|_| rng.f64()).collect();
+
+    let rms = |a: &[f64], b: &[f64]| {
+        (a.iter().zip(b).map(|(p, q)| (p - q) * (p - q)).sum::<f64>() / a.len() as f64).sqrt()
+    };
+
+    let y_ideal = ir_mvm(&w, rows, cols, 32, IrDropMode::Ideal, &x);
+    let mut errs = Vec::new(); // (err_first_order, err_ideal) per r_wire
+    for r_wire in [2.0, 0.5] {
+        let y_fo = ir_mvm(&w, rows, cols, 32, IrDropMode::FirstOrder { r_wire }, &x);
+        let y_em = ir_mvm(&w, rows, cols, 32, IrDropMode::ExactMesh { r_wire }, &x);
+        let (e_fo, e_id) = (rms(&y_fo, &y_em), rms(&y_ideal, &y_em));
+        println!(
+            "r_wire={r_wire}: |FirstOrder−Exact| rms = {e_fo:.3e}, |Ideal−Exact| rms = {e_id:.3e}"
+        );
+        assert!(
+            e_fo < e_id,
+            "r_wire={r_wire}: first-order error {e_fo:.3e} !< ideal error {e_id:.3e}"
+        );
+        errs.push((e_fo, e_id));
+    }
+    let (coarse, fine) = (errs[0], errs[1]);
+    assert!(
+        fine.0 < coarse.0,
+        "first-order error must shrink with r_wire"
+    );
+    assert!(fine.1 < coarse.1, "ideal error must shrink with r_wire");
+
+    // Rate separation, shown where the first-order premise (independent
+    // current paths) holds: a diagonal weight matrix has one device per row
+    // and per column, so no wire segment carries another device's current —
+    // FirstOrder coincides with the exact mesh to LU precision while Ideal
+    // still misses the O(r_wire) self-path drop. (In the fully-active case
+    // above, both errors are instead dominated by the same shared-wire
+    // coupling term, which FirstOrder ignores by construction, so it
+    // improves on Ideal by a constant factor rather than by an order.)
+    let mut w_diag = vec![0.0; rows * cols];
+    for i in 0..rows {
+        w_diag[i * cols + i] = 0.2 + 0.8 * rng.f64();
+    }
+    let y_id = ir_mvm(&w_diag, rows, cols, 32, IrDropMode::Ideal, &x);
+    for r_wire in [2.0, 0.5] {
+        let y_fo = ir_mvm(
+            &w_diag,
+            rows,
+            cols,
+            32,
+            IrDropMode::FirstOrder { r_wire },
+            &x,
+        );
+        let y_em = ir_mvm(
+            &w_diag,
+            rows,
+            cols,
+            32,
+            IrDropMode::ExactMesh { r_wire },
+            &x,
+        );
+        let (e_fo, e_id) = (rms(&y_fo, &y_em), rms(&y_id, &y_em));
+        println!(
+            "diagonal r_wire={r_wire}: |FirstOrder−Exact| rms = {e_fo:.3e}, |Ideal−Exact| rms = {e_id:.3e}"
+        );
+        assert!(
+            e_fo < 1e-12,
+            "single device per wire: first-order must be exact, got {e_fo:.3e}"
+        );
+        assert!(
+            e_id > 1e3 * e_fo,
+            "ideal must keep its O(r_wire) error: {e_id:.3e} vs {e_fo:.3e}"
+        );
+    }
+}
+
+/// (j) IR-drop monotonicity signature: a far-corner crosspoint (long row +
+/// column path) delivers less current than a near-corner one, and with a
+/// uniform fully-on array the column outputs decay with distance from the
+/// drivers; everything stays below the ideal value.
+#[test]
+fn exact_mesh_ir_drop_monotonic() {
+    let (rows, cols, r_wire) = (4usize, 4usize, 200.0);
+    // Single device at the near corner (last row, first column: 1 row + 1
+    // column segment) vs the far corner (first row, last column).
+    let mut w_near = vec![0.0; rows * cols];
+    w_near[(rows - 1) * cols] = 1.0;
+    let mut w_far = vec![0.0; rows * cols];
+    w_far[cols - 1] = 1.0;
+    let x = vec![1.0; rows];
+    let mode = IrDropMode::ExactMesh { r_wire };
+    let y_near = ir_mvm(&w_near, rows, cols, 8, mode.clone(), &x)[0];
+    let y_far = ir_mvm(&w_far, rows, cols, 8, mode.clone(), &x)[cols - 1];
+    assert!(
+        y_far < y_near && y_near < 1.0,
+        "far-corner {y_far} !< near-corner {y_near} !< ideal 1"
+    );
+
+    // Uniform 8×8: outputs strictly decrease with column distance.
+    let (rows, cols) = (8usize, 8usize);
+    let y = ir_mvm(
+        &vec![1.0; rows * cols],
+        rows,
+        cols,
+        8,
+        IrDropMode::ExactMesh { r_wire },
+        &vec![1.0; rows],
+    );
+    assert!(y[0] < rows as f64, "every column must sit below ideal");
+    for j in 1..cols {
+        assert!(
+            y[j] < y[j - 1],
+            "col {j}: {} !< {} — IR drop must grow with row-wire distance",
+            y[j],
+            y[j - 1]
+        );
+    }
+}
+
+/// (k) ExactMesh determinism + ledger: identical seeds with the full
+/// non-ideality stack give bit-identical outputs across a tiled matrix, and
+/// the ledger counts one mesh solve per (tile, MVM) with the macs /
+/// adc_samples conventions unchanged.
+#[test]
+fn exact_mesh_seed_determinism_and_ledger() {
+    let (rows, cols, size) = (40usize, 20usize, 16usize);
+    let mut wrng = Rng::new(7);
+    let w: Vec<f64> = (0..rows * cols).map(|_| 2.0 * wrng.f64() - 1.0).collect();
+    let x: Vec<f64> = (0..rows).map(|_| 2.0 * wrng.f64() - 1.0).collect();
+    let params = DeviceParams {
+        sigma_prog: 0.1,
+        sigma_read: 0.05,
+        drift_nu: 0.05,
+        age: 100.0,
+        dac_bits: Some(6),
+        input_range: 1.0,
+        adc: Some(AdcParams {
+            bits: 8,
+            range: 40.0,
+            inl_lsb: 0.5,
+        }),
+        ir_drop: IrDropMode::ExactMesh { r_wire: 1.0 },
+        ..Default::default()
+    };
+
+    let run = || {
+        let arr = CrossbarArray::program(&w, rows, cols, size, params.clone(), &mut Rng::new(11));
+        let mut ledger = EventLedger::default();
+        let y = arr.mvm(&x, &mut Rng::new(13), &mut ledger);
+        (y, ledger)
+    };
+    let ((y1, l1), (y2, _)) = (run(), run());
+    assert_eq!(y1, y2, "same seeds must give bit-identical outputs");
+    // ⌈40/16⌉·⌈20/16⌉ = 3·2 = 6 tiles → 6 mesh solves for one MVM.
+    assert_eq!(l1.mesh_solves, 6, "one mesh solve per tile per MVM");
+    assert_eq!(l1.macs, (rows * cols) as u64, "macs convention unchanged");
+    assert_eq!(
+        l1.adc_samples,
+        (cols * 3) as u64,
+        "adc convention unchanged"
+    );
+}
+
+/// (l) ExactMesh through the executor: the job round-trips from JSON
+/// (serde-tagged like FirstOrder), runs deterministically (same job →
+/// bit-identical outputs), and reports the mesh-solve count.
+#[test]
+fn exact_mesh_executor_job_deterministic() {
+    let job: CrossbarJob = serde_json::from_str(
+        r#"{
+            "rows": 48, "cols": 24, "array_size": 32,
+            "device": { "sigma_read": 0.02, "ir_drop": { "exact_mesh": { "r_wire": 1.0 } } },
+            "n_queries": 3, "seed": 9
+        }"#,
+    )
+    .unwrap();
+    let r1 = CrossbarExecutor.execute(&job, &mut |_| {});
+    let r2 = CrossbarExecutor.execute(&job, &mut |_| {});
+    assert_eq!(r1.outputs["rms_error"], r2.outputs["rms_error"]);
+    assert_eq!(r1.outputs["snr_db"], r2.outputs["snr_db"]);
+    // ⌈48/32⌉·⌈24/32⌉ = 2 tiles × 3 queries.
+    assert_eq!(r1.ledger.mesh_solves, 6);
+    assert_eq!(r1.outputs["mesh_solves"], 6);
+}
+
+/// Factor-once / solve-many cost of the largest supported tile (64×64):
+/// programming pays one MNA factorization, each query one cached-LU
+/// re-solve. Run with `cargo test --release -- --ignored --nocapture`.
+#[test]
+#[ignore = "timing benchmark, run explicitly in release"]
+fn bench_exact_mesh_factor_and_solve_64() {
+    let (rows, cols) = (64usize, 64usize);
+    let mut rng = Rng::new(99);
+    let w: Vec<f64> = (0..rows * cols).map(|_| 2.0 * rng.f64() - 1.0).collect();
+    let params = DeviceParams {
+        ir_drop: IrDropMode::ExactMesh { r_wire: 1.0 },
+        ..Default::default()
+    };
+
+    let t0 = std::time::Instant::now();
+    let arr = CrossbarArray::program(&w, rows, cols, 64, params, &mut Rng::new(1));
+    let t_program = t0.elapsed();
+
+    let n = 100;
+    let mut ledger = EventLedger::default();
+    let mut sink = 0.0;
+    let t1 = std::time::Instant::now();
+    for q in 0..n {
+        let x: Vec<f64> = (0..rows).map(|_| (q as f64 / n as f64) - 0.5).collect();
+        sink += arr.mvm(&x, &mut Rng::new(2), &mut ledger)[0];
+    }
+    let t_query = t1.elapsed();
+    println!(
+        "64×64 ExactMesh: program+factor {:.1} ms, {n} queries in {:.1} ms \
+         ({:.3} ms/solve, sink {sink:.3e})",
+        t_program.as_secs_f64() * 1e3,
+        t_query.as_secs_f64() * 1e3,
+        t_query.as_secs_f64() * 1e3 / n as f64
+    );
+    assert_eq!(ledger.mesh_solves, n as u64);
 }
 
 /// CrossbarExecutor end-to-end: a noisy job reports finite RMS/SNR, the
