@@ -15,6 +15,7 @@
 
 pub mod graphs;
 pub mod maxcut;
+pub mod tempering;
 
 use serde::{Deserialize, Serialize};
 use tei_sim_core::exec::{ExecutionResult, Executor, Progress};
@@ -270,6 +271,10 @@ pub struct StochasticJob {
     pub schedule: Schedule,
     #[serde(default)]
     pub seed: u64,
+    /// Optional replica exchange. When present, `schedule.sweeps` is the
+    /// per-replica budget and the ladder overrides `beta0`/`beta1`.
+    #[serde(default)]
+    pub tempering: Option<tempering::TemperingSpec>,
 }
 
 pub struct StochasticExecutor;
@@ -299,6 +304,42 @@ impl Executor for StochasticExecutor {
             });
         };
         let trace_every = (job.schedule.sweeps / 200).max(1);
+
+        if let Some(spec) = &job.tempering {
+            let mut outcome = tempering::parallel_temper(
+                &model,
+                spec,
+                job.schedule.sweeps,
+                job.seed,
+                trace_every,
+                Some(&mut wrapped),
+            );
+            outcome.ledger.wall_seconds = Some(t0.elapsed().as_secs_f64());
+            let best_cut = (total_weight - outcome.best_energy) / 2.0;
+            return ExecutionResult {
+                ledger: outcome.ledger.clone(),
+                outputs: serde_json::json!({
+                    "best_cut": best_cut,
+                    "total_weight": total_weight,
+                    "best_energy": outcome.best_energy,
+                    "n_nodes": model.n,
+                    "n_edges": graph.edges.len(),
+                    "known_optimum": job.problem.known_optimum(),
+                    "replica_count": outcome.betas.len(),
+                    "replica_betas": outcome.betas,
+                    "swap_attempts": outcome.stats.attempts,
+                    "swap_accepts": outcome.stats.accepts,
+                    "swap_acceptance_overall": outcome.stats.acceptance_overall(),
+                    "per_pair_acceptance": outcome.stats.per_pair_acceptance(),
+                    "trace": outcome.trace.iter().map(|t| serde_json::json!({
+                        "sweep": t.sweep,
+                        "cut": (total_weight - t.energy) / 2.0,
+                        "best_cut": (total_weight - t.best_energy) / 2.0,
+                    })).collect::<Vec<_>>(),
+                }),
+            };
+        }
+
         let mut outcome = anneal(
             &model,
             &job.schedule,

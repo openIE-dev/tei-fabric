@@ -215,6 +215,7 @@ enum ExecuteRequest {
     Circuit(tei_sim_circuit::CircuitJob),
     Field(tei_sim_field::FieldJob),
     Adiabatic(tei_sim_adiabatic::AdiabaticJob),
+    Field3(tei_sim_field::Field3Job),
 }
 
 /// Run one executor on the blocking thread, forwarding progress ticks and
@@ -300,6 +301,9 @@ async fn post_execute(
             }
             ExecuteRequest::Field(job) => {
                 run_streaming(tei_sim_field::FieldExecutor, &job, &tx, |_| None)
+            }
+            ExecuteRequest::Field3(job) => {
+                run_streaming(tei_sim_field::Field3Executor, &job, &tx, |_| None)
             }
             ExecuteRequest::Adiabatic(job) => {
                 run_streaming(tei_sim_adiabatic::AdiabaticExecutor, &job, &tx, |r| {

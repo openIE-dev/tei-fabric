@@ -9,5 +9,6 @@ description = "thrml-class (Extropic) stochastic simulator — Ising/EBM factor 
 
 [dependencies]
 tei-sim-core = { path = "../tei-sim-core" }
+rayon.workspace = true
 serde.workspace = true
 serde_json.workspace = true

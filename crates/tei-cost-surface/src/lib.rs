@@ -17,6 +17,7 @@ use std::sync::Arc;
 use tei_d_in_memory::InMemoryParams;
 use tei_d_neuromorphic::NeuromorphicParams;
 use tei_d_photonic::PhotonicParams;
+use tei_d_reversible::ReversibleParams;
 use tei_ir::{Constraints, Invocation, Workload};
 use tei_stack::Stack;
 use tei_substrate_traits::{Cost, Substrate};
@@ -34,6 +35,8 @@ pub struct SubstrateParams {
     pub in_memory: InMemoryParams,
     #[serde(default)]
     pub neuromorphic: NeuromorphicParams,
+    #[serde(default)]
+    pub reversible: ReversibleParams,
 }
 
 /// Build the default substrate set with custom engineering parameters for
@@ -52,7 +55,10 @@ pub fn substrates_with_params(
             params.in_memory.clone(),
         )) as Arc<dyn Substrate>,
         Arc::new(tei_d_stochastic::Stochastic) as Arc<dyn Substrate>,
-        Arc::new(tei_d_reversible::Reversible::new(stack.clone())) as Arc<dyn Substrate>,
+        Arc::new(tei_d_reversible::Reversible::with_params(
+            stack.clone(),
+            params.reversible.clone(),
+        )) as Arc<dyn Substrate>,
         Arc::new(tei_d_neuromorphic::Neuromorphic::with_params(
             stack,
             params.neuromorphic.clone(),

@@ -386,6 +386,35 @@ const SUBSTRATES = {
         ['FIELD UPDATES', fmt(l.macs), AMBER], ['MONITOR READS', fmt(l.adc_samples)], ['WALL', wall(l)]];
     },
   },
+
+  field3: {
+    label: 'FIELD 3D', blurb: 'A dipole pulse in a full 3D Yee grid with CPML on all six faces and an ε_r=4 box — six field components, rayon-parallel slabs, bit-identical at any thread count. The heatmap is a |E| slice through the source plane.',
+    viz: '|E| slice · z midplane · final step',
+    fields: [
+      ['n', 'Grid n³', 64], ['steps', 'Steps', 420],
+      ['eps', 'Box ε_r', 4, 0.5],
+    ],
+    buildJob: v => {
+      const n = v.n | 0, c = Math.round(n / 2);
+      return {
+        substrate: 'field3', nx: n, ny: n, nz: n, steps: v.steps | 0,
+        eps: { kind: 'box', eps_r: v.eps, i0: Math.round(n * 0.6), i1: Math.round(n * 0.85),
+          j0: Math.round(n * 0.3), j1: Math.round(n * 0.7), k0: Math.round(n * 0.3), k1: Math.round(n * 0.7) },
+        source: { i: Math.round(n * 0.3), j: c, k: c, axis: 'z',
+          time: { type: 'gaussian', t0: 30.0, tau: 9.0 } },
+        probes: [{ i: Math.round(n * 0.75), j: c, k: c, component: 'ez' }],
+        snapshot: { axis: 'z', index: c, field: 'e_mag' },
+      };
+    },
+    init() {},
+    onProgress(m) { if (m.step != null) status(`step ${m.step} · Ez(probe) ${m.ez_probe?.toExponential(2) ?? ''}`); },
+    onResult(o, l) {
+      const s = o.snapshot;
+      if (s?.data) { view = { kind: 'heatmap', nx: s.n0, ny: s.n1, ez: s.data }; redraw(); }
+      return [['GRID', `${s?.n0}×${s?.n1} slice of ${$('f-n').value}³`], ['STEPS', fmt(o.steps)],
+        ['FIELD UPDATES', fmt(l.macs), AMBER], ['WALL', wall(l)]];
+    },
+  },
 };
 
 // ── generic plumbing ──────────────────────────────────────────────────
@@ -481,6 +510,7 @@ function handleBlock(block, s) {
         rows.push(['ACTIVITY ASSUMED→MEAS', `${d.assumed_activity} → ${d.measured_activity.toFixed(3)}`]);
       if (d.crossover_t_over_rc != null)
         rows.push(['10³ CROSSOVER AT T/RC', d.crossover_t_over_rc.toFixed(1), GREEN]);
+      if (cal.substrate_params_patch) repriceDispatch(cal.substrate_params_patch, d.patch_t_over_rc);
     }
     const el = $('stats'); el.innerHTML = '';
     for (const [k, v, color] of rows) {
@@ -492,6 +522,36 @@ function handleBlock(block, s) {
     el.style.display = '';
     status('done');
   }
+}
+
+// Close the loop: re-price a reversible-heavy dispatch plan with the
+// measured overhead and show it beside the assumed-constant plan.
+async function repriceDispatch(patch, atRatio) {
+  const workload = {
+    goal: 'adiabatic re-price', constraints: { cycles_per_second: 1.0, power_budget_w: 100.0, accuracy_floor: 0.9 },
+    invocations: [
+      { primitive_id: 79, count: 10000000, label: 'dct', profile: { shape: { dims: [64] }, batch: 1 } },
+      { primitive_id: 80, count: 10000000, label: 'hilbert', profile: { shape: { dims: [64] }, batch: 1 } },
+    ],
+  };
+  const call = body => fetch(`${API_BASE}/api/dispatch`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }).then(r => r.json());
+  try {
+    const [before, after] = await Promise.all([
+      call(workload), call({ ...workload, substrate_params: patch })]);
+    const el = $('stats');
+    const add = (k, v, color) => {
+      const div = document.createElement('div');
+      div.className = 'flex justify-between';
+      div.innerHTML = `<span class="text-brand-gray">${k}</span><span${color ? ` style="color:${color}" class="font-bold"` : ''}>${v}</span>`;
+      el.appendChild(div);
+    };
+    add('— RE-PRICED DISPATCH —', '');
+    add('PLAN (ASSUMED 10³)', `${before.total_joules.toExponential(2)} J`);
+    add(`PLAN (MEASURED @ T/RC ${atRatio?.toFixed(0) ?? ''})`, `${after.total_joules.toExponential(2)} J`, AMBER);
+    add('PLAN CHANGE', `${(before.total_joules / after.total_joules).toFixed(1)}× cheaper`, GREEN);
+  } catch { /* dispatch unavailable — leave stats as-is */ }
 }
 
 $('run-btn').addEventListener('click', run);

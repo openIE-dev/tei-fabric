@@ -15,3 +15,6 @@ tei-sim-core = { path = "../tei-sim-core" }
 tei-sim-photonic = { path = "../tei-sim-photonic" }
 serde.workspace = true
 serde_json.workspace = true
+# F3: slab-parallel 3D updates (fixed slab boundaries, no reductions —
+# results are bit-identical at any thread count).
+rayon.workspace = true

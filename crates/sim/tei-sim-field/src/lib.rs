@@ -1,4 +1,4 @@
-//! tei-sim-field — MEEP-class (MIT) Yee-grid FDTD, stages F1 + F2.
+//! tei-sim-field — MEEP-class (MIT) Yee-grid FDTD, stages F1–F3.
 //!
 //! Finite-difference time-domain solver for the field substrate column:
 //! a 2D Yee grid evolving the out-of-plane-E component set (Ez, Hx, Hy)
@@ -29,10 +29,23 @@
 //! Fabry-Pérot etalon vs the exact Airy formula, and the star-composed
 //! photonic handoff (F2).
 //!
-//! Deliberately out at F2 (the contract of roadmap §3.7): dispersive and
-//! conductive media, 3D, far-field transforms, multi-column excitation
-//! (S-columns beyond the source port come from re-running with the source
-//! on another port). Those are F3+.
+//! **F3** adds the 3D path, additively (the 2D F1/F2 modules and job
+//! schema are untouched): a full-component 3D Yee grid with CPML on all
+//! six faces and deterministic rayon slab decomposition ([`grid3`]),
+//! Drude/Lorentz dispersive media via the ADE method ([`medium3`]), and a
+//! separate [`Field3Job`]/[`Field3Executor`] job type ([`field3`]) with
+//! point-dipole sources, probes, per-probe DFT monitors and 2D rendering
+//! slices. Validation (tests/f3.rs): PEC box-cavity resonances against
+//! the exact f_mnp = ½√((m/Lx)² + (n/Ly)² + (p/Lz)²), the 3D Yee axis
+//! dispersion relation, the CPML reflection floor, the 3D CFL boundary,
+//! Drude below/above-plasma transmission brackets, the Lorentz
+//! resonance-absorption bracket, the bit-exact ADE vacuum limit, and
+//! bit-identical determinism across runs and thread counts.
+//!
+//! Deliberately out at F3 (the contract of roadmap §3.7): conductive
+//! (σ > 0) media, far-field transforms, 3D mode sources / port monitors /
+//! S-parameter extraction, nonuniform grids, subpixel averaging. The GPU
+//! kernel is F4.
 //!
 //! Lineage: MEEP-class — A.F. Oskooi et al., "MEEP: A flexible free-software
 //! package for electromagnetic simulations by the FDTD method", Comput.
@@ -44,14 +57,23 @@
 //! D. Marcuse, *Theory of Dielectric Optical Waveguides*, Academic Press
 //! (1991) — slab mode relations.
 
+pub mod field3;
 pub mod grid;
+pub mod grid3;
+pub mod medium3;
 pub mod mode;
 pub mod monitor;
 pub mod port;
 pub mod source;
 pub mod sparams;
 
+pub use field3::{
+    Dft3Monitor, Dipole3, EpsSpec3, Field3Executor, Field3Job, Probe3, Probe3Spec, SnapshotSpec,
+    run_job3,
+};
 pub use grid::{CpmlParams, Grid2d, GridSpec, yee_axis_wavenumber};
+pub use grid3::{Axis, Comp, Grid3Spec, Grid3d, SliceField};
+pub use medium3::{MaterialModel, MaterialRegion};
 pub use mode::{SlabMode, SlabWaveguide};
 pub use monitor::{DftMonitor, Probe};
 pub use port::{PortMonitor, PortSpec};

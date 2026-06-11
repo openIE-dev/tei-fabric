@@ -137,13 +137,38 @@ fn reversible_fraction(p: &Primitive, has_bennett: bool) -> f64 {
     }
 }
 
+/// Engineering parameters for the reversible dialect. The default is the
+/// literature constant; the calibration loop replaces it with the overhead
+/// measured by `tei-sim-adiabatic` at an operating T/RC.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct ReversibleParams {
+    /// Overhead above the Landauer floor for the L₀ free phase.
+    pub overhead_l0: f64,
+}
+
+impl Default for ReversibleParams {
+    fn default() -> Self {
+        Self {
+            overhead_l0: REVERSIBLE_OVERHEAD_L0,
+        }
+    }
+}
+
 pub struct Reversible {
     stack: Arc<Stack>,
+    params: ReversibleParams,
 }
 
 impl Reversible {
     pub fn new(stack: Arc<Stack>) -> Self {
-        Self { stack }
+        Self {
+            stack,
+            params: ReversibleParams::default(),
+        }
+    }
+
+    pub fn with_params(stack: Arc<Stack>, params: ReversibleParams) -> Self {
+        Self { stack, params }
     }
 }
 
@@ -168,7 +193,7 @@ impl Substrate for Reversible {
         let floor = bits * K_T_LN2_300K;
 
         // L₀ free phase pays only the adiabatic rail-and-clock overhead.
-        let free_phase = fraction * REVERSIBLE_OVERHEAD_L0 * floor;
+        let free_phase = fraction * self.params.overhead_l0 * floor;
         // L₂ irreversible projection still pays full L₂ overhead.
         let paid_phase = (1.0 - fraction) * REVERSIBLE_OVERHEAD_L2 * floor;
         let joules_per_atomic = free_phase + paid_phase;

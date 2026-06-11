@@ -957,6 +957,7 @@ dependencies = [
 name = "tei-d-reversible"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "serde_json",
  "tei-ir",
  "tei-stack",
@@ -1061,6 +1062,7 @@ dependencies = [
 name = "tei-sim-crossbar"
 version = "0.1.0"
 dependencies = [
+ "rayon",
  "serde",
  "serde_json",
  "tei-sim-core",
@@ -1070,6 +1072,7 @@ dependencies = [
 name = "tei-sim-field"
 version = "0.1.0"
 dependencies = [
+ "rayon",
  "serde",
  "serde_json",
  "tei-sim-core",
@@ -1107,6 +1110,7 @@ dependencies = [
 name = "tei-sim-stochastic"
 version = "0.1.0"
 dependencies = [
+ "rayon",
  "serde",
  "serde_json",
  "tei-sim-core",

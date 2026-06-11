@@ -212,9 +212,17 @@ pub struct Grid2d {
     psi_hy_x: Vec<f64>,
 }
 
-/// (1/κ, b, c) at coordinate `pos` (cells) along an axis with `n` Ez points
-/// and PML thickness `npml`; interfaces sit at npml and n−1−npml.
-fn cpml_coeffs(pos: f64, n: usize, npml: usize, dt: f64, p: &CpmlParams) -> (f64, f64, f64) {
+/// (1/κ, b, c) at coordinate `pos` (cells) along an axis with `n` integer
+/// grid points and PML thickness `npml`; interfaces sit at npml and
+/// n−1−npml. Shared by the 2D (F1) and 3D (F3) grids — the Roden-Gedney
+/// recursive-convolution coefficients are per-axis and dimension-agnostic.
+pub(crate) fn cpml_coeffs(
+    pos: f64,
+    n: usize,
+    npml: usize,
+    dt: f64,
+    p: &CpmlParams,
+) -> (f64, f64, f64) {
     let d = npml as f64;
     if npml == 0 {
         return (1.0, 1.0, 0.0);

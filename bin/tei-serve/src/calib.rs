@@ -245,6 +245,10 @@ pub fn adiabatic(outputs: &Value) -> Option<Value> {
         .map(|(r, o)| json!({ "t_over_rc": r, "measured_overhead": o }))
         .collect();
     let measured_j_last = pts.last().map(|(_, o)| o * floor_j).unwrap_or(0.0);
+    // Ready-to-use dispatch patch: the overhead this cell actually delivers
+    // at the slowest ramp swept. POST it back as `substrate_params` on
+    // /api/dispatch to re-price the plan with the measured constant.
+    let (best_ratio, best_overhead) = *pts.last().unwrap();
 
     Some(json!({
         "substrate": "reversible",
@@ -257,6 +261,8 @@ pub fn adiabatic(outputs: &Value) -> Option<Value> {
             "bits_per_atomic_op": L0_BITS,
             "measured_overhead_curve": measured_curve,
             "crossover_t_over_rc": crossover,
+            "patch_t_over_rc": best_ratio,
         },
+        "substrate_params_patch": { "reversible": { "overhead_l0": best_overhead } },
     }))
 }

@@ -11,3 +11,4 @@ description = "tei-sim crossbar column — see docs/SIM-ROADMAP.md."
 tei-sim-core = { path = "../tei-sim-core" }
 serde.workspace = true
 serde_json.workspace = true
+rayon.workspace = true

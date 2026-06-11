@@ -45,6 +45,10 @@
 //! 6.02·b + 1.76 dB, drift-exponent recovery, tiling exactness, lognormal
 //! mean exp(μ + σ²/2), seed determinism.
 
+pub mod idx;
+pub mod mlp;
+pub mod mnist;
+
 use serde::{Deserialize, Serialize};
 use tei_sim_core::exec::{ExecutionResult, Executor, Progress};
 use tei_sim_core::ledger::EventLedger;
