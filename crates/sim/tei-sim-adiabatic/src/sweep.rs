@@ -22,8 +22,10 @@
 //! DeBenedictis arXiv:2009.00448 runs the same sweep over S2LAL cells.
 
 use crate::cells::CellSpec;
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use serde::Serialize;
+#[cfg(feature = "parallel")]
 use std::sync::mpsc;
 use tei_sim_circuit::{CircuitError, TransientOpts, TransientResult, transient};
 
@@ -103,11 +105,13 @@ pub fn run_cell(cell: &CellSpec, t_over_rc: f64) -> Result<CellRun, CircuitError
     })
 }
 
-/// Sweep a cell across T/RC ratios, rayon-parallel. `on_point(done, &p)` is
-/// invoked **on the calling thread** once per completed point (in completion
-/// order; `done` = points finished so far) — the executor turns these into
-/// progress ticks. The returned vector is in the *input* ratio order
-/// regardless of completion order, so outputs stay deterministic.
+/// Sweep a cell across T/RC ratios — rayon-parallel under the `parallel`
+/// feature (the default), serial otherwise (the wasm32 build).
+/// `on_point(done, &p)` is invoked **on the calling thread** once per
+/// completed point (in completion order; `done` = points finished so far) —
+/// the executor turns these into progress ticks. The returned vector is in
+/// the *input* ratio order regardless of completion order, so outputs stay
+/// deterministic and feature-independent.
 pub fn sweep_with_progress(
     cell: &CellSpec,
     ratios: &[f64],
@@ -119,6 +123,32 @@ pub fn sweep_with_progress(
             "ratios must contain at least one T/RC value".into(),
         ));
     }
+    #[cfg(feature = "parallel")]
+    {
+        sweep_parallel(cell, ratios, on_point)
+    }
+    #[cfg(not(feature = "parallel"))]
+    {
+        sweep_serial(cell, ratios, on_point)
+    }
+}
+
+/// One sweep point from one validated ratio (shared by both sweep paths).
+fn sweep_point(cell: &CellSpec, ratio: f64) -> Result<SweepPoint, CircuitError> {
+    run_cell(cell, ratio).map(|run| SweepPoint {
+        t_over_rc: ratio,
+        e_diss_j: run.e_diss_j,
+        e_over_abrupt: run.e_diss_j / run.e_abrupt_j,
+        steps: run.transient.steps,
+    })
+}
+
+#[cfg(feature = "parallel")]
+fn sweep_parallel(
+    cell: &CellSpec,
+    ratios: &[f64],
+    on_point: &mut dyn FnMut(usize, &SweepPoint),
+) -> Result<Vec<SweepPoint>, CircuitError> {
     let n = ratios.len();
     let mut out: Vec<Option<SweepPoint>> = vec![None; n];
     let mut first_err: Option<CircuitError> = None;
@@ -130,13 +160,7 @@ pub fn sweep_with_progress(
                 .par_iter()
                 .enumerate()
                 .for_each_with(tx, |tx, (i, &ratio)| {
-                    let point = run_cell(cell, ratio).map(|run| SweepPoint {
-                        t_over_rc: ratio,
-                        e_diss_j: run.e_diss_j,
-                        e_over_abrupt: run.e_diss_j / run.e_abrupt_j,
-                        steps: run.transient.steps,
-                    });
-                    let _ = tx.send((i, point));
+                    let _ = tx.send((i, sweep_point(cell, ratio)));
                 });
         });
         // Drain on the caller's thread so the (non-Send) progress callback
@@ -161,6 +185,33 @@ pub fn sweep_with_progress(
         return Err(e);
     }
     Ok(out.into_iter().map(|p| p.expect("point filled")).collect())
+}
+
+#[cfg(not(feature = "parallel"))]
+fn sweep_serial(
+    cell: &CellSpec,
+    ratios: &[f64],
+    on_point: &mut dyn FnMut(usize, &SweepPoint),
+) -> Result<Vec<SweepPoint>, CircuitError> {
+    let mut out = Vec::with_capacity(ratios.len());
+    let mut first_err: Option<CircuitError> = None;
+    for (done, &ratio) in ratios.iter().enumerate() {
+        match sweep_point(cell, ratio) {
+            Ok(p) => {
+                on_point(done + 1, &p);
+                out.push(p);
+            }
+            Err(e) => {
+                if first_err.is_none() {
+                    first_err = Some(e);
+                }
+            }
+        }
+    }
+    if let Some(e) = first_err {
+        return Err(e);
+    }
+    Ok(out)
 }
 
 /// **The recalibration product**: (T/RC, E/E_abrupt) pairs for a cell across

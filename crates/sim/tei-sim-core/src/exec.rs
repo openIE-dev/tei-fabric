@@ -32,3 +32,38 @@ pub trait Executor {
     /// implementation decides — typically every few hundred sweeps/events).
     fn execute(&self, job: &Self::Job, on_progress: &mut dyn FnMut(Progress)) -> ExecutionResult;
 }
+
+/// Wall-clock timer for `EventLedger::wall_seconds` that degrades cleanly on
+/// `wasm32-unknown-unknown`, where `std::time::Instant::now()` panics
+/// (no monotonic clock). Natively `elapsed_seconds()` measures real wall
+/// time; on wasm32 it returns `None` — exactly the ledger's documented
+/// "None on wasm" contract.
+#[derive(Debug, Clone, Copy)]
+pub struct WallTimer {
+    #[cfg(not(target_arch = "wasm32"))]
+    start: std::time::Instant,
+}
+
+impl WallTimer {
+    /// Start the timer (a no-op on wasm32).
+    #[must_use]
+    pub fn start() -> Self {
+        Self {
+            #[cfg(not(target_arch = "wasm32"))]
+            start: std::time::Instant::now(),
+        }
+    }
+
+    /// Seconds since `start()` — `Some` natively, `None` on wasm32.
+    #[must_use]
+    pub fn elapsed_seconds(&self) -> Option<f64> {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            Some(self.start.elapsed().as_secs_f64())
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            None
+        }
+    }
+}

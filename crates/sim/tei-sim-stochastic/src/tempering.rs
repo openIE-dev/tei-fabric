@@ -19,6 +19,7 @@
 //! across runs and across thread counts.
 
 use crate::{GibbsSampler, IsingModel, TracePoint};
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tei_sim_core::exec::Progress;
@@ -167,6 +168,7 @@ pub struct Tempering {
 
 impl Tempering {
     /// Spin updates per chunk below which `advance` skips the rayon pool.
+    #[cfg(feature = "parallel")]
     const PAR_THRESHOLD_UPDATES: u64 = 4096;
 
     pub fn new(model: &IsingModel, spec: &TemperingSpec, seed: u64) -> Self {
@@ -246,9 +248,11 @@ impl Tempering {
 
     /// Advance every replica `sweeps` sweeps at its fixed β. Replicas touch
     /// only their own state/RNG/ledger, so the execution schedule cannot
-    /// change the result — bit-identical at any thread count. Chunks below
-    /// `PAR_THRESHOLD_UPDATES` spin updates run serially (identical output,
-    /// no rayon dispatch overhead on tiny models).
+    /// change the result — bit-identical at any thread count, and identical
+    /// with the `parallel` feature disabled (the wasm32 build). Under
+    /// `parallel`, chunks below `PAR_THRESHOLD_UPDATES` spin updates run
+    /// serially (identical output, no rayon dispatch overhead on tiny
+    /// models).
     pub fn advance(&mut self, model: &IsingModel, sweeps: u64) {
         let sampler = &self.sampler;
         let betas = &self.betas;
@@ -263,16 +267,19 @@ impl Tempering {
                 }
             }
         };
-        let work = model.n as u64 * sweeps * self.replicas.len() as u64;
-        if work >= Self::PAR_THRESHOLD_UPDATES {
-            self.replicas
-                .par_iter_mut()
-                .enumerate()
-                .for_each(|(k, r)| advance_one(k, r));
-        } else {
-            for (k, r) in self.replicas.iter_mut().enumerate() {
-                advance_one(k, r);
+        #[cfg(feature = "parallel")]
+        {
+            let work = model.n as u64 * sweeps * self.replicas.len() as u64;
+            if work >= Self::PAR_THRESHOLD_UPDATES {
+                self.replicas
+                    .par_iter_mut()
+                    .enumerate()
+                    .for_each(|(k, r)| advance_one(k, r));
+                return;
             }
+        }
+        for (k, r) in self.replicas.iter_mut().enumerate() {
+            advance_one(k, r);
         }
     }
 

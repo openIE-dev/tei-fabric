@@ -273,6 +273,7 @@ enum ExecuteRequest {
     Field(tei_sim_field::FieldJob),
     Adiabatic(tei_sim_adiabatic::AdiabaticJob),
     Field3(tei_sim_field::Field3Job),
+    Mnist(tei_sim_crossbar::mnist::MnistJob),
 }
 
 /// Run one executor on the blocking thread, forwarding progress ticks and
@@ -365,6 +366,11 @@ async fn post_execute(
             ExecuteRequest::Adiabatic(job) => {
                 run_streaming(tei_sim_adiabatic::AdiabaticExecutor, &job, &tx, |r| {
                     calib::adiabatic(&r.outputs)
+                })
+            }
+            ExecuteRequest::Mnist(job) => {
+                run_streaming(tei_sim_crossbar::mnist::MnistExecutor, &job, &tx, |r| {
+                    calib::mnist_accuracy(&r.outputs)
                 })
             }
         }

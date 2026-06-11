@@ -1,0 +1,21 @@
+{
+  "name": "tei-sim-wasm",
+  "type": "module",
+  "description": "wasm-bindgen bindings for the tei-sim executors — small instances run client-side, same JSON shapes as /api/execute. See docs/SIM-ROADMAP.md §1/§4.",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/openie-dev/tei-fabric"
+  },
+  "files": [
+    "tei_sim_wasm_bg.wasm",
+    "tei_sim_wasm.js",
+    "tei_sim_wasm.d.ts"
+  ],
+  "main": "tei_sim_wasm.js",
+  "types": "tei_sim_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

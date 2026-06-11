@@ -266,3 +266,24 @@ pub fn adiabatic(outputs: &Value) -> Option<Value> {
         "substrate_params_patch": { "reversible": { "overhead_l0": best_overhead } },
     }))
 }
+
+/// MNIST-on-crossbar: the in-memory dialect's fixed `accuracy_loss = 0.01`
+/// versus the measured loss-vs-digital of a real network under the device
+/// model at the operating σ — the accuracy axis of the calibration loop.
+pub fn mnist_accuracy(outputs: &Value) -> Option<Value> {
+    let measured = outputs.get("measured_accuracy_loss")?.as_f64()?;
+    let assumed = tei_d_in_memory::IN_MEMORY_ACCURACY_LOSS;
+    let patch = tei_d_in_memory::InMemoryParams {
+        accuracy_loss: measured,
+        ..Default::default()
+    };
+    Some(json!({
+        "substrate": "in-memory",
+        "kind": "accuracy",
+        "assumed_accuracy_loss": assumed,
+        "measured_accuracy_loss": measured,
+        "operating_sigma": outputs.get("operating_sigma"),
+        "digital_accuracy": outputs.get("digital_accuracy"),
+        "substrate_params_patch": { "in_memory": patch },
+    }))
+}

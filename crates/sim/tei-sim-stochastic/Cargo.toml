@@ -9,6 +9,12 @@ description = "thrml-class (Extropic) stochastic simulator — Ising/EBM factor 
 
 [dependencies]
 tei-sim-core = { path = "../tei-sim-core" }
-rayon.workspace = true
+rayon = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
+
+[features]
+default = ["parallel"]
+# Rayon-parallel replica advancement in `tempering`. Disable for
+# wasm32-unknown-unknown builds; the serial path is bit-identical.
+parallel = ["dep:rayon"]

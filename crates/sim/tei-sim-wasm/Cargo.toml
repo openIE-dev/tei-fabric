@@ -1,0 +1,28 @@
+[package]
+name = "tei-sim-wasm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "wasm-bindgen bindings for the tei-sim executors — small instances run client-side, same JSON shapes as /api/execute. See docs/SIM-ROADMAP.md §1/§4."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tei-sim-core = { path = "../tei-sim-core" }
+# default-features = false drops rayon: the wasm32 build takes the serial
+# (bit-identical) paths. Native builds of the rest of the workspace keep
+# `parallel` on via feature unification.
+tei-sim-stochastic = { path = "../tei-sim-stochastic", default-features = false }
+tei-sim-adiabatic = { path = "../tei-sim-adiabatic", default-features = false }
+serde.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen.workspace = true
+js-sys.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"

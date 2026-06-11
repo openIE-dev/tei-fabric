@@ -59,6 +59,15 @@ pub struct InMemoryParams {
     pub dac_j_per_bit: f64,
     /// ADC energy per output sample. Scales roughly 2× per added bit.
     pub adc_j_per_sample: f64,
+    /// Relative accuracy loss vs digital f32 — device variability +
+    /// thermal drift. The literature default is replaced by the measured
+    /// MNIST-on-crossbar degradation via the calibration loop.
+    #[serde(default = "default_accuracy_loss")]
+    pub accuracy_loss: f64,
+}
+
+fn default_accuracy_loss() -> f64 {
+    IN_MEMORY_ACCURACY_LOSS
 }
 
 impl Default for InMemoryParams {
@@ -68,6 +77,7 @@ impl Default for InMemoryParams {
             device_j_per_mac: 1.0e-15,
             dac_j_per_bit: 1.0e-15,
             adc_j_per_sample: 1.0e-12,
+            accuracy_loss: IN_MEMORY_ACCURACY_LOSS,
         }
     }
 }
@@ -80,7 +90,7 @@ const IN_MEMORY_OPS_PER_SEC: f64 = 1.0e10;
 /// In-memory crossbars have device variability (G ~5-10% device-to-device,
 /// thermal drift, write asymmetry). Published-system accuracy at 8-bit
 /// equivalent precision: ~0.5-1.5% loss vs digital baseline on ImageNet.
-const IN_MEMORY_ACCURACY_LOSS: f64 = 0.01;
+pub const IN_MEMORY_ACCURACY_LOSS: f64 = 0.01;
 
 /// Native primitives — anything that maps to a matrix-vector multiply
 /// or a small dense matmul.
@@ -135,7 +145,7 @@ impl InMemory {
         Cost {
             joules_per_op,
             seconds_per_op,
-            accuracy_loss: IN_MEMORY_ACCURACY_LOSS,
+            accuracy_loss: p.accuracy_loss,
         }
     }
 

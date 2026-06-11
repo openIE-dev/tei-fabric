@@ -287,7 +287,7 @@ impl Executor for StochasticExecutor {
         let model = maxcut::to_ising(&graph);
         let total_weight: f64 = graph.edges.iter().map(|e| e.2).sum();
 
-        let t0 = std::time::Instant::now();
+        let t0 = tei_sim_core::exec::WallTimer::start();
         // Wrap progress so the browser sees cut values, not raw energies.
         let mut wrapped = |p: Progress| {
             let mut metrics = p.metrics.clone();
@@ -314,7 +314,7 @@ impl Executor for StochasticExecutor {
                 trace_every,
                 Some(&mut wrapped),
             );
-            outcome.ledger.wall_seconds = Some(t0.elapsed().as_secs_f64());
+            outcome.ledger.wall_seconds = t0.elapsed_seconds();
             let best_cut = (total_weight - outcome.best_energy) / 2.0;
             return ExecutionResult {
                 ledger: outcome.ledger.clone(),
@@ -347,7 +347,7 @@ impl Executor for StochasticExecutor {
             trace_every,
             Some(&mut wrapped),
         );
-        outcome.ledger.wall_seconds = Some(t0.elapsed().as_secs_f64());
+        outcome.ledger.wall_seconds = t0.elapsed_seconds();
 
         let best_cut = (total_weight - outcome.best_energy) / 2.0;
         ExecutionResult {

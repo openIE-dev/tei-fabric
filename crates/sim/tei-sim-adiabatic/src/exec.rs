@@ -26,7 +26,7 @@ impl Executor for AdiabaticExecutor {
     type Job = AdiabaticJob;
 
     fn execute(&self, job: &Self::Job, on_progress: &mut dyn FnMut(Progress)) -> ExecutionResult {
-        let t0 = std::time::Instant::now();
+        let t0 = tei_sim_core::exec::WallTimer::start();
         let n = job.ratios.len().max(1);
         let mut tick = |done: usize, p: &SweepPoint| {
             on_progress(Progress {
@@ -50,7 +50,7 @@ impl Executor for AdiabaticExecutor {
                 let ledger = EventLedger {
                     joules: total_j,
                     sweeps: total_steps,
-                    wall_seconds: Some(t0.elapsed().as_secs_f64()),
+                    wall_seconds: t0.elapsed_seconds(),
                     ..EventLedger::default()
                 };
                 ExecutionResult {
@@ -77,7 +77,7 @@ impl Executor for AdiabaticExecutor {
             }
             Err(e) => ExecutionResult {
                 ledger: EventLedger {
-                    wall_seconds: Some(t0.elapsed().as_secs_f64()),
+                    wall_seconds: t0.elapsed_seconds(),
                     ..EventLedger::default()
                 },
                 outputs: serde_json::json!({ "error": e.to_string() }),

@@ -274,3 +274,124 @@ pub fn noise_sweep(pipeline: &Pipeline, sigmas: &[f64], n_images: usize) -> Vec<
 
 /// The canonical sweep points for the demo.
 pub const SWEEP_SIGMAS: [f64; 6] = [0.0, 0.01, 0.03, 0.05, 0.1, 0.2];
+
+// ─── executor: the accuracy axis of the calibration loop ────────────────────
+
+/// Job for the MNIST accuracy column: sweep test-set accuracy across device
+/// noise σ (applied to both σ_prog and σ_read). `operating_sigma` is the
+/// point whose measured loss-vs-digital feeds the in-memory dialect's
+/// `accuracy_loss` via the calibration loop.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct MnistJob {
+    #[serde(default = "default_sweep_sigmas")]
+    pub sigmas: Vec<f64>,
+    /// Test images evaluated per sweep point.
+    #[serde(default = "default_subset")]
+    pub subset: usize,
+    #[serde(default = "default_operating_sigma")]
+    pub operating_sigma: f64,
+    /// Training seed (weights are cached per config under the MNIST dir).
+    #[serde(default = "default_train_seed")]
+    pub seed: u64,
+}
+
+fn default_sweep_sigmas() -> Vec<f64> {
+    SWEEP_SIGMAS.to_vec()
+}
+fn default_subset() -> usize {
+    2000
+}
+fn default_operating_sigma() -> f64 {
+    0.03
+}
+fn default_train_seed() -> u64 {
+    42
+}
+
+pub struct MnistExecutor;
+
+impl tei_sim_core::exec::Executor for MnistExecutor {
+    type Job = MnistJob;
+
+    fn execute(
+        &self,
+        job: &MnistJob,
+        on_progress: &mut dyn FnMut(tei_sim_core::exec::Progress),
+    ) -> tei_sim_core::exec::ExecutionResult {
+        use tei_sim_core::exec::{ExecutionResult, Progress};
+        let t0 = std::time::Instant::now();
+        let mut ledger = EventLedger::default();
+
+        let pipeline = match Pipeline::train_or_load(TrainConfig {
+            seed: job.seed,
+            ..TrainConfig::default()
+        }) {
+            Ok(p) => p,
+            Err(e) => {
+                return ExecutionResult {
+                    ledger,
+                    outputs: serde_json::json!({ "error": e }),
+                };
+            }
+        };
+        let digital = pipeline.digital_accuracy();
+        on_progress(Progress {
+            fraction: 0.1,
+            metrics: serde_json::json!({
+                "stage": "trained",
+                "digital_accuracy": digital,
+                "train_seconds": pipeline.train_seconds,
+            }),
+        });
+
+        let mut sigmas = job.sigmas.clone();
+        if !sigmas
+            .iter()
+            .any(|s| (s - job.operating_sigma).abs() < 1e-12)
+        {
+            sigmas.push(job.operating_sigma);
+        }
+        sigmas.sort_by(f64::total_cmp);
+        sigmas.dedup();
+
+        let n = job.subset.min(pipeline.data.n_test()).max(1);
+        // Per-image MAC/ADC counts are data-independent (fixed network), so
+        // one instrumented predict prices the whole evaluation exactly.
+        let px = &pipeline.data.test_images[0..pipeline.data.pixels];
+        let x0: Vec<f64> = px.iter().map(|&p| p as f64 / 255.0).collect();
+
+        let mut curve = Vec::with_capacity(sigmas.len());
+        let mut measured_loss = 0.0;
+        for (i, &s) in sigmas.iter().enumerate() {
+            let xb = CrossbarMlp::program(&pipeline.mlp, &pipeline.data, s, s, 256, 7);
+            let (_, l1) = xb.predict(&x0, 0);
+            ledger.macs += l1.macs * n as u64;
+            ledger.adc_samples += l1.adc_samples * n as u64;
+            let acc = xb.accuracy(&pipeline.data, n);
+            let loss = (digital - acc).max(0.0);
+            if (s - job.operating_sigma).abs() < 1e-12 {
+                measured_loss = loss;
+            }
+            curve.push(serde_json::json!({
+                "sigma": s, "accuracy": acc, "loss_vs_digital": loss,
+            }));
+            on_progress(Progress {
+                fraction: 0.1 + 0.9 * (i + 1) as f64 / sigmas.len() as f64,
+                metrics: serde_json::json!({ "sigma": s, "accuracy": acc }),
+            });
+        }
+
+        ledger.wall_seconds = Some(t0.elapsed().as_secs_f64());
+        ExecutionResult {
+            ledger,
+            outputs: serde_json::json!({
+                "digital_accuracy": digital,
+                "curve": curve,
+                "operating_sigma": job.operating_sigma,
+                "measured_accuracy_loss": measured_loss,
+                "n_images": n,
+                "train_seconds": pipeline.train_seconds,
+            }),
+        }
+    }
+}

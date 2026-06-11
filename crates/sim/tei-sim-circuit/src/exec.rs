@@ -38,7 +38,7 @@ impl Executor for CircuitExecutor {
     type Job = CircuitJob;
 
     fn execute(&self, job: &Self::Job, on_progress: &mut dyn FnMut(Progress)) -> ExecutionResult {
-        let t0 = std::time::Instant::now();
+        let t0 = tei_sim_core::exec::WallTimer::start();
         let n_steps = (job.t_stop / job.dt).round().max(1.0) as usize;
         let opts = TransientOpts {
             t_stop: job.t_stop,
@@ -51,7 +51,7 @@ impl Executor for CircuitExecutor {
             Ok(res) => {
                 let ledger = EventLedger {
                     joules: res.dissipated_energy,
-                    wall_seconds: Some(t0.elapsed().as_secs_f64()),
+                    wall_seconds: t0.elapsed_seconds(),
                     ..EventLedger::default()
                 };
                 let energies: std::collections::BTreeMap<&str, f64> = res
@@ -78,7 +78,7 @@ impl Executor for CircuitExecutor {
             }
             Err(e) => ExecutionResult {
                 ledger: EventLedger {
-                    wall_seconds: Some(t0.elapsed().as_secs_f64()),
+                    wall_seconds: t0.elapsed_seconds(),
                     ..EventLedger::default()
                 },
                 outputs: serde_json::json!({ "error": e.to_string() }),

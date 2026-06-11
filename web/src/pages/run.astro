@@ -29,6 +29,7 @@ import Layout from '../layouts/Layout.astro';
       <p id="sub-blurb" class="text-brand-gray text-[13px] leading-relaxed mb-4"></p>
       <div id="fields" class="grid grid-cols-2 gap-3 mb-5"></div>
       <button id="run-btn" class="primary w-full">RUN →</button>
+      <button id="run-local-btn" class="w-full mt-2 font-mono text-[11px] tracking-wider px-3 py-2 rounded-lg border border-white/15 text-brand-light hover:border-brand-amber/50 hover:text-brand-amber transition-colors" style="display:none;">RUN IN THIS TAB → wasm · no server</button>
       <div id="stats" class="mt-6 space-y-2 font-mono text-[12px] text-brand-light" style="display:none;"></div>
     </div>
 
@@ -154,6 +155,7 @@ function redraw() {
 // Each: blurb, viz title, fields, buildJob(v), onProgress(m), onResult(outputs, ledger)
 const SUBSTRATES = {
   stochastic: {
+    localWasm: 'stochastic',
     label: 'STOCHASTIC', blurb: 'Max-Cut annealed by chromatic block Gibbs on a thrml-class Ising sampler. Amber = best-so-far, cyan = instantaneous.',
     viz: 'cut value vs sweep · live',
     fields: [
@@ -237,6 +239,36 @@ const SUBSTRATES = {
     },
   },
 
+  mnist: {
+    label: 'MNIST', blurb: 'A 784→128→10 MLP trained from raw IDX bytes in pure Rust, then run through the noisy crossbar device model — programming variability, read noise, 8-bit DAC/ADC. Accuracy vs σ, live. The loss at the operating σ is the measured replacement for the dialect\u2019s assumed 1%.',
+    viz: 'test accuracy vs device σ · live',
+    fields: [
+      ['subset', 'Images', 2000], ['opsigma', 'Operating σ', 0.03, 0.01],
+      ['seed', 'Train seed', 42],
+    ],
+    buildJob: v => ({ substrate: 'mnist', subset: v.subset | 0, operating_sigma: v.opsigma, seed: v.seed | 0 }),
+    init() { this._pts = []; this._digital = null; },
+    onProgress(m) {
+      if (m.stage === 'trained') { this._digital = m.digital_accuracy; status(`trained · digital ${(m.digital_accuracy*100).toFixed(2)}%`); return; }
+      if (m.sigma == null) return;
+      this._pts.push([m.sigma, m.accuracy * 100]);
+      this._pts.sort((a, b) => a[0] - b[0]);
+      view = { kind: 'series', xLabel: 'device σ · dashed = digital − assumed 1%',
+        hline: this._digital != null ? (this._digital - 0.01) * 100 : null,
+        hlineLabel: 'dialect assumed loss (1%)',
+        series: [{ pts: this._pts, color: AMBER, width: 2.5 }] };
+      redraw();
+      status(`σ ${m.sigma} · accuracy ${(m.accuracy*100).toFixed(2)}%`);
+    },
+    onResult(o, l) {
+      if (o.error) { status(`error: ${o.error}`); return []; }
+      return [['DIGITAL f32', `${(o.digital_accuracy*100).toFixed(2)}%`],
+        [`LOSS @ σ=${o.operating_sigma}`, `${(o.measured_accuracy_loss*100).toFixed(2)} pts`, AMBER],
+        ['ASSUMED (DIALECT)', '1.00 pts'],
+        ['IMAGES / POINT', fmt(o.n_images)], ['MACS', fmt(l.macs)], ['WALL', wall(l)]];
+    },
+  },
+
   photonic: {
     label: 'PHOTONIC', blurb: 'A Haar-random unitary decomposed into a rectangular MZI mesh (Clements 2016 nulling), rebuilt, and driven with optical-power MVM queries. Live reconstruction fidelity.',
     viz: 'mvm error vs query · live',
@@ -300,6 +332,7 @@ const SUBSTRATES = {
   },
 
   adiabatic: {
+    localWasm: 'adiabatic',
     label: 'ADIABATIC', blurb: 'A ramp-charged cell swept across T/RC, plotted as overhead above the Landauer floor. The green dashed line is the cost dialect’s assumed constant (10³×) — the sweep measures where on the curve that assumption actually lives.',
     viz: 'overhead above landauer vs T/RC · log–log · live',
     fields: [
@@ -608,6 +641,7 @@ function renderPicker() {
 function renderFields() {
   const s = SUBSTRATES[active];
   $('sub-blurb').textContent = s.blurb;
+  $('run-local-btn').style.display = s.localWasm ? '' : 'none';
   $('viz-title').textContent = s.viz;
   $('fields').innerHTML = '';
   for (const [id, label, value, step] of s.fields) {
@@ -673,7 +707,11 @@ function handleBlock(block, s) {
   else if (evt === 'result') {
     const rows = s.onResult(payload.outputs || {}, payload.ledger || {}) || [];
     const cal = payload.calibration;
-    if (cal && cal.estimated_j != null) {
+    if (cal && cal.kind === 'accuracy') {
+      rows.push(['— CALIBRATION —', '']);
+      rows.push(['ASSUMED LOSS', `${(cal.assumed_accuracy_loss*100).toFixed(2)} pts`]);
+      rows.push(['MEASURED LOSS', `${(cal.measured_accuracy_loss*100).toFixed(2)} pts`, AMBER]);
+    } else if (cal && cal.estimated_j != null) {
       rows.push(['— CALIBRATION —', '']);
       rows.push(['EST (DIALECT)', `${cal.estimated_j.toExponential(2)} J`]);
       rows.push(['MEASURED (LEDGER)', `${cal.measured_j.toExponential(2)} J`, AMBER]);
@@ -694,6 +732,7 @@ function handleBlock(block, s) {
       el.appendChild(div);
     }
     el.style.display = '';
+    if (cal && cal.kind === 'accuracy' && cal.substrate_params_patch) offerApply(cal.substrate_params_patch);
     status('done');
   }
 }
@@ -725,19 +764,31 @@ async function repriceDispatch(patch, atRatio) {
     add('PLAN (ASSUMED 10³)', `${before.total_joules.toExponential(2)} J`);
     add(`PLAN (MEASURED @ T/RC ${atRatio?.toFixed(0) ?? ''})`, `${after.total_joules.toExponential(2)} J`, AMBER);
     add('PLAN CHANGE', `${(before.total_joules / after.total_joules).toFixed(1)}× cheaper`, GREEN);
-    const btn = document.createElement('button');
-    btn.textContent = 'APPLY TO FABRIC → every /api/dispatch prices with this';
-    btn.className = 'w-full mt-2 font-mono text-[11px] tracking-wider px-3 py-2 rounded-lg border border-brand-amber/40 text-brand-amber hover:bg-brand-amber/10 transition-colors';
-    btn.onclick = async () => {
-      btn.disabled = true; btn.textContent = 'SAVING…';
-      const r = await fetch(`${API_BASE}/api/calibration`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
-      });
-      btn.textContent = r.ok ? 'SAVED — fabric now prices with the measured constant' : 'SAVE FAILED';
-      refreshCalBadge();
-    };
-    el.appendChild(btn);
+    offerApply(patch);
   } catch { /* dispatch unavailable — leave stats as-is */ }
+}
+
+// Merge a patch into the stored calibration (so adiabatic + mnist patches
+// coexist) and offer the one-click apply button under the stats panel.
+async function offerApply(patch) {
+  const el = $('stats');
+  const btn = document.createElement('button');
+  btn.textContent = 'APPLY TO FABRIC → every /api/dispatch prices with this';
+  btn.className = 'w-full mt-2 font-mono text-[11px] tracking-wider px-3 py-2 rounded-lg border border-brand-amber/40 text-brand-amber hover:bg-brand-amber/10 transition-colors';
+  btn.onclick = async () => {
+    btn.disabled = true; btn.textContent = 'SAVING…';
+    let merged = patch;
+    try {
+      const cur = await fetch(`${API_BASE}/api/calibration`).then(r => r.json());
+      if (cur.calibrated) merged = { ...cur.substrate_params, ...patch };
+    } catch {}
+    const r = await fetch(`${API_BASE}/api/calibration`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(merged),
+    });
+    btn.textContent = r.ok ? 'SAVED — fabric now prices with the measured constant' : 'SAVE FAILED';
+    refreshCalBadge();
+  };
+  el.appendChild(btn);
 }
 
 async function refreshCalBadge() {
@@ -745,8 +796,12 @@ async function refreshCalBadge() {
     const c = await fetch(`${API_BASE}/api/calibration`).then(r => r.json());
     $('cal-badge').style.display = c.calibrated ? '' : 'none';
     if (c.calibrated) {
+      const bits = [];
       const ov = c.substrate_params?.reversible?.overhead_l0;
-      $('cal-detail').textContent = ov != null ? ` · reversible overhead_l0 = ${Number(ov).toPrecision(4)} (literature: 1000)` : '';
+      if (ov != null && Math.abs(ov - 1000) > 1e-9) bits.push(`reversible overhead_l0 = ${Number(ov).toPrecision(4)} (lit: 1000)`);
+      const al = c.substrate_params?.in_memory?.accuracy_loss;
+      if (al != null && Math.abs(al - 0.01) > 1e-12) bits.push(`in-memory accuracy_loss = ${(al*100).toFixed(2)} pts (lit: 1.00)`);
+      $('cal-detail').textContent = bits.length ? ' · ' + bits.join(' · ') : '';
     }
   } catch { /* server unreachable */ }
 }
@@ -754,6 +809,63 @@ $('cal-clear').addEventListener('click', async () => {
   await fetch(`${API_BASE}/api/calibration`, { method: 'DELETE' });
   refreshCalBadge();
 });
+
+// §1's WASM vision: the same sim core, compiled to wasm32, running in this
+// tab with zero server round-trip. A module Worker keeps progress painting.
+let wasmWorker = null;
+function localWorker() {
+  if (wasmWorker) return wasmWorker;
+  const src = `
+    import init, { run_stochastic, run_adiabatic } from '${location.origin}/wasm/tei_sim_wasm.js';
+    let ready = init();
+    onmessage = async (e) => {
+      await ready;
+      const { kind, job } = e.data;
+      const fn = kind === 'adiabatic' ? run_adiabatic : run_stochastic;
+      try {
+        const result = fn(JSON.stringify(job), (tick) => postMessage({ type: 'progress', tick: JSON.parse(tick) }));
+        postMessage({ type: 'result', result: JSON.parse(result) });
+      } catch (err) { postMessage({ type: 'result', result: { ledger: {}, outputs: { error: String(err) } } }); }
+    };`;
+  wasmWorker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })), { type: 'module' });
+  return wasmWorker;
+}
+
+function runLocal() {
+  const s = SUBSTRATES[active];
+  if (!s.localWasm) return;
+  const btn = $('run-local-btn');
+  btn.disabled = true; btn.textContent = 'RUNNING IN THIS TAB…';
+  $('stats').style.display = 'none';
+  view = { kind: 'idle' }; redraw();
+  s.init();
+  status('loading wasm…');
+  const job = s.buildJob(values());
+  delete job.substrate;
+  const t0 = performance.now();
+  const w = localWorker();
+  w.onmessage = (e) => {
+    if (e.data.type === 'progress') s.onProgress(e.data.tick.metrics || {});
+    else {
+      const { ledger, outputs } = e.data.result;
+      ledger.wall_seconds = (performance.now() - t0) / 1000;  // measured here — the wasm can't
+      const rows = s.onResult(outputs || {}, ledger || {}) || [];
+      rows.push(['EXECUTED', 'in this tab · wasm', '#0ea5e9']);
+      const el = $('stats'); el.innerHTML = '';
+      for (const [k, v, color] of rows) {
+        const div = document.createElement('div');
+        div.className = 'flex justify-between';
+        div.innerHTML = `<span class="text-brand-gray">${k}</span><span${color ? ` style="color:${color}" class="font-bold"` : ''}>${v ?? '—'}</span>`;
+        el.appendChild(div);
+      }
+      el.style.display = '';
+      status('done — computed locally, zero server round-trip');
+      btn.disabled = false; btn.textContent = 'RUN IN THIS TAB → wasm · no server';
+    }
+  };
+  w.postMessage({ kind: s.localWasm, job });
+}
+$('run-local-btn').addEventListener('click', runLocal);
 
 $('run-btn').addEventListener('click', run);
 window.addEventListener('DOMContentLoaded', () => {

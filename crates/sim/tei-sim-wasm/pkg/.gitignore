@@ -1,0 +1,4 @@
+# wasm-pack writes `*` here on every build; this pkg/ is deliberately
+# committed (web/ loads it as a static ES module). Restore this file if a
+# rebuild clobbers it.
+!*
