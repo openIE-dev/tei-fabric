@@ -98,6 +98,35 @@ Minutes-to-first-ledger through Studio: plug in a Pico 2 → Studio offers
 "Flash teiOS" → 10 seconds later the ledger view is live. That is the
 whole pitch, demonstrated.
 
+## 3.6 The full ecosystem map
+
+The trio is the seed of something larger: every category that made
+embedded development *easy* gets a thermodynamic-compute counterpart.
+Ease of use is not a feature of this list — it is the founding doctrine.
+Each row ships only when it is SUPER easy: one click, one line, one
+drag-drop. If a row needs a manual, it is not done.
+
+| Category (the thing that won) | TEI counterpart | What changes under thermodynamic paradigms |
+|---|---|---|
+| Yocto (image builder) | **the forge** | recipes emit teiOS images with energy tables baked in; reproducible joules, not just reproducible bits |
+| Raspberry Pi OS (the OS) | **teiOS** | the scheduler's first-class resource is joules; every task has a ledger; sleep is a substrate |
+| Arduino (IDE + library + `begin()`) | **TEI Studio + tei-arduino** | `TEI.run(FFT, buf)` returns a ledger; the Serial monitor is a joule monitor |
+| MicroPython / CircuitPython | **tei modules** | `import tei` — the REPL prints measured joules; education-first on-ramp |
+| PlatformIO (multi-platform studio) | **TEI Studio** | one app, every board in EMBEDDED-TARGETS.md, one flash button |
+| ROS (robotics middleware) | **tei-ros / joule-aware pub-sub** | nodes and topics carry joule budgets; a robot's compute graph dispatches like the fabric dispatches — lowest-joule substrate wins; energy is a first-class QoS field |
+| Edge Impulse (end-to-end edge MLOps) | **fabric pipelines** | collect → train → deploy, but every deploy candidate is priced in measured J/inference per board before you flash |
+| Qualcomm AI Hub (model zoo + per-device profiling) | **the fabric hub** (fabric.thermoedge.ai grows a deploy arm) | the community calibration store IS the per-device profile database; pick a primitive/workload, see measured J/op on every board, click deploy |
+| OpenMV (domain board + IDE) | **domain bundles** (vision first — Joulo camera lineage) | a camera pipeline where each stage reports joules and the dispatcher moves stages between core/NPU/PIO |
+| Edge AI runtimes (TFLM et al.) | **teiOS primitive runtime** | kernels are Periodic Stack primitives with ledgers; delegates are substrates; selection is by measured joules |
+
+The sequencing discipline stays the same: each counterpart enters the
+world as a turnkey artifact (a flashable image, a one-line install, a
+web page with a Connect button) and earns depth afterward. The fabric
+hub deserves emphasis: it already exists as the calibration store +
+cost surface — the embedded program turns it into the place where a
+developer asks "what does THIS workload cost on THIS board" and gets a
+measured answer with a flash button next to it.
+
 ## 4. Architecture: one core, thin bindings
 
 One `no_std` Rust core crate owns the contract types + dispatch logic +
