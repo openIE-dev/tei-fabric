@@ -75,6 +75,29 @@ calibrated cost table, run it on the lowest-joule substrate available.
 On an RP2350 that choice set is {M33 core, Hazard3 core, PIO, DMA+sniffer};
 on purpose-built hardware it becomes {CPU, p-bit array, mesh}. Same API.
 
+## 3.5 The product trio
+
+- **teiOS** — the runtime. Not Linux: a `no_std` TEI executor (instrumented
+  tasks, the embedded ledger, lowest-joule dispatch, calibration agent)
+  over Embassy-class HALs on MCUs and a flat bare-metal image on Pi-class
+  boards. teiOS is what every flashable artifact in EMBEDDED-TARGETS.md
+  contains.
+- **The forge** — the recipe system ("our Yocto, not Linux"): MACHINE
+  recipe in → reproducible teiOS image out (`.uf2`/`.bin`/`.bit`/`.img`),
+  with the board's energy tables baked in.
+- **TEI Studio** — the turnkey face (the Arduino-IDE/Thonny lesson, applied).
+  Desktop app (Tauri — Rust core, web UI, so the /run live-view components
+  we already ship on fabric.thermoedge.ai are reused verbatim): detect a
+  plugged board → one-click flash teiOS → **live ledger console** streaming
+  joules per primitive → cost-table browser → run a calibration → publish
+  the measurement to the fabric. Code editing comes later; flashing +
+  *seeing your board's joules* is the wedge. Studio invokes the forge;
+  users never meet the forge directly.
+
+Minutes-to-first-ledger through Studio: plug in a Pico 2 → Studio offers
+"Flash teiOS" → 10 seconds later the ledger view is live. That is the
+whole pitch, demonstrated.
+
 ## 4. Architecture: one core, thin bindings
 
 One `no_std` Rust core crate owns the contract types + dispatch logic +
