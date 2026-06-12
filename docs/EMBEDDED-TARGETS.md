@@ -62,7 +62,7 @@ tiered by flash path, best first.
 | NXP FRDM-MCXN947 (~$26) | 2×M33 @150 MHz + **eIQ Neutron NPU** (NXP proprietary, NOT Ethos-U) + PowerQuad | NPU (closed NXP tools), PowerQuad (FFT/FIR/CORDIC) | NPU column, NXP channel |
 | Teensy 4.0 / 4.1 | i.MX RT1062 (M7 @600 MHz) | 2×FlexIO, DMA, CM7 dual-issue | teensy_loader_cli; the performance MCU |
 | Arduino UNO R4 / classic UNO R3 | RA4M1 / ATmega328P | DAC/CTSU / —— | reach play only; R3 via avrdude |
-| TI MSP430FR LaunchPads | MSP430FR (+ **LEA** accel) | LEA vector math, FRAM | **EnergyTrace = the T0 measurement reference** |
+| TI MSP430FR LaunchPads (FR5994/FR6989-class) | MSP430FR (+ **LEA** accel, 36× energy on FFT measured) | LEA vector math, FRAM | **EnergyTrace = the bench-calibration (T1) anchor, NOT T0**: the charge-pulse counter lives in the eZ-FET/MSP-FET/XDS110 debug probe — firmware can never read its own joules (TI-confirmed). ET++ state-correlation only on FR59xx/69xx + CC13xx/26xx (the latter via XDS110) |
 | TI MSPM0 LaunchPads | M0+ | analog blocks | $0.5-class parts |
 | **SiLabs xG24 Pro Kit** (PK6010A — NOT the Dev Kit, which lacks AEM) | EFR32MG24 (M33) | MVP AI/ML accel (≈6× energy vs M33), radio | **WSTK/WPK mainboard AEM = T0 energy telemetry without bench gear** |
 | Ambiq Apollo4/5 EVB | M4F/M55 subthreshold | low-power GPU (4), Helium (5) | the µW-class floor; J-Link |
