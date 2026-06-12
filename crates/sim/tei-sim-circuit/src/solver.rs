@@ -31,7 +31,7 @@
 //! down (≤ 12 nodes in tei-sim-adiabatic) on the exact, bit-identical
 //! pre-M4 dense path.
 
-use crate::mna::{self, ElemState, Mode, Topology};
+use crate::mna::{self, ElemState, Mode, NlLin, Topology};
 use crate::netlist::Netlist;
 use crate::{CircuitError, Method};
 use serde::{Deserialize, Serialize};
@@ -124,18 +124,18 @@ impl SystemSolver {
         h: f64,
         src_scale: f64,
         hist: &[ElemState],
-        dlin: &[f64],
+        lin: &[NlLin],
     ) -> Result<Vec<f64>, CircuitError> {
         match self {
             SystemSolver::Dense => {
-                let (a, b) = mna::assemble(net, topo, mode, method, t, h, src_scale, hist, dlin);
+                let (a, b) = mna::assemble(net, topo, mode, method, t, h, src_scale, hist, lin);
                 a.lu_solve(&b).ok_or(CircuitError::Singular)
             }
             SystemSolver::Sparse { triplets, pattern } => {
                 triplets.clear();
                 let mut b = vec![0.0; topo.dim];
                 mna::assemble_into(
-                    net, topo, mode, method, t, h, src_scale, hist, dlin, triplets, &mut b,
+                    net, topo, mode, method, t, h, src_scale, hist, lin, triplets, &mut b,
                 );
                 match pattern {
                     None => {

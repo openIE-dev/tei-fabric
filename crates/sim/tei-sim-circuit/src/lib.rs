@@ -12,9 +12,16 @@
 //!   sine, PWL) and **per-element energy instrumentation ∫ i·v dt** — the
 //!   entire point: dissipation per element versus ramp time is what feeds the
 //!   reversible/adiabatic cost dialect.
-//! - **M2 (partial)** — Shockley diode with a Newton-Raphson inner loop and
-//!   SPICE-style junction-voltage limiting (`pnjlim`). MOSFET level-1 and
-//!   EKV-lite remain on the M2 ladder.
+//! - **M2** — Shockley diode with a Newton-Raphson inner loop and SPICE-style
+//!   junction-voltage limiting (`pnjlim`); level-1 (Shichman–Hodges) MOSFET
+//!   with square-law cutoff/triode/saturation, channel-length modulation and
+//!   source/drain symmetry (transmission gates); EKV-lite MOSFET — a
+//!   single-expression all-region model whose honest subthreshold leakage is
+//!   the floor under the adiabatic energy curves. Both MOSFETs stamp their
+//!   Newton companions through the same `MatrixSink` assembly as the linear
+//!   elements, so they run identically on the dense and sparse paths. The
+//!   2-3 transistor flavors the adiabatic cells need map onto these
+//!   parameters by hand — no BSIM cards, no PDK parsing (deliberately out).
 //! - **M4** — sparse CSR + Markowitz-ordered LU (`tei_sim_core::sparse`)
 //!   behind a solver abstraction: cells at ≤ [`SPARSE_NODE_THRESHOLD`]
 //!   (16) nodes keep the dense rebuild-and-factor path bit-for-bit; larger cells
@@ -52,7 +59,7 @@ mod solver;
 pub mod transient;
 
 pub use exec::{CircuitExecutor, CircuitJob};
-pub use netlist::{Element, Netlist, Node, VT_300K, Waveform};
+pub use netlist::{Element, MosPolarity, Netlist, Node, VT_300K, Waveform};
 pub use solver::{SPARSE_NODE_THRESHOLD, SolverChoice, SolverKind};
 pub use transient::{
     DcSolution, LinearDcSolver, TransientOpts, TransientResult, solve_dc, transient,

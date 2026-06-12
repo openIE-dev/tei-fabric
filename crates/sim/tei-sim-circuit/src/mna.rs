@@ -80,6 +80,33 @@
 //! overflow; convergence requires every unknown to move less than
 //! `abstol + reltol·|x|` *and* the limiter to have been inactive.
 //!
+//! **MOSFET** (M2, level-1 and EKV-lite) — the channel current i_ds (d→s)
+//! is a function of the three terminal potentials, i(v_g, v_d, v_s).
+//! Newton-Raphson linearizes about the previous iterate (v_g*, v_d*, v_s*):
+//!
+//! ```text
+//! i(v) ≈ a_g·v_g + a_d·v_d + a_s·v_s + I_eq        a_x = ∂i/∂v_x|_*
+//! I_eq = i* − a_g·v_g* − a_d·v_d* − a_s·v_s*
+//! ```
+//!
+//! The current enters KCL only at the drain and source rows (no DC gate
+//! current), so the stamp is two rows × three columns plus the RHS pair:
+//!
+//! ```text
+//! A[d,x] += a_x   A[s,x] −= a_x   (x ∈ {g, d, s})
+//! b[d] −= I_eq    b[s] += I_eq
+//! ```
+//!
+//! For level-1, (a_g, a_d, a_s) = (gm, gds, −gm−gds) in the forward
+//! orientation, with source/drain roles swapped when v_ds < 0 (the
+//! transmission-gate case). For EKV-lite the three partials are independent
+//! (the pinch-off voltage divides v_g by the slope factor n — the implicit
+//! bulk at ground absorbs the difference). GMIN between d and s is folded
+//! into the evaluation, exactly as for the diode. Both models are polynomial
+//! / softplus-smooth (no exponential blow-up like the diode), so no junction
+//! limiter is applied to MOSFET iterates; stiff DC points fall back to the
+//! same source stepping.
+//!
 //! The system is rebuilt every step and every Newton iteration; *how* it is
 //! solved is the [`crate::solver::SystemSolver`]'s decision (M4): small
 //! systems assemble dense and LU-factor from scratch (O(n³) is microseconds
@@ -88,7 +115,7 @@
 //! fill pattern with each step's new values. The stamps below are generic
 //! over a [`MatrixSink`] so both paths share one assembly, entry for entry.
 
-use crate::netlist::{Element, Netlist, Node, VT_300K};
+use crate::netlist::{Element, MosPolarity, Netlist, Node, VT_300K};
 use crate::solver::SystemSolver;
 use crate::{CircuitError, Method};
 use tei_sim_core::linalg::Mat;
@@ -139,6 +166,18 @@ pub(crate) enum Mode {
 pub(crate) struct ElemState {
     pub v: f64,
     pub i: f64,
+}
+
+/// Per-element Newton linearization point. Diodes use `v1` (the junction
+/// voltage); MOSFETs use the full terminal triple `(v1, v2, v3) =
+/// (v_g, v_d, v_s)` — EKV currents depend on the potentials individually,
+/// not just on differences (implicit bulk at ground). Linear elements
+/// ignore it.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct NlLin {
+    pub v1: f64,
+    pub v2: f64,
+    pub v3: f64,
 }
 
 /// Static analysis of a netlist for one assembly mode: node count, total
@@ -204,6 +243,12 @@ pub(crate) fn validate(net: &Netlist) -> Result<usize, CircuitError> {
         }
         max_node = max_node.max(p).max(n);
         touches_ground |= p == 0 || n == 0;
+        if let Some(g) = el.gate() {
+            // The gate may coincide with drain or source (diode-connected);
+            // only d == s is degenerate, and that is the p == n check above.
+            max_node = max_node.max(g);
+            touches_ground |= g == 0;
+        }
         let positive = |v: f64, what: &str| -> Result<(), CircuitError> {
             if v > 0.0 && v.is_finite() {
                 Ok(())
@@ -223,6 +268,33 @@ pub(crate) fn validate(net: &Netlist) -> Result<usize, CircuitError> {
                 positive(*i_s, "I_s")?;
                 positive(*n_ideality, "n")?;
             }
+            Element::Mosfet {
+                vth, kp, lambda, ..
+            } => {
+                positive(*kp, "kp")?;
+                if !vth.is_finite() || *vth < 0.0 {
+                    return Err(CircuitError::Invalid(format!(
+                        "element '{name}': vth must be finite and ≥ 0 (threshold magnitude), got {vth}"
+                    )));
+                }
+                if !lambda.is_finite() || *lambda < 0.0 {
+                    return Err(CircuitError::Invalid(format!(
+                        "element '{name}': lambda must be finite and ≥ 0, got {lambda}"
+                    )));
+                }
+            }
+            Element::MosfetEkv {
+                vth, kp, n, phi_t, ..
+            } => {
+                positive(*kp, "kp")?;
+                positive(*n, "n")?;
+                positive(*phi_t, "phi_t")?;
+                if !vth.is_finite() || *vth < 0.0 {
+                    return Err(CircuitError::Invalid(format!(
+                        "element '{name}': vth must be finite and ≥ 0 (threshold magnitude), got {vth}"
+                    )));
+                }
+            }
             Element::VoltageSource { .. } | Element::CurrentSource { .. } => {}
         }
     }
@@ -236,6 +308,9 @@ pub(crate) fn validate(net: &Netlist) -> Result<usize, CircuitError> {
         let (p, n) = el.nodes();
         seen[p] = true;
         seen[n] = true;
+        if let Some(g) = el.gate() {
+            seen[g] = true;
+        }
     }
     if let Some(gap) = (1..=max_node).find(|&k| !seen[k]) {
         return Err(CircuitError::Invalid(format!(
@@ -331,17 +406,142 @@ fn vcrit(i_s: f64, n_ideality: f64) -> f64 {
     nvt * (nvt / (std::f64::consts::SQRT_2 * i_s)).ln()
 }
 
-/// Initial diode linearization voltages (vcrit, the SPICE start), 0 elsewhere.
-pub(crate) fn initial_dlin(net: &Netlist) -> Vec<f64> {
+/// Initial Newton linearization points: diodes start at vcrit (the SPICE
+/// start), MOSFETs at all-zero terminal potentials (cutoff — GMIN keeps the
+/// Jacobian regular), everything else at zero.
+pub(crate) fn initial_lin(net: &Netlist) -> Vec<NlLin> {
     net.elements
         .iter()
         .map(|el| match el {
             Element::Diode {
                 i_s, n_ideality, ..
-            } => vcrit(*i_s, *n_ideality),
-            _ => 0.0,
+            } => NlLin {
+                v1: vcrit(*i_s, *n_ideality),
+                ..NlLin::default()
+            },
+            _ => NlLin::default(),
         })
         .collect()
+}
+
+/// Level-1 core in the forward orientation (v_ds ≥ 0): returns
+/// (i_d, ∂i/∂v_gs, ∂i/∂v_ds). The (1 + λ·v_ds) factor applies in both
+/// conducting regions, so i and both partials are continuous at the
+/// triode/saturation boundary v_ds = v_gs − vth.
+fn mos1_core(vth: f64, kp: f64, lambda: f64, vgs: f64, vds: f64) -> (f64, f64, f64) {
+    let vov = vgs - vth;
+    if vov <= 0.0 {
+        return (0.0, 0.0, 0.0); // cutoff
+    }
+    let cl = 1.0 + lambda * vds;
+    if vds < vov {
+        // Triode.
+        let q = vov * vds - 0.5 * vds * vds;
+        (
+            kp * q * cl,
+            kp * vds * cl,
+            kp * (vov - vds) * cl + kp * q * lambda,
+        )
+    } else {
+        // Saturation.
+        let half = 0.5 * kp * vov * vov;
+        (half * cl, kp * vov * cl, half * lambda)
+    }
+}
+
+/// Level-1 NMOS at absolute terminal potentials: (i_ds, ∂i/∂v_g, ∂i/∂v_d,
+/// ∂i/∂v_s), current oriented d→s. The device is source/drain symmetric:
+/// v_d < v_s swaps the roles (i = −f(v_gd, v_sd)), which is what makes
+/// transmission gates work without case analysis at the call site.
+fn mos1_nmos(vth: f64, kp: f64, lambda: f64, vg: f64, vd: f64, vs: f64) -> (f64, f64, f64, f64) {
+    if vd >= vs {
+        let (i, gm, gds) = mos1_core(vth, kp, lambda, vg - vs, vd - vs);
+        (i, gm, gds, -(gm + gds))
+    } else {
+        let (i, gm, gds) = mos1_core(vth, kp, lambda, vg - vd, vs - vd);
+        (-i, -gm, gm + gds, -gds)
+    }
+}
+
+/// Numerically stable softplus ln(1 + e^x) and the logistic sigmoid.
+fn softplus(x: f64) -> f64 {
+    if x > 0.0 {
+        x + (-x).exp().ln_1p()
+    } else {
+        x.exp().ln_1p()
+    }
+}
+fn sigmoid(x: f64) -> f64 {
+    if x >= 0.0 {
+        1.0 / (1.0 + (-x).exp())
+    } else {
+        let e = x.exp();
+        e / (1.0 + e)
+    }
+}
+
+/// EKV interpolation function F(u) = ln²(1 + e^{u/(2φt)}) and its derivative
+/// F′(u) = ln(1 + e^{u/(2φt)})·σ(u/(2φt))/φt.
+fn ekv_f(u: f64, phi_t: f64) -> (f64, f64) {
+    let x = u / (2.0 * phi_t);
+    let sp = softplus(x);
+    (sp * sp, sp * sigmoid(x) / phi_t)
+}
+
+/// EKV-lite NMOS at absolute terminal potentials: (i_ds, ∂i/∂v_g, ∂i/∂v_d,
+/// ∂i/∂v_s). The forward−reverse form is d/s symmetric by construction.
+/// Note Σ ∂i/∂v_x ≠ 0 for n ≠ 1 — the implicit bulk at ground absorbs the
+/// difference, so the companion I_eq must use absolute potentials.
+fn ekv_nmos(
+    vth: f64,
+    kp: f64,
+    n: f64,
+    phi_t: f64,
+    vg: f64,
+    vd: f64,
+    vs: f64,
+) -> (f64, f64, f64, f64) {
+    let i_spec = 2.0 * n * kp * phi_t * phi_t;
+    let vp = (vg - vth) / n;
+    let (ff, dff) = ekv_f(vp - vs, phi_t);
+    let (fr, dfr) = ekv_f(vp - vd, phi_t);
+    (
+        i_spec * (ff - fr),
+        i_spec * (dff - dfr) / n,
+        i_spec * dfr,
+        -i_spec * dff,
+    )
+}
+
+/// Channel current + partials of either MOSFET model at absolute terminal
+/// potentials, with the polarity mirror and GMIN (d↔s) folded in. PMOS is
+/// the exact mirror i_P(v) = −i_N(−v); by the chain rule the partials carry
+/// over unnegated. Used identically by the Newton companion stamps and the
+/// post-solve state reconstruction, which is what keeps the discrete
+/// Tellegen identity intact through the nonlinear elements.
+fn mos_eval(el: &Element, vg: f64, vd: f64, vs: f64) -> (f64, f64, f64, f64) {
+    let pol = match el {
+        Element::Mosfet { polarity, .. } | Element::MosfetEkv { polarity, .. } => *polarity,
+        _ => unreachable!("mos_eval called on a non-MOSFET element"),
+    };
+    let (xg, xd, xs) = match pol {
+        MosPolarity::Nmos => (vg, vd, vs),
+        MosPolarity::Pmos => (-vg, -vd, -vs),
+    };
+    let (i, ag, ad, asrc) = match el {
+        Element::Mosfet {
+            vth, kp, lambda, ..
+        } => mos1_nmos(*vth, *kp, *lambda, xg, xd, xs),
+        Element::MosfetEkv {
+            vth, kp, n, phi_t, ..
+        } => ekv_nmos(*vth, *kp, *n, *phi_t, xg, xd, xs),
+        _ => unreachable!(),
+    };
+    let i = match pol {
+        MosPolarity::Nmos => i,
+        MosPolarity::Pmos => -i,
+    };
+    (i + GMIN * (vd - vs), ag, ad + GMIN, asrc - GMIN)
 }
 
 /// Assemble the dense MNA system `A·x = b` for one solve (the small-circuit
@@ -356,12 +556,12 @@ pub(crate) fn assemble(
     h: f64,
     src_scale: f64,
     hist: &[ElemState],
-    dlin: &[f64],
+    lin: &[NlLin],
 ) -> (Mat, Vec<f64>) {
     let mut a = Mat::zeros(topo.dim, topo.dim);
     let mut b = vec![0.0; topo.dim];
     assemble_into(
-        net, topo, mode, method, t, h, src_scale, hist, dlin, &mut a, &mut b,
+        net, topo, mode, method, t, h, src_scale, hist, lin, &mut a, &mut b,
     );
     (a, b)
 }
@@ -374,7 +574,7 @@ pub(crate) fn assemble(
 /// makes the overall scheme trapezoidal in the input as well).
 /// `h` — step size (Step mode only). `src_scale` — source-stepping λ.
 /// `hist` — previous-step element states (Step mode only).
-/// `dlin` — per-element diode linearization voltages (Newton iterate).
+/// `lin` — per-element nonlinear linearization points (Newton iterate).
 ///
 /// The element walk is deterministic, so re-assembling the same
 /// (netlist, topology, mode) emits stamps in an identical sequence — the
@@ -389,7 +589,7 @@ pub(crate) fn assemble_into<S: MatrixSink>(
     h: f64,
     src_scale: f64,
     hist: &[ElemState],
-    dlin: &[f64],
+    lin: &[NlLin],
     a: &mut S,
     b: &mut [f64],
 ) {
@@ -462,8 +662,30 @@ pub(crate) fn assemble_into<S: MatrixSink>(
             Element::Diode {
                 i_s, n_ideality, ..
             } => {
-                let (g, i_eq) = diode_companion(*i_s, *n_ideality, dlin[k]);
+                let (g, i_eq) = diode_companion(*i_s, *n_ideality, lin[k].v1);
                 stamp_g(a, ip, inn, g);
+                inject(b, ip, inn, i_eq);
+            }
+            Element::Mosfet { g, .. } | Element::MosfetEkv { g, .. } => {
+                // Channel current d→s linearized about the previous iterate
+                // (see module docs). ip/inn are the drain/source rows; the
+                // gate contributes a column only. The emitted stamp sequence
+                // is the same every call (entries may be 0.0 in cutoff) —
+                // the invariant the sparse triplet→slot map relies on.
+                let l = &lin[k];
+                let (i, ag, ad, asrc) = mos_eval(el, l.v1, l.v2, l.v3);
+                let ig = node_idx(*g);
+                for (col, coef) in [(ig, ag), (ip, ad), (inn, asrc)] {
+                    if let Some(c) = col {
+                        if let Some(r) = ip {
+                            a.add(r, c, coef);
+                        }
+                        if let Some(r) = inn {
+                            a.add(r, c, -coef);
+                        }
+                    }
+                }
+                let i_eq = i - ag * l.v1 - ad * l.v2 - asrc * l.v3;
                 inject(b, ip, inn, i_eq);
             }
         }
@@ -471,10 +693,13 @@ pub(crate) fn assemble_into<S: MatrixSink>(
 }
 
 /// Solve one MNA system. Linear netlists are a single assemble + solve;
-/// netlists with diodes run damped Newton-Raphson, warm-started from (and
-/// updating) `dlin` so consecutive transient steps converge in a couple of
-/// iterations. The `solver` carries the dense-vs-sparse decision and, on the
-/// sparse path, the cached pivot order + fill pattern reused across calls.
+/// netlists with nonlinear devices (diodes, MOSFETs) run Newton-Raphson,
+/// warm-started from (and updating) `lin` so consecutive transient steps
+/// converge in a couple of iterations. Diode iterates are damped with
+/// `pnjlim`; MOSFET iterates are taken raw (both models are polynomial /
+/// softplus-smooth). The `solver` carries the dense-vs-sparse decision and,
+/// on the sparse path, the cached pivot order + fill pattern reused across
+/// calls — every Newton iteration is a numeric-only refactor.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn solve(
     net: &Netlist,
@@ -485,34 +710,42 @@ pub(crate) fn solve(
     h: f64,
     src_scale: f64,
     hist: &[ElemState],
-    dlin: &mut [f64],
+    lin: &mut [NlLin],
     solver: &mut SystemSolver,
 ) -> Result<Vec<f64>, CircuitError> {
-    let has_diode = net
-        .elements
-        .iter()
-        .any(|e| matches!(e, Element::Diode { .. }));
-    if !has_diode {
-        return solver.solve_system(net, topo, mode, method, t, h, src_scale, hist, dlin);
+    let nonlinear = net.elements.iter().any(Element::is_nonlinear);
+    if !nonlinear {
+        return solver.solve_system(net, topo, mode, method, t, h, src_scale, hist, lin);
     }
     let vn = |x: &[f64], node: Node| if node == 0 { 0.0 } else { x[node - 1] };
     let mut x_prev: Option<Vec<f64>> = None;
     for _ in 0..NR_MAX_ITERS {
-        let x = solver.solve_system(net, topo, mode, method, t, h, src_scale, hist, dlin)?;
+        let x = solver.solve_system(net, topo, mode, method, t, h, src_scale, hist, lin)?;
         let mut limited = false;
         for (k, el) in net.elements.iter().enumerate() {
-            if let Element::Diode {
-                i_s, n_ideality, ..
-            } = el
-            {
-                let (p, n) = el.nodes();
-                let vd = vn(&x, p) - vn(&x, n);
-                let nvt = n_ideality * VT_300K;
-                let vlim = pnjlim(vd, dlin[k], nvt, vcrit(*i_s, *n_ideality));
-                if (vlim - vd).abs() > 1e-15 {
-                    limited = true;
+            match el {
+                Element::Diode {
+                    i_s, n_ideality, ..
+                } => {
+                    let (p, n) = el.nodes();
+                    let vd = vn(&x, p) - vn(&x, n);
+                    let nvt = n_ideality * VT_300K;
+                    let vlim = pnjlim(vd, lin[k].v1, nvt, vcrit(*i_s, *n_ideality));
+                    if (vlim - vd).abs() > 1e-15 {
+                        limited = true;
+                    }
+                    lin[k].v1 = vlim;
                 }
-                dlin[k] = vlim;
+                Element::Mosfet { .. } | Element::MosfetEkv { .. } => {
+                    let (d, s) = el.nodes();
+                    let g = el.gate().unwrap();
+                    lin[k] = NlLin {
+                        v1: vn(&x, g),
+                        v2: vn(&x, d),
+                        v3: vn(&x, s),
+                    };
+                }
+                _ => {}
             }
         }
         let converged = x_prev.as_ref().is_some_and(|xp| {
@@ -578,6 +811,13 @@ pub(crate) fn element_states(
                 Element::Diode {
                     i_s, n_ideality, ..
                 } => i_s * ((v / (n_ideality * VT_300K)).exp() - 1.0) + GMIN * v,
+                Element::Mosfet { g, .. } | Element::MosfetEkv { g, .. } => {
+                    // Channel current at the converged potentials. The
+                    // converged companion current differs from this by
+                    // O(Δx²) ≪ the Tellegen tolerance; the gate carries
+                    // none, so p = i·v_ds is the device's full power.
+                    mos_eval(el, vn(*g), vn(p), vn(n)).0
+                }
             };
             ElemState { v, i }
         })

@@ -122,8 +122,24 @@ impl Waveform {
     }
 }
 
+/// MOSFET channel polarity. A `Pmos` device is the **exact mirror** of the
+/// `Nmos` device with the same parameters: i_P(v_g, v_d, v_s) =
+/// −i_N(−v_g, −v_d, −v_s), with `vth` the (positive) threshold magnitude for
+/// both. The mirror is exact in floating point, which is what the PMOS
+/// symmetry validation pins to 1e-12.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MosPolarity {
+    Nmos,
+    Pmos,
+}
+
 /// A circuit element. `p`/`n` are the positive/negative terminals; current
-/// through the element is oriented p → n (see module docs).
+/// through the element is oriented p → n (see module docs). For the
+/// three-terminal MOSFETs the (p, n) pair is (drain, source) — the gate is a
+/// pure high-impedance control terminal (no DC gate current in either model,
+/// and no gate capacitance: gate dynamics are deliberately out of scope, the
+/// channel dissipation is what the adiabatic energy analysis needs).
 ///
 /// `ic` on reactive elements is the initial condition used to start the
 /// transient (capacitor voltage / inductor current); it defaults to 0, which
@@ -176,6 +192,69 @@ pub enum Element {
         #[serde(default = "default_ideality")]
         n_ideality: f64,
     },
+    /// Level-1 (Shichman–Hodges) MOSFET — the M2 square-law device.
+    ///
+    /// NMOS with v_ds ≥ 0 (the device is source/drain symmetric; reversed
+    /// bias swaps the roles, which is what lets it model transmission gates):
+    ///
+    /// ```text
+    /// cutoff     v_gs ≤ vth:        i_d = 0
+    /// triode     v_ds < v_gs − vth: i_d = kp·[(v_gs − vth)·v_ds − v_ds²/2]·(1 + λ·v_ds)
+    /// saturation otherwise:         i_d = (kp/2)·(v_gs − vth)²·(1 + λ·v_ds)
+    /// ```
+    ///
+    /// `kp` is the full transconductance factor β = k′·W/L [A/V²] (W/L is
+    /// folded in — no geometry parsing, per the roadmap's deliberately-out
+    /// list). The (1 + λ·v_ds) factor applies in both conducting regions,
+    /// keeping i_d and its derivatives continuous at the triode/saturation
+    /// boundary. `vth` is the threshold magnitude (positive for both
+    /// polarities); PMOS is the exact mirror (see [`MosPolarity`]). No body
+    /// terminal: potentials enter bulk-referenced at ground (NMOS) / its
+    /// mirror (PMOS), i.e. a body-effect-free device. No gate current, no
+    /// gate capacitance.
+    Mosfet {
+        name: String,
+        d: Node,
+        g: Node,
+        s: Node,
+        polarity: MosPolarity,
+        vth: f64,
+        kp: f64,
+        #[serde(default)]
+        lambda: f64,
+    },
+    /// EKV-lite MOSFET — single-expression all-region model with honest
+    /// near/sub-threshold behavior (the adiabatic energy floor):
+    ///
+    /// ```text
+    /// i_d = I_S·[F(v_p − v_s) − F(v_p − v_d)]
+    /// F(u) = ln²(1 + e^{u/(2·φ_t)})        I_S = 2·n·kp·φ_t²
+    /// v_p  = (v_g − vth)/n                  (pinch-off voltage)
+    /// ```
+    ///
+    /// Limits: deep subthreshold i_d ∝ e^{(v_gs − vth)/(n·φ_t)} — slope
+    /// n·φ_t·ln10 per decade; strong-inversion saturation
+    /// i_d → kp/(2n)·(v_gs − vth)². The forward−reverse form is
+    /// source/drain symmetric by construction (transmission gates work
+    /// without case analysis) and never fully shuts off — the subthreshold
+    /// leakage that puts the interior minimum into E(T). Same conventions as
+    /// [`Element::Mosfet`]: `vth` is the threshold magnitude, PMOS is the
+    /// exact mirror, no body terminal / gate current / gate capacitance.
+    MosfetEkv {
+        name: String,
+        d: Node,
+        g: Node,
+        s: Node,
+        polarity: MosPolarity,
+        vth: f64,
+        kp: f64,
+        /// Slope factor (subthreshold swing = n·φ_t·ln10 per decade).
+        #[serde(default = "default_ekv_n")]
+        n: f64,
+        /// Thermal voltage kT/q [V]; defaults to [`VT_300K`] ≈ 25.85 mV.
+        #[serde(default = "default_phi_t")]
+        phi_t: f64,
+    },
 }
 
 fn default_i_s() -> f64 {
@@ -183,6 +262,12 @@ fn default_i_s() -> f64 {
 }
 fn default_ideality() -> f64 {
     1.0
+}
+fn default_ekv_n() -> f64 {
+    1.3
+}
+fn default_phi_t() -> f64 {
+    VT_300K
 }
 
 impl Element {
@@ -193,10 +278,15 @@ impl Element {
             | Element::Inductor { name, .. }
             | Element::VoltageSource { name, .. }
             | Element::CurrentSource { name, .. }
-            | Element::Diode { name, .. } => name,
+            | Element::Diode { name, .. }
+            | Element::Mosfet { name, .. }
+            | Element::MosfetEkv { name, .. } => name,
         }
     }
 
+    /// The (p, n) current-carrying terminal pair. For MOSFETs this is
+    /// (drain, source) — the channel branch; the gate carries no current
+    /// (reach it via [`Element::gate`]).
     pub fn nodes(&self) -> (Node, Node) {
         match self {
             Element::Resistor { p, n, .. }
@@ -205,7 +295,26 @@ impl Element {
             | Element::VoltageSource { p, n, .. }
             | Element::CurrentSource { p, n, .. }
             | Element::Diode { p, n, .. } => (*p, *n),
+            Element::Mosfet { d, s, .. } | Element::MosfetEkv { d, s, .. } => (*d, *s),
         }
+    }
+
+    /// The gate (control) terminal of a MOSFET, `None` for everything else.
+    pub fn gate(&self) -> Option<Node> {
+        match self {
+            Element::Mosfet { g, .. } | Element::MosfetEkv { g, .. } => Some(*g),
+            _ => None,
+        }
+    }
+
+    /// Whether the element makes the MNA matrix depend on the iterate
+    /// (Newton-Raphson inner loop; rules the element out of
+    /// [`crate::LinearDcSolver`]).
+    pub fn is_nonlinear(&self) -> bool {
+        matches!(
+            self,
+            Element::Diode { .. } | Element::Mosfet { .. } | Element::MosfetEkv { .. }
+        )
     }
 }
 
@@ -284,6 +393,63 @@ impl Netlist {
         });
         self
     }
+
+    /// Level-1 MOSFET (drain, gate, source). `vth` is the threshold
+    /// magnitude, `kp` the full β = k′·W/L [A/V²], `lambda` the
+    /// channel-length-modulation coefficient [1/V].
+    #[allow(clippy::too_many_arguments)]
+    pub fn mosfet(
+        &mut self,
+        name: &str,
+        d: Node,
+        g: Node,
+        s: Node,
+        polarity: MosPolarity,
+        vth: f64,
+        kp: f64,
+        lambda: f64,
+    ) -> &mut Self {
+        self.elements.push(Element::Mosfet {
+            name: name.into(),
+            d,
+            g,
+            s,
+            polarity,
+            vth,
+            kp,
+            lambda,
+        });
+        self
+    }
+
+    /// EKV-lite MOSFET (drain, gate, source). `n` is the slope factor,
+    /// `phi_t` the thermal voltage [V].
+    #[allow(clippy::too_many_arguments)]
+    pub fn mosfet_ekv(
+        &mut self,
+        name: &str,
+        d: Node,
+        g: Node,
+        s: Node,
+        polarity: MosPolarity,
+        vth: f64,
+        kp: f64,
+        n: f64,
+        phi_t: f64,
+    ) -> &mut Self {
+        self.elements.push(Element::MosfetEkv {
+            name: name.into(),
+            d,
+            g,
+            s,
+            polarity,
+            vth,
+            kp,
+            n,
+            phi_t,
+        });
+        self
+    }
 }
 
 #[cfg(test)]
@@ -345,5 +511,45 @@ mod tests {
         assert!(json.contains("\"shape\":\"dc\""));
         let back: Netlist = serde_json::from_str(&json).unwrap();
         assert_eq!(back, net);
+    }
+
+    /// MOSFET serde: documented tags, snake_case polarity, and the M2
+    /// defaults (lambda = 0; EKV n = 1.3, phi_t = VT_300K).
+    #[test]
+    fn mosfet_serde_round_trip_and_defaults() {
+        let m: Element = serde_json::from_str(
+            r#"{"kind":"mosfet","name":"m1","d":2,"g":1,"s":0,
+                "polarity":"nmos","vth":0.5,"kp":1e-4}"#,
+        )
+        .unwrap();
+        let Element::Mosfet {
+            polarity, lambda, ..
+        } = &m
+        else {
+            panic!("expected level-1 mosfet");
+        };
+        assert_eq!(*polarity, MosPolarity::Nmos);
+        assert_eq!(*lambda, 0.0);
+        let json = serde_json::to_string(&m).unwrap();
+        assert!(json.contains("\"kind\":\"mosfet\""));
+        assert!(json.contains("\"polarity\":\"nmos\""));
+        assert_eq!(serde_json::from_str::<Element>(&json).unwrap(), m);
+
+        let e: Element = serde_json::from_str(
+            r#"{"kind":"mosfet_ekv","name":"m2","d":3,"g":1,"s":2,
+                "polarity":"pmos","vth":0.4,"kp":2e-4}"#,
+        )
+        .unwrap();
+        let Element::MosfetEkv { n, phi_t, .. } = &e else {
+            panic!("expected ekv mosfet");
+        };
+        assert_eq!(*n, 1.3);
+        assert_eq!(*phi_t, VT_300K);
+        assert_eq!(e.nodes(), (3, 2));
+        assert_eq!(e.gate(), Some(1));
+        assert!(e.is_nonlinear());
+        let json = serde_json::to_string(&e).unwrap();
+        assert!(json.contains("\"kind\":\"mosfet_ekv\""));
+        assert_eq!(serde_json::from_str::<Element>(&json).unwrap(), e);
     }
 }

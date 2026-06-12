@@ -79,6 +79,17 @@ pub struct CellRun {
     pub transient: TransientResult,
 }
 
+impl CellRun {
+    /// Energy-recovery ratio 1 − E_diss/E_abrupt: the fraction of the
+    /// abrupt-switching energy the power clock got back. 0 at abrupt
+    /// switching, → 1 in the deep adiabatic regime — the trend
+    /// DeBenedictis's S2LAL sweeps (arXiv:2009.00448) chart against ramp
+    /// time, and §3.6's published-trend validation target.
+    pub fn recovery_ratio(&self) -> f64 {
+        1.0 - self.e_diss_j / self.e_abrupt_j
+    }
+}
+
 /// Run one cell at one T/RC ratio: builds the netlist via
 /// [`CellSpec::build`], steps it with dt = min(T, RC)/[`STEPS_PER_UNIT`]
 /// through the full clock cycle plus the settle tail, and returns the

@@ -12,17 +12,25 @@
 //! `REVERSIBLE_OVERHEAD_L0 = 10³` constant with a measured,
 //! frequency-dependent function ([`overhead_curve`] + [`fitted_slope`]).
 //!
-//! ## What's modeled, and the binding simplification
+//! ## What's modeled
 //!
-//! Switches are **linear on-resistances**, not MOSFETs (see
-//! [`cells`] module docs): the templates are the R–C abstraction the
-//! adiabatic scaling law E_R(T) = (RC/T)·CV²·[1 − (RC/T)(1 − e^{−T/RC})]
-//! (Athas et al. 1994) is derived for, which makes every validation check
-//! closed-form. Threshold drops, leakage and the non-adiabatic ½CV_th²
-//! residual of real pass devices arrive with `tei-sim-circuit`'s M2 MOSFET
-//! ladder.
+//! Two switch abstractions, both emitting plain `tei_sim_circuit::Netlist`s:
 //!
-//! ## Validation (tests/analytic.rs — analytic ground truth only)
+//! - **R–C templates** — switches as linear on-resistances, the abstraction
+//!   the adiabatic scaling law E_R(T) = (RC/T)·CV²·[1 − (RC/T)(1 − e^{−T/RC})]
+//!   (Athas et al. 1994) is derived for; every validation check is
+//!   closed-form. These follow the ideal −1 slope all the way down.
+//! - **S2LAL MOSFET templates** (`tei-sim-circuit` M2) — CMOS transmission
+//!   gates between trapezoid power-clocks and the loads, complementary
+//!   control trapezoids, and the opposing off T-gate per stage
+//!   ([`s2lal_chain`]). Level-1 switches add threshold/triode realism;
+//!   EKV-lite switches add the honest subthreshold leakage that floors the
+//!   curve, so E(T) develops the published interior minimum. Clocks and
+//!   controls stay ideal sources — measuring transistor + wire dissipation
+//!   is the point (see [`cells`] for the full list of kept simplifications).
+//!
+//! ## Validation (tests/analytic.rs + tests/s2lal.rs — analytic ground
+//! truth and published trends only)
 //!
 //! | Check | Source of truth |
 //! |---|---|
@@ -32,6 +40,10 @@
 //! | Charge-recovery cycle ≪ abrupt 2·½CV² when slow; → 2·½CV² when fast | closed form / property |
 //! | N-stage chain dissipation = N × single stage; Tellegen residual ≈ 0 | property (passthrough from -circuit) |
 //! | Executor's fitted slope ≡ direct-sweep slope | property |
+//! | S2LAL chain: slope → −1 in the adiabatic regime | closed-form scaling law |
+//! | S2LAL energy-recovery ratio improves monotonically with slower ramps | published trend (DeBenedictis arXiv:2009.00448) |
+//! | S2LAL + EKV leakage: E(T) has an interior minimum (the U-curve) | published trend (leakage-floored adiabatic energy) |
+//! | S2LAL abrupt limit lands at the N·CV² scale | closed form |
 //!
 //! Citations:
 //!   - DeBenedictis 2020, *arXiv:2009.00448* — S2LAL static 2-level adiabatic
@@ -48,7 +60,10 @@ pub mod cells;
 pub mod exec;
 pub mod sweep;
 
-pub use cells::{CellSpec, charge_recovery_cell, ramp_charge_cell, shift_register_chain};
+pub use cells::{
+    CellSpec, SwitchModel, charge_recovery_cell, ramp_charge_cell, s2lal_buffer_stage, s2lal_chain,
+    shift_register_chain, transmission_gate,
+};
 pub use exec::{AdiabaticExecutor, AdiabaticJob};
 pub use sweep::{
     ADIABATIC_REGIME_MIN_RATIO, CellRun, E_LANDAUER_300K, SweepPoint, fitted_slope, overhead_curve,

@@ -126,16 +126,17 @@ impl DcSolution {
 
 /// Solve the DC operating point (sources at their t = 0 values).
 ///
-/// Linear circuits solve in one LU; circuits with diodes run Newton-Raphson
-/// with `pnjlim` damping, falling back to source stepping (λ swept 0.1 → 1,
-/// diode linearization warm-started across λ) if plain Newton stalls — the
+/// Linear circuits solve in one LU; circuits with nonlinear devices (diodes,
+/// MOSFETs) run Newton-Raphson — `pnjlim`-damped on the diode junctions —
+/// falling back to source stepping (λ swept 0.1 → 1, nonlinear
+/// linearizations warm-started across λ) if plain Newton stalls — the
 /// roadmap's day-one mitigation for stiff operating points.
 pub fn solve_dc(net: &Netlist) -> Result<DcSolution, CircuitError> {
     let topo = Topology::build(net, Mode::DcOp)?;
     let hist = vec![ElemState::default(); net.elements.len()];
-    let mut dlin = mna::initial_dlin(net);
+    let mut lin = mna::initial_lin(net);
     let mut solver = SystemSolver::new(topo.n_nodes, SolverChoice::Auto);
-    let solve_at = |scale: f64, dlin: &mut [f64], solver: &mut SystemSolver| {
+    let solve_at = |scale: f64, lin: &mut [mna::NlLin], solver: &mut SystemSolver| {
         mna::solve(
             net,
             &topo,
@@ -145,17 +146,17 @@ pub fn solve_dc(net: &Netlist) -> Result<DcSolution, CircuitError> {
             1.0,
             scale,
             &hist,
-            dlin,
+            lin,
             solver,
         )
     };
-    let x = match solve_at(1.0, &mut dlin, &mut solver) {
+    let x = match solve_at(1.0, &mut lin, &mut solver) {
         Ok(x) => x,
         Err(CircuitError::NoConvergence) => {
-            let mut dlin = mna::initial_dlin(net);
+            let mut lin = mna::initial_lin(net);
             let mut last = Err(CircuitError::NoConvergence);
             for step in 1..=10 {
-                last = solve_at(step as f64 / 10.0, &mut dlin, &mut solver);
+                last = solve_at(step as f64 / 10.0, &mut lin, &mut solver);
                 if last.is_err() {
                     break;
                 }
@@ -213,18 +214,14 @@ impl LinearDcSolver {
     /// `Invalid` for malformed/nonlinear netlists, `Singular` if the MNA
     /// matrix cannot be factored.
     pub fn new(net: &Netlist) -> Result<Self, CircuitError> {
-        if net
-            .elements
-            .iter()
-            .any(|e| matches!(e, Element::Diode { .. }))
-        {
+        if net.elements.iter().any(Element::is_nonlinear) {
             return Err(CircuitError::Invalid(
-                "LinearDcSolver requires a linear netlist (no diodes)".into(),
+                "LinearDcSolver requires a linear netlist (no diodes or MOSFETs)".into(),
             ));
         }
         let topo = Topology::build(net, Mode::DcOp)?;
         let hist = vec![ElemState::default(); net.elements.len()];
-        let dlin = mna::initial_dlin(net);
+        let lin = mna::initial_lin(net);
         let mut triplets: Vec<(u32, u32, f64)> = Vec::new();
         let mut b0 = vec![0.0; topo.dim];
         mna::assemble_into(
@@ -236,7 +233,7 @@ impl LinearDcSolver {
             1.0,
             1.0,
             &hist,
-            &dlin,
+            &lin,
             &mut triplets,
             &mut b0,
         );
@@ -350,7 +347,7 @@ pub fn transient_with_progress(
 
     let topo = Topology::build(net, Mode::Step)?;
     let topo_init = Topology::build(net, Mode::Init)?;
-    let mut dlin = mna::initial_dlin(net);
+    let mut lin = mna::initial_lin(net);
     // One solver per assembly mode: Init and Step systems differ in
     // dimension and sparsity pattern, so each caches its own factorization.
     let mut init_solver = SystemSolver::new(topo_init.n_nodes, opts.solver);
@@ -367,7 +364,7 @@ pub fn transient_with_progress(
         h,
         1.0,
         &dummy,
-        &mut dlin,
+        &mut lin,
         &mut init_solver,
     )?;
     let mut states = mna::element_states(
@@ -401,7 +398,7 @@ pub fn transient_with_progress(
             h,
             1.0,
             &states,
-            &mut dlin,
+            &mut lin,
             &mut step_solver,
         )?;
         let new_states =
@@ -433,7 +430,10 @@ pub fn transient_with_progress(
     let (mut dissipated, mut src_absorbed, mut reactive) = (0.0, 0.0, 0.0);
     for (el, &e) in net.elements.iter().zip(&energy) {
         match el {
-            Element::Resistor { .. } | Element::Diode { .. } => dissipated += e,
+            Element::Resistor { .. }
+            | Element::Diode { .. }
+            | Element::Mosfet { .. }
+            | Element::MosfetEkv { .. } => dissipated += e,
             Element::VoltageSource { .. } | Element::CurrentSource { .. } => src_absorbed += e,
             Element::Capacitor { .. } | Element::Inductor { .. } => reactive += e,
         }
