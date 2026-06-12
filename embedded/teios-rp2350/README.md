@@ -60,11 +60,16 @@ flag form above works identically without it.)
 ## Host tests
 
 The wire format, the CRC32 implementation, and the cost table are
-host-testable (`src/lib.rs`); the JSON writer is locked to
-`tei-ledger`'s serde shape by comparing against `serde_json` output:
+host-testable. The board-independent half (CRC32, workload, JSON
+writers) lives in the shared [`teios-core`](../teios-core) crate (also
+used by the RP2040 port, [`teios-rp2040`](../teios-rp2040)); this
+crate's `src/lib.rs` pins the pico2 identity and locks the emitted
+lines to `tei-ledger`'s serde shape by comparing against `serde_json`
+output:
 
 ```sh
 cargo test --lib --target aarch64-apple-darwin   # or your host triple
+(cd ../teios-core && cargo test)                 # the shared logic
 ```
 
 ## The JSON-lines protocol (TEI Studio web console)

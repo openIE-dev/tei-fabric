@@ -23,6 +23,9 @@ description = "teiOS E1: priced-primitive dispatch demo on RP2350 — CRC32 on c
 # the wire format is produced by this crate's hand-rolled JSON writer and
 # locked to tei-ledger's serde shape by host tests.
 tei-ledger = { path = "../../crates/embedded/tei-ledger" }
+# Board-independent firmware core shared with the RP2040 port: CRC32
+# substrate, deterministic workload, JSON-lines writers.
+teios-core = { path = "../teios-core" }
 heapless = { version = "0.9", default-features = false }
 
 # Firmware-only dependencies: never built for the host, so `cargo test`

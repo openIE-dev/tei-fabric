@@ -1036,6 +1036,9 @@ name = "portable-atomic"
 version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c33a9471896f1c69cecef8d20cbe2f7accd12527ce60845ff44c153bb2a21b49"
+dependencies = [
+ "critical-section",
+]
 
 [[package]]
 name = "precomputed-hash"
@@ -1388,7 +1391,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "teios-rp2350"
+name = "teios-rp2040"
 version = "0.1.0"
 dependencies = [
  "cortex-m",
@@ -1399,6 +1402,7 @@ dependencies = [
  "embassy-usb",
  "heapless 0.9.1",
  "panic-halt",
+ "portable-atomic",
  "serde_json",
  "static_cell",
  "tei-ledger",

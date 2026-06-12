@@ -1,0 +1,26 @@
+# teios-core — the board-independent half of the teiOS E1 firmwares.
+#
+# Standalone crate (excluded from the root workspace alongside the
+# firmware projects: it exists to be path-depended by them). `no_std`,
+# allocation-free; host tests lock the hand-rolled JSON writer to
+# tei-ledger's serde shape:
+#
+#     cargo test
+
+[package]
+name = "teios-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+description = "teiOS E1 shared core: CRC32 Hash primitive, deterministic workload, and the JSON-lines ledger protocol shared by the RP2350/RP2040 (and future) firmwares."
+
+[dependencies]
+# The TEI Embedded device contract (E0). Core only — no serde on target;
+# the wire format is produced by this crate's hand-rolled JSON writer and
+# locked to tei-ledger's serde shape by host tests.
+tei-ledger = { path = "../../crates/embedded/tei-ledger" }
+
+[dev-dependencies]
+tei-ledger = { path = "../../crates/embedded/tei-ledger", features = ["serde"] }
+serde_json = "1"

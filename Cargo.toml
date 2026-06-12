@@ -2,7 +2,12 @@
 resolver = "3"
 # Firmware projects build for embedded targets with their own profiles
 # and cargo config; they consume crates/embedded/tei-ledger by path.
-exclude = ["embedded/teios-rp2350"]
+# teios-core is the board-independent half both firmwares share.
+exclude = [
+    "embedded/teios-core",
+    "embedded/teios-rp2350",
+    "embedded/teios-rp2040",
+]
 members = [
     "crates/embedded/tei-ledger",
     "crates/tei-stack",

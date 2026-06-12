@@ -1,13 +1,26 @@
-//! teiOS E1 — host-testable core of the RP2350 firmware.
+//! teiOS E1a — host-testable core of the RP2040 firmware.
 //!
 //! The firmware binary ([`main.rs`](../src/main.rs)) owns the hardware
-//! (USB CDC, DWT CYCCNT, the DMA sniffer); the board-independent logic
-//! — the software CRC32 substrate, the deterministic workload, and the
-//! JSON-lines writers — lives in the shared `teios-core` crate (also
-//! used by the RP2040 port). This crate pins the Pico 2's identity:
-//! board strings, substrate names, and the shipped cost table; the
-//! tests at the bottom lock the board's wire format to `tei-ledger`'s
-//! serde shape.
+//! (USB CDC, the 1 MHz TIMER, the DMA sniffer); the board-independent
+//! logic — the software CRC32 substrate, the deterministic workload,
+//! and the JSON-lines writers — lives in the shared `teios-core` crate
+//! (also used by teios-rp2350). This crate pins the RP2040 board
+//! identity: board strings, substrate names, and the shipped cost
+//! table; the tests at the bottom lock the board's wire format to
+//! `tei-ledger`'s serde shape.
+//!
+//! # Cycles on the Cortex-M0+ (the CycleSource doctrine)
+//!
+//! The M0+ has **no DWT CYCCNT** — no CPU cycle counter exists on this
+//! chip, full stop. Per the roadmap's per-substrate `CycleSource`
+//! doctrine, the firmware derives cycles from the RP2040 TIMER (1 MHz,
+//! 64-bit): `cycles = elapsed_us × clk_sys_MHz` (125 at the embassy-rp
+//! default clock). The boot line therefore reports `cyccnt:false` —
+//! there is no cycle counter — while cpu ledgers carry the honest
+//! timer-derived proxy in `cycles` (quantization ±1 µs = ±125 cycles
+//! per measured span; see `fw::TimerCycleSource`). Energy provenance
+//! is unchanged: it lives in `joules_source`, and this image ships at
+//! the Table tier.
 //!
 //! # The JSON-lines protocol (what TEI Studio's web console parses)
 //!
@@ -16,15 +29,16 @@
 //! snake_case names, `None` fields **omitted** (never `null`). Numbers
 //! may use exponent notation (`4e-6`) — any JSON parser accepts both.
 //!
-//! - `{"type":"boot","board_id":"pico2","firmware":"teios-rp2350/0.1.0",
-//!    "primitive_id":36,"buf_len":65536,"cyccnt":true}`
-//!   Once after USB connects. `cyccnt:false` means the M33 reported
-//!   `DWT_CTRL.NOCYCCNT` (no cycle counter) and cpu ledgers carry
-//!   `cycles:0`.
-//! - `{"type":"ledger","board_id":"pico2","substrate":"cpu@150mhz",
-//!    "primitive_id":36,"n_ops":1,"ledger":{"cycles":524288,
-//!    "dma_transfers":0,"adc_samples":0,"accel_invocations":0,
-//!    "sleep_us":0,"active_us":3495,"joules_source":"table"}}`
+//! - `{"type":"boot","board_id":"feather-rp2040",
+//!    "firmware":"teios-rp2040/0.1.0","primitive_id":36,
+//!    "buf_len":65536,"cyccnt":false}`
+//!   Once after USB connects. `cyccnt` is always `false` on RP2040
+//!   (see above); `cycles` in cpu ledgers is the timer proxy.
+//! - `{"type":"ledger","board_id":"feather-rp2040",
+//!    "substrate":"cpu@125mhz","primitive_id":36,"n_ops":1,
+//!    "ledger":{"cycles":1250000,"dma_transfers":0,"adc_samples":0,
+//!    "accel_invocations":0,"sleep_us":0,"active_us":10000,
+//!    "joules_source":"table"}}`
 //!   One per primitive run per substrate. The `ledger` object is exactly
 //!   `tei_ledger::EventLedger` in serde form; `instructions`/`joules`
 //!   appear only when present.
@@ -33,7 +47,7 @@
 //!   is their agreement. CRCs are the u32 values as JSON numbers.
 //! - `{"type":"dispatch","primitive_id":36,"chosen":"dma-sniffer",
 //!    "j_per_op":4e-6,"joules_source":"table","alternatives":[
-//!    {"substrate":"cpu@150mhz","j_per_op":9e-5,"joules_source":"table"}]}`
+//!    {"substrate":"cpu@125mhz","j_per_op":1.8e-4,"joules_source":"table"}]}`
 //!   The lowest-joule verdict from [`CostTable::cheapest`], plus every
 //!   priced alternative for the primitive.
 
@@ -45,11 +59,25 @@ use tei_ledger::{CostEntry, CostTable, EventLedger, JoulesSource};
 use teios_core::BoardConfig;
 pub use teios_core::{BUF_LEN, COST_CAPACITY, PRIMITIVE_HASH, crc32_software, fill_pattern};
 
-/// Board identity, forge conventions.
-pub const BOARD_ID: &str = "pico2";
+#[cfg(all(feature = "board-feather-rp2040", feature = "board-pico"))]
+compile_error!("enable exactly one board feature: board-feather-rp2040 OR board-pico");
+#[cfg(not(any(feature = "board-feather-rp2040", feature = "board-pico")))]
+compile_error!(
+    "enable a board feature: board-feather-rp2040 (default) or \
+     --no-default-features --features board-pico"
+);
+
+/// Board identity, forge conventions. Selected by the board feature,
+/// which also selects the matching boot2 flash bootloader.
+#[cfg(feature = "board-feather-rp2040")]
+pub const BOARD_ID: &str = "feather-rp2040";
+/// Board identity, forge conventions. Selected by the board feature,
+/// which also selects the matching boot2 flash bootloader.
+#[cfg(all(feature = "board-pico", not(feature = "board-feather-rp2040")))]
+pub const BOARD_ID: &str = "pico";
 
 /// Firmware identity reported in the boot line.
-pub const FIRMWARE: &str = concat!("teios-rp2350/", env!("CARGO_PKG_VERSION"));
+pub const FIRMWARE: &str = concat!("teios-rp2040/", env!("CARGO_PKG_VERSION"));
 
 /// This board, as stamped on every JSON line.
 pub const BOARD: BoardConfig = BoardConfig {
@@ -57,23 +85,26 @@ pub const BOARD: BoardConfig = BoardConfig {
     firmware: FIRMWARE,
 };
 
-/// Substrate name for the software CRC32 on the Cortex-M33 at the
-/// embassy-rp default 150 MHz system clock.
-pub const SUBSTRATE_CPU: &str = "cpu@150mhz";
+/// Substrate name for the software CRC32 on the Cortex-M0+ at the
+/// embassy-rp default 125 MHz system clock.
+pub const SUBSTRATE_CPU: &str = "cpu@125mhz";
 
-/// Substrate name for the RP2350 DMA sniffer (hardware CRC32 computed
-/// by the DMA engine while the CPU is free to sleep).
+/// Substrate name for the RP2040 DMA sniffer (hardware CRC32 computed
+/// by the DMA engine while the CPU is free to sleep — the same
+/// SNIFF_DATA/SNIFF_CTRL block the RP2350 kept).
 pub const SUBSTRATE_DMA: &str = "dma-sniffer";
 
 // ---------------------------------------------------------------------------
 // Shipped cost table — Table tier.
 // ---------------------------------------------------------------------------
 
-/// ILLUSTRATIVE J/op for one CRC32 pass over [`BUF_LEN`] on the M33 at
-/// 150 MHz (software, table-driven). Placeholder default pending the
-/// novel E1 bench measurement (PPK2) — no published figure exists; the
-/// ledger says `joules_source: table` so nothing overclaims.
-pub const CPU_J_PER_OP: f64 = 9.0e-5;
+/// ILLUSTRATIVE J/op for one CRC32 pass over [`BUF_LEN`] on the M0+ at
+/// 125 MHz (software, table-driven). Placeholder default pending the
+/// E1 bench measurement (PPK2) — no published figure exists; the
+/// ledger says `joules_source: table` so nothing overclaims. Kept
+/// above the RP2350's M33 placeholder (the two-cycle-per-bit M0+
+/// works harder per byte), but it is a placeholder, not a measurement.
+pub const CPU_J_PER_OP: f64 = 1.8e-4;
 
 /// ILLUSTRATIVE J/op for the same pass via the DMA sniffer. Same
 /// caveat as [`CPU_J_PER_OP`]: a placeholder Table-tier default, kept
@@ -104,7 +135,8 @@ pub fn shipped_cost_table() -> CostTable<COST_CAPACITY> {
 // JSON-lines writers — teios-core's, with this board's identity bound.
 // ---------------------------------------------------------------------------
 
-/// `{"type":"boot",...}` — once after USB connects.
+/// `{"type":"boot",...}` — once after USB connects. On RP2040 the
+/// firmware always passes `cyccnt: false` (no cycle counter on M0+).
 pub fn write_boot_line<W: Write>(w: &mut W, cyccnt: bool) -> fmt::Result {
     teios_core::write_boot_line(w, &BOARD, cyccnt)
 }
@@ -128,18 +160,18 @@ mod tests {
 
     /// The wire-format lock for this board: the emitted ledger line must
     /// equal serde_json's rendering of the same `EventLedger` and carry
-    /// the pico2 identity. (The generic shape tests live in teios-core.)
+    /// the board identity. (The generic shape tests live in teios-core.)
     #[test]
     fn ledger_line_matches_tei_ledger_serde_shape() {
         let mut l = EventLedger::new(JoulesSource::Table);
-        l.cycles = 524_288;
-        l.active_us = 3_495;
+        l.cycles = 1_250_000; // timer proxy: 10 000 µs × 125 MHz
+        l.active_us = 10_000;
         let mut s = String::new();
         write_ledger_line(&mut s, SUBSTRATE_CPU, 1, &l).unwrap();
         let v: Value = serde_json::from_str(&s).unwrap();
         assert_eq!(v["type"], "ledger");
-        assert_eq!(v["board_id"], "pico2");
-        assert_eq!(v["substrate"], "cpu@150mhz");
+        assert_eq!(v["board_id"], BOARD_ID);
+        assert_eq!(v["substrate"], "cpu@125mhz");
         assert_eq!(v["primitive_id"], 36);
         assert_eq!(v["n_ops"], 1);
         assert_eq!(v["ledger"], serde_json::to_value(l).unwrap());
@@ -149,16 +181,31 @@ mod tests {
     }
 
     #[test]
-    fn boot_line_carries_board_identity() {
+    fn boot_line_carries_board_identity_and_no_cyccnt() {
         let mut b = String::new();
-        write_boot_line(&mut b, true).unwrap();
+        write_boot_line(&mut b, false).unwrap();
         let v: Value = serde_json::from_str(&b).unwrap();
         assert_eq!(v["type"], "boot");
-        assert_eq!(v["board_id"], "pico2");
+        assert_eq!(v["board_id"], BOARD_ID);
         assert_eq!(v["firmware"], FIRMWARE);
         assert_eq!(v["primitive_id"], 36);
         assert_eq!(v["buf_len"], 65_536);
-        assert_eq!(v["cyccnt"], true);
+        // M0+ has no DWT CYCCNT; the firmware reports the truth.
+        assert_eq!(v["cyccnt"], false);
+    }
+
+    /// Each board feature pins its literal id (the forge convention).
+    #[cfg(feature = "board-feather-rp2040")]
+    #[test]
+    fn board_id_is_feather_rp2040() {
+        assert_eq!(BOARD_ID, "feather-rp2040");
+    }
+
+    /// Each board feature pins its literal id (the forge convention).
+    #[cfg(all(feature = "board-pico", not(feature = "board-feather-rp2040")))]
+    #[test]
+    fn board_id_is_pico() {
+        assert_eq!(BOARD_ID, "pico");
     }
 
     #[test]
@@ -185,7 +232,7 @@ mod tests {
         assert_eq!(
             alts,
             &vec![
-                json!({"substrate": "cpu@150mhz", "j_per_op": CPU_J_PER_OP, "joules_source": "table"})
+                json!({"substrate": "cpu@125mhz", "j_per_op": CPU_J_PER_OP, "joules_source": "table"})
             ]
         );
     }
@@ -193,7 +240,7 @@ mod tests {
     /// Every line the firmware can emit fits the firmware's line buffer.
     #[test]
     fn lines_fit_firmware_buffer() {
-        const LINE_CAP: usize = teios_core::LINE_CAP; // keep in sync with main.rs
+        const LINE_CAP: usize = teios_core::LINE_CAP; // keep in sync with fw.rs
         let mut l = EventLedger::new(JoulesSource::Table);
         l.cycles = u64::MAX;
         l.instructions = Some(u64::MAX);
