@@ -1,8 +1,12 @@
 # teiOS E1 — Raspberry Pi Pico 2 (RP2350) firmware.
 #
 # Standalone project (excluded from the root workspace: different target,
-# embedded-only dependency tree). Builds for thumbv8m.main-none-eabihf by
-# default (.cargo/config.toml); host tests run the `lib` portion only:
+# embedded-only dependency tree). Build with
+#
+#     cargo build --release --target thumbv8m.main-none-eabihf
+#
+# (or activate cargo-config-staged.toml as .cargo/config.toml to make
+# that the default). Host tests run the `lib` portion only:
 #
 #     cargo test --lib --target aarch64-apple-darwin
 

@@ -181,7 +181,11 @@ fn write_ledger_object<W: Write>(w: &mut W, l: &EventLedger) -> fmt::Result {
     if let Some(j) = l.joules {
         write!(w, ",\"joules\":{j:e}")?;
     }
-    write!(w, ",\"joules_source\":\"{}\"}}", joules_source_str(l.joules_source))
+    write!(
+        w,
+        ",\"joules_source\":\"{}\"}}",
+        joules_source_str(l.joules_source)
+    )
 }
 
 /// `{"type":"boot",...}` — once after USB connects.
@@ -282,7 +286,10 @@ mod tests {
         // The canonical CRC-32/ISO-HDLC check value.
         assert_eq!(crc32_software(b"123456789"), 0xCBF4_3926);
         assert_eq!(crc32_software(b""), 0);
-        assert_eq!(crc32_software(b"The quick brown fox jumps over the lazy dog"), 0x414F_A339);
+        assert_eq!(
+            crc32_software(b"The quick brown fox jumps over the lazy dog"),
+            0x414F_A339
+        );
     }
 
     #[test]

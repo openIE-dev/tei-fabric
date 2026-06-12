@@ -1,0 +1,11 @@
+# Staged copy of .cargo/config.toml — move into place with:
+#   mkdir -p .cargo && mv cargo-config-staged.toml .cargo/config.toml
+# (Purely convenience: default target + `cargo run` flashing. Every
+# command in the README also works without it via explicit --target.)
+
+[build]
+target = "thumbv8m.main-none-eabihf"
+
+[target.'cfg(all(target_arch = "arm", target_os = "none"))']
+# `picotool load -u -v -x -t elf` flashes and reboots a BOOTSEL-mode Pico 2.
+runner = "picotool load -u -v -x -t elf"
