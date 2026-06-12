@@ -57,14 +57,14 @@ tiered by flash path, best first.
 | nRF52840-DK / dongle | M4F | **PPI**, radio, on-die USB | nrfutil DFU on dongle; PPK2 attaches for T1 calibration |
 | nRF5340-DK | M33 app + M33 net | dual-core dispatch, DPPI | |
 | **nRF54L15-DK** ($39) | M33 + **FLPR VPR core** (RV32EMC @128 MHz; PPR is nRF54H20-only) | FLPR (Zephyr `cpuflpr` target, NCS soft-peripherals), DPPI | among the most TEI-shaped MCUs shipping: a dispatchable RISC-V helper core |
-| STM32 Nucleo (G4 / H72x-H73x / H5 / **U5**) | the FMAC+CORDIC families (NOT F4/L4/H743/H503) | DMA, **FMAC** (≈1 MAC/cycle — value is full CPU offload via DMA; 7–11× vs CMSIS-DSP measured on G474), **CORDIC** (5–10× vs sw sin/cos), U5 LPBAM autonomous chains (~10 µA ADC sampling in Stop 2) | on-board ST-LINK; probe-rs flashes |
+| STM32 Nucleo (G4 / H72x-H73x / H5 / **U5**) | the FMAC+CORDIC families (NOT F4/L4/H743/H503) | DMA, **FMAC** (≈1 MAC/cycle — value is full CPU offload via DMA; 7–11× vs CMSIS-DSP measured on G474), **CORDIC** (5–10× vs sw sin/cos), U5 LPBAM autonomous chains (~10 µA ADC sampling in Stop 2) | on-board ST-LINK; probe-rs flashes. **No on-die current/energy meter on any STM32** (ST-confirmed: shunt/IDD jumper or STLINK-V3PWR only) → T1 |
 | **STM32N6 Nucleo (~$56) / DK (~$185)** | N6 (M55 @800 MHz + **ST Neural-ART NPU**, 600 GOPS — proprietary, NOT Ethos-U) | NPU (closed ST toolchain), Helium SIMD, DMA | NPU column; MLPerf-Tiny measured 156–444 µJ/inference |
 | NXP FRDM-MCXN947 (~$26) | 2×M33 @150 MHz + **eIQ Neutron NPU** (NXP proprietary, NOT Ethos-U) + PowerQuad | NPU (closed NXP tools), PowerQuad (FFT/FIR/CORDIC) | NPU column, NXP channel |
 | Teensy 4.0 / 4.1 | i.MX RT1062 (M7 @600 MHz) | 2×FlexIO, DMA, CM7 dual-issue | teensy_loader_cli; the performance MCU |
 | Arduino UNO R4 / classic UNO R3 | RA4M1 / ATmega328P | DAC/CTSU / —— | reach play only; R3 via avrdude |
 | TI MSP430FR LaunchPads (FR5994/FR6989-class) | MSP430FR (+ **LEA** accel, 36× energy on FFT measured) | LEA vector math, FRAM | **EnergyTrace = the bench-calibration (T1) anchor, NOT T0**: the charge-pulse counter lives in the eZ-FET/MSP-FET/XDS110 debug probe — firmware can never read its own joules (TI-confirmed). ET++ state-correlation only on FR59xx/69xx + CC13xx/26xx (the latter via XDS110) |
 | TI MSPM0 LaunchPads | M0+ | analog blocks | $0.5-class parts |
-| **SiLabs xG24 Pro Kit** (PK6010A — NOT the Dev Kit, which lacks AEM) | EFR32MG24 (M33) | MVP AI/ML accel (≈6× energy vs M33), radio | **WSTK/WPK mainboard AEM = T0 energy telemetry without bench gear** |
+| **SiLabs xG24 Pro Kit** (PK6010A — NOT the Dev Kit, which lacks AEM) | EFR32MG24 (M33) | MVP AI/ML accel (≈6× energy vs M33), radio | **The confirmed T0 path: target firmware reads its own AEM current via BSP_CurrentGet()/BSP_VoltageGet() over the board-controller channel** (BCP; verified in simplicity_sdk source, not deprecated). One bench-verify pending on the BRD4002A WPK board-controller servicing legacy BCP packets |
 | Ambiq Apollo4/5 EVB | M4F/M55 subthreshold | low-power GPU (4), Helium (5) | the µW-class floor; J-Link |
 | Alif Ensemble DK-E7 | M55-HP+**Ethos-U55-256** & M55-HE+**Ethos-U55-128** | dual NPU, dual core | **the only true Ethos-U part in this matrix** (open Vela toolchain; ST/NXP NPUs need closed tools). Published: 76× energy vs M55-alone MobileNetV2. E4/E6/E8 successors ship Ethos-U85 |
 | WCH CH32V003 dev board | RV32EC @48 MHz | —— | $0.10 CPU; minichlink/wchisp; the "TEI on ten cents" stunt |
@@ -110,9 +110,9 @@ simply our flat binary. Turnkey UX identical to Raspberry Pi OS, contents
 
 | Board | Silicon | Bare-metal state | Notes |
 |---|---|---|---|
-| **Raspberry Pi Zero 2 W** | BCM2710 (4×A53) | mature (circle, rust crates) | $15; the image-flash flagship |
+| **Raspberry Pi Zero 2 W** | BCM2710 (4×A53) | mature (circle, rust crates) | $15; the image-flash flagship. **Zero power telemetry** (schematic-verified: dumb bucks, no sense resistors) — cycles-proxy T1 only |
 | Raspberry Pi 4 / CM4 | BCM2711 (4×A72) | mature | |
-| Raspberry Pi 5 | BCM2712 + **RP1** | workable; RP1 southbridge adds I/O complexity | document as "later" |
+| Raspberry Pi 5 | BCM2712 + **RP1** | workable; RP1 southbridge adds I/O complexity | document as "later" — but note: **PMIC ADCs are runtime-readable** (`vcgencmd pmic_read_adc`; per-rail V/I) → teiOS on Pi 5 can self-calibrate (caveat: 5V/USB path bypasses the PMIC) |
 | Raspberry Pi 3 | BCM2837 | mature | the docs/tutorials corpus |
 | BeagleBone Black / BeaglePlay | AM335x (PRU 2×200 MHz) / AM625 (PRUSS 2× up to 333 MHz, no ICSSG) | bare-metal possible; **PRU-ICSS** deterministic RT cores | PRUs = first-class substrate; AM62x PRU Academy launched 2026-04 |
 | i.MX8M Plus EVK (M7 core) | A53×4 + M7 + NPU | M7 bare metal via RPMsg-less boot | asymmetric-core dispatch story |

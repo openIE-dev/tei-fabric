@@ -59,6 +59,12 @@ Three shapes, all already canon in the fabric, all serializable small:
    count cheaply, replacing the sim columns' counters:
    `{cycles, instructions?, dma_transfers, adc_samples, accel_invocations,
    sleep_us, active_us, joules?: Option, joules_source: measured|cycles_proxy|table}`.
+   Cycle-counting is itself per-substrate (verified): ARM cores use DWT
+   CYCCNT/PMU; ESP32-C6 uses Espressif's CUSTOM PCCR CSR at 0x7e2
+   (SOC_CPU_HAS_CSR_PC) while ESP32-P4 uses standard mcycle; and the
+   nRF54 FLPR has NO cycle counter at all (rv32emc, no Zicntr) — its
+   ledger times via the GRTC peripheral. The core crate therefore takes
+   a `CycleSource` impl per substrate rather than assuming one CSR.
    `joules` is honest about provenance — a board with a coulomb counter
    reports `measured`; a bare board reports `cycles_proxy` against its
    calibrated per-state power table; an uncalibrated board reports `table`
@@ -151,10 +157,20 @@ the shape.
 
 **Energy measurement tiers** (a board is in exactly one tier per substrate):
 
-- **T0 measured** — on-board coulomb counter / power monitor readable by
-  firmware (INA228/PAC1934-class, EFM32 AEM, fuel gauges). Real joules.
-- **T1 calibrated proxy** — DWT CYCCNT / mcycle × a per-power-state table
-  calibrated once on a bench (PPK2/Joulescope/Otii with GPIO markers) or
+- **T0 measured** — energy readable by the TARGET's own firmware. Two
+  confirmed paths: (a) I2C monitors with hardware energy accumulation —
+  the INA228 is verified ideal: a 40-bit ENERGY register integrating
+  joules in hardware (continuous mode), E[J] = 16·3.2·CURRENT_LSB·reg,
+  2.94 MHz I2C readout — one part turns ANY board into T0; (b) SiLabs
+  STK/WSTK: target firmware queries its own AEM current via
+  BSP_CurrentGet() over the board-controller protocol (source-verified
+  in simplicity_sdk). Pi 5's runtime-readable PMIC ADCs are a near-T0
+  third path. Verified NON-paths: EnergyTrace (probe-side counter,
+  TI-confirmed no target access), all STM32 (external shunt only),
+  Pi Zero 2 W (no sense circuitry at all).
+- **T1 calibrated proxy** — cycle/time counters × a per-power-state table
+  calibrated once on a bench (PPK2 — ±10% typ R1-R4 / ±15% R5, so T1
+  carries honest ~10-15% error bars; Joulescope/Otii tighter) or
   crowd-sourced from T0 boards of the same family via the fabric store.
 - **T2 shipped table** — defaults from datasheets; honest `joules_source:
   table`. Still useful: dispatch *ratios* between substrates are far more
