@@ -46,9 +46,16 @@ import Layout from '../layouts/Layout.astro';
 
     <!-- live ledger -->
     <div class="glass-card p-6">
-      <div class="flex items-baseline justify-between mb-4">
+      <div class="flex items-baseline justify-between mb-2">
         <p class="section-label">live ledger</p>
         <p id="conn-state" class="font-mono text-[10px] text-brand-gray uppercase tracking-wider">disconnected</p>
+      </div>
+      <div id="prov-bar" class="hidden mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11px] bg-black/30 rounded-lg px-3 py-2">
+        <span><span class="text-brand-gray">board</span> <span id="pv-board" class="text-brand-white">—</span></span>
+        <span><span class="text-brand-gray">provenance</span> <span id="pv-src" class="text-brand-amber">—</span></span>
+        <span><span class="text-brand-gray">odometer</span> <span id="pv-odo" class="text-brand-light">0 J</span>
+          <button id="pv-odo-reset" class="ml-1 text-brand-gray hover:text-brand-light underline decoration-dotted">reset</button></span>
+        <span id="pv-issues-wrap" class="hidden"><span class="text-brand-gray">issues</span> <span id="pv-issues"></span></span>
       </div>
       <div class="relative aspect-[16/8]">
         <canvas id="chart" class="absolute inset-0 w-full h-full"></canvas>
@@ -190,6 +197,27 @@ function draw() {
 // ── ledger stream handling (the teiOS JSON-lines protocol) ────────────
 const counts = { ledger: 0, dispatch: 0, check_ok: 0, check_fail: 0 };
 let lastDispatch = null, boardId = null;
+let odometerJ = 0, lastSrc = null;
+const issues = new Map(); // key -> {count, label, sev}
+function issue(key, label, sev) {
+  const e = issues.get(key) || { count: 0, label, sev };
+  e.count++; issues.set(key, e);
+  renderProv();
+}
+function renderProv() {
+  const bar = $('prov-bar');
+  if (!boardId && !odometerJ) return;
+  bar.classList.remove('hidden');
+  $('pv-board').textContent = boardId || '—';
+  $('pv-src').textContent = lastSrc || '—';
+  $('pv-src').style.color = lastSrc === 'measured' ? GREEN : (lastSrc === 'cycles_proxy' ? '#0ea5e9' : AMBER);
+  $('pv-odo').textContent = odometerJ < 1e-3 ? odometerJ.toExponential(2) + ' J' : odometerJ.toFixed(3) + ' J';
+  const wrap = $('pv-issues-wrap'), el = $('pv-issues');
+  if (!issues.size) { wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  el.innerHTML = [...issues.values()].map(i =>
+    `<span class="px-1.5 py-0.5 rounded mr-1" style="background:${i.sev === 'err' ? 'rgba(248,113,113,0.15)' : 'rgba(245,158,11,0.12)'};color:${i.sev === 'err' ? '#f87171' : AMBER}">${i.label} ×${i.count}</span>`).join('');
+}
 function logLine(s, cls) {
   const el = $('log'); const div = document.createElement('div');
   if (cls) div.style.color = cls;
@@ -206,18 +234,23 @@ function handleLine(line) {
     const j = m.ledger && m.ledger.joules;
     const t = (Date.now() - (t0 ??= Date.now())) / 1000;
     if (j != null) {
+      odometerJ += j;
+      lastSrc = m.ledger.joules_source || lastSrc;
       if (!series.has(m.substrate)) series.set(m.substrate, []);
       const pts = series.get(m.substrate); pts.push({ t, j, msg: m });
       if (pts.length > 300) pts.shift();
-      draw();
+      draw(); renderProv();
     }
     logLine(`ledger ${m.substrate} · ${m.ledger?.cycles ?? '—'} cyc · ${j != null ? j.toExponential(2) + ' J (' + (m.ledger.joules_source || '?') + ')' : 'unpriced'}`);
   } else if (m.type === 'dispatch') {
-    counts.dispatch++; lastDispatch = m;
+    counts.dispatch++;
+    if (lastDispatch && lastDispatch.chosen !== m.chosen)
+      issue('flip:' + lastDispatch.chosen + '>' + m.chosen, `dispatch flip ${lastDispatch.chosen}→${m.chosen}`, 'warn');
+    lastDispatch = m;
     logLine(`dispatch → ${m.chosen} @ ${Number(m.j_per_op).toExponential(2)} J/op`, AMBER);
   } else if (m.type === 'check') {
     m.ok ? counts.check_ok++ : counts.check_fail++;
-    if (!m.ok) logLine('CHECK FAILED', '#f87171');
+    if (!m.ok) { logLine('CHECK FAILED', '#f87171'); issue('check-fail', 'check failed', 'err'); }
   } else { logLine(line); }
   renderStats();
 }
@@ -291,8 +324,13 @@ $('btn-demo').addEventListener('click', () => {
       ledger: { cycles: 14400000 + (n % 7) * 1000, dma_transfers: 0, adc_samples: 0, accel_invocations: 0, sleep_us: 0, active_us: 96000, joules: cpuJ, joules_source: 'table' } }));
     handleLine(JSON.stringify({ type: 'ledger', board_id: 'pico2-sim', substrate: 'dma-sniffer', primitive_id: 36, n_ops: 1,
       ledger: { cycles: 0, dma_transfers: 16384, adc_samples: 0, accel_invocations: 1, sleep_us: 90000, active_us: 6000, joules: dmaJ, joules_source: 'table' } }));
-    handleLine(JSON.stringify({ type: 'dispatch', primitive_id: 36, chosen: 'dma-sniffer', j_per_op: dmaJ,
-      alternatives: [{ substrate: 'cpu@150mhz', j_per_op: cpuJ }] }));
+    // every 7th tick the noise makes the CPU win — exercising the
+    // dispatch-flip detector the way a real noisy board would
+    const flip = n % 7 === 0;
+    handleLine(JSON.stringify({ type: 'dispatch', primitive_id: 36,
+      chosen: flip ? 'cpu@150mhz' : 'dma-sniffer',
+      j_per_op: flip ? cpuJ : dmaJ,
+      alternatives: [{ substrate: flip ? 'dma-sniffer' : 'cpu@150mhz', j_per_op: flip ? dmaJ : cpuJ }] }));
     handleLine(JSON.stringify({ type: 'check', ok: true }));
   }, 1000);
 });
@@ -356,6 +394,7 @@ function renderSelection() {
   }
 }
 $('btn-clear-sel').addEventListener('click', () => { sel = null; draw(); renderSelection(); });
+$('pv-odo-reset').addEventListener('click', () => { odometerJ = 0; renderProv(); logLine('odometer reset'); });
 $('btn-publish-sel').addEventListener('click', async () => {
   const rows = selRows(); if (!rows.length) return;
   const btn = $('btn-publish-sel');
@@ -399,7 +438,7 @@ const GRAMMAR = [
   { re: /^stop$/i, cmd: 'stop', describe: () => 'stop the simulated board',
     run: () => { if (demoTimer) $('btn-demo').click(); } },
   { re: /^clear$/i, cmd: 'clear', describe: () => 'clear chart series, selection, and log',
-    run: () => { series.clear(); sel = null; t0 = null; $('log').innerHTML = ''; draw(); renderSelection(); } },
+    run: () => { series.clear(); sel = null; t0 = null; odometerJ = 0; issues.clear(); $('log').innerHTML = ''; draw(); renderSelection(); renderProv(); } },
   { re: /^baud\s+(\d{3,7})$/i, cmd: 'baud', describe: m => `set serial baud to ${m[1]}`,
     run: m => { $('baud').value = m[1]; logLine(`baud set to ${m[1]} (takes effect on next connect)`); } },
   { re: /^select\s+last\s+(\d+)\s*s(econds)?$/i, cmd: 'select', describe: m => `select the last ${m[1]} seconds of the trace`,
