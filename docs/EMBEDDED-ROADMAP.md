@@ -170,9 +170,10 @@ the shape.
 - **Raspberry Pi (4/5/Zero 2)** — the Linux/Yocto/teid flagship and the
   turnkey image; hwmon/INA HATs for T0 measurement; the board everyone
   already owns.
-- Stretch: one Ethos-U board (STM32N6 / MCX N / Alif) for the NPU column,
-  one nRF54 for the VPR coprocessor + PPI story, MSP430 EnergyTrace as the
-  T0-measurement reference.
+- Stretch: one NPU board for the NPU column (Alif DK-E7 = the only Ethos-U
+  with the open Vela flow; STM32N6 Neural-ART / MCX eIQ Neutron are closed
+  toolchains), one nRF54L15 for the FLPR coprocessor + DPPI story, MSP430
+  EnergyTrace as the T0-measurement reference.
 
 ## 6. Phasing (each phase ends with a turnkey artifact)
 
@@ -312,6 +313,14 @@ ledger counter set.)
 
 - Which counters are cheaply countable per family (decides ledger fields).
 - Whether any on-die T0 measurement exists beyond EFM32 AEM / EnergyTrace.
-- Ethos-U delegate model details for the NPU substrate column.
+- ~~Ethos-U delegate model~~ ANSWERED: Vela partitions OFFLINE at compile
+  time — there is no runtime NPU delegate anywhere in MCU-land. Verified
+  more broadly: **runtime lowest-energy dispatch has never shipped below
+  Linux-EAS scale** (Vela/EON/CMSIS are offline; ULP/LPBAM/FLPR are manual
+  placement), and the literature attributes this to missing per-block J/op
+  tables — the exact artifact the calibration store produces. TEI's
+  runtime dispatch is not a port of prior art; it is the first of its kind
+  at this scale. Related: no published PIO-vs-core energy number exists —
+  E1's measurement will be a novel public result.
 - MicroPython native-module vs frozen-py tradeoff for the binding.
 - Whether devicetree is the right home for Zephyr energy tables.

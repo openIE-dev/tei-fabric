@@ -28,17 +28,17 @@ tiered by flash path, best first.
 
 | Board | Silicon | On-die substrates for dispatch | Notes |
 |---|---|---|---|
-| **Raspberry Pi Pico 2 / 2 W** | RP2350 (2×M33 **or** 2×Hazard3 RISC-V, switchable) | 3×PIO (12 SMs), DMA w/ sniffer-CRC, HSTX, dual-arch cores | **E1 flagship.** Core-vs-core vs PIO dispatch on one $5 board |
+| **Raspberry Pi Pico 2 / 2 W** | RP2350 — per-core ARCHSEL: 2×M33, 2×Hazard3, **or 1×M33 + 1×Hazard3 simultaneously** (reset-switchable) | 3×PIO (12 SMs), 16-ch DMA w/ sniffer-CRC, HSTX | **E1 flagship — a 4-substrate live-dispatch demo** (M33 + Hazard3 + PIO + DMA) on a $5–7 board. Caveat: pico-sdk has no out-of-box mixed-binary build |
 | Raspberry Pi Pico / W / WH | RP2040 (2×M0+) | 2×PIO (8 SMs), DMA | the install base |
 | Adafruit Feather RP2040 (+DVI/CAN/RFM variants) | RP2040 | PIO, DMA | Feather form factor, huge tutorial reach |
 | Adafruit Feather nRF52840 / Sense | nRF52840 (M4F) | PPI hardware event routing, radio, on-die USB | UF2 bootloader; PPI = "CPU-asleep" substrate |
 | Adafruit Feather M4 / ItsyBitsy M4 | SAMD51 (M4F) | DMAC, EVSYS event system, CCL lookup logic | EVSYS = free event routing |
 | Adafruit Feather ESP32-S2/S3 (TinyUF2) | ESP32-S2/S3 | ULP-RISC-V/FSM coprocessor, AES/SHA accel, vector ext (S3) | UF2 via TinyUF2; native path is esptool |
-| Seeed XIAO RP2040 / RP2350 / nRF52840 (Sense) / SAMD21 | as named | as families above | thumbnail-size, classroom favorite |
+| Seeed XIAO RP2040 / RP2350 / nRF52840 (Sense) / SAMD21 | as named | as families above (note: SAMD21 = 12-ch EVSYS, NO CCL) | thumbnail-size, classroom favorite |
 | SparkFun Thing Plus / Pro Micro RP2040·RP2350 | RP2040/RP2350 | PIO, DMA | Qwiic ecosystem |
 | Pimoroni Pico-family boards | RP2040/RP2350 | PIO, DMA | |
 | Arduino Nano RP2040 Connect | RP2040 + NINA Wi-Fi | PIO, DMA + radio | Arduino-branded RP2 |
-| Fomu | **iCE40UP5K FPGA** | the entire fabric is the substrate | FPGA that enumerates as USB + DFU/UF2-class flow — FPGA with Feather-grade UX |
+| Fomu | **iCE40UP5K FPGA** | the entire fabric is the substrate | FPGA with Feather-grade DFU UX — but project dormant, stock uncertain; OrangeCrab is the living equivalent |
 
 ## Tier B — one-line CLI flash
 
@@ -46,7 +46,7 @@ tiered by flash path, best first.
 | Board | Silicon | Substrates | Notes |
 |---|---|---|---|
 | **ESP32-C6-DevKitC** | C6 (HP RISC-V 160 MHz + **LP RISC-V core**) | LP core, DMA, AES/SHA, 802.15.4+WiFi6 | **E-phase pick**: HP-vs-LP dispatch + radio upload of calibration reports |
-| ESP32-P4-Function-EV | P4 (2×HP 400 MHz + LP core, no radio) | LP core, 2D-DMA, PPA, crypto | the compute-heavy ESP |
+| ESP32-P4X-Function-EV (~$60; original board obsolete) | P4 (2×HP RV32IMAFC @400 MHz + PIE SIMD + LP core @40 MHz, no radio) | LP core, 2D-DMA, PPA, crypto | the compute-heavy ESP |
 | ESP32-S3-DevKitC | S3 (2×LX7) | ULP-RISC-V, vector instructions, crypto | TinyML community |
 | ESP32-C3 / H2 DevKits | single RISC-V | crypto, DMA | $2-4 class |
 | classic ESP32-DevKitC | 2×LX6 | ULP-FSM, crypto | the install base |
@@ -56,17 +56,17 @@ tiered by flash path, best first.
 |---|---|---|---|
 | nRF52840-DK / dongle | M4F | **PPI**, radio, on-die USB | nrfutil DFU on dongle; PPK2 attaches for T1 calibration |
 | nRF5340-DK | M33 app + M33 net | dual-core dispatch, DPPI | |
-| **nRF54L15-DK** | M33 + **RISC-V VPR coprocessors** | VPR "FLPR/PPR" cores, DPPI | the most TEI-shaped MCU shipping: dispatchable RISC-V helpers |
-| STM32 Nucleo (any) | F4/L4/H7/**U5**/H5… | DMA, **FMAC** (filter-math accel), **CORDIC**, U5's LPBAM autonomous chains | on-board ST-LINK; probe-rs flashes; U5 LPBAM = work-while-asleep |
-| **STM32N6 Nucleo/DK** | N6 (M55 + **Ethos-U55 NPU**) | NPU, Helium SIMD, DMA | the NPU column on an ST board |
-| NXP FRDM-MCXN947 | 2×M33 + **Ethos-U55** + DSP | NPU, PowerQuad DSP, eIQ | NPU column, NXP channel |
+| **nRF54L15-DK** ($39) | M33 + **FLPR VPR core** (RV32EMC @128 MHz; PPR is nRF54H20-only) | FLPR (Zephyr `cpuflpr` target, NCS soft-peripherals), DPPI | among the most TEI-shaped MCUs shipping: a dispatchable RISC-V helper core |
+| STM32 Nucleo (G4 / H72x-H73x / H5 / **U5**) | the FMAC+CORDIC families (NOT F4/L4/H743/H503) | DMA, **FMAC** (≈1 MAC/cycle — value is full CPU offload via DMA; 7–11× vs CMSIS-DSP measured on G474), **CORDIC** (5–10× vs sw sin/cos), U5 LPBAM autonomous chains (~10 µA ADC sampling in Stop 2) | on-board ST-LINK; probe-rs flashes |
+| **STM32N6 Nucleo (~$56) / DK (~$185)** | N6 (M55 @800 MHz + **ST Neural-ART NPU**, 600 GOPS — proprietary, NOT Ethos-U) | NPU (closed ST toolchain), Helium SIMD, DMA | NPU column; MLPerf-Tiny measured 156–444 µJ/inference |
+| NXP FRDM-MCXN947 (~$26) | 2×M33 @150 MHz + **eIQ Neutron NPU** (NXP proprietary, NOT Ethos-U) + PowerQuad | NPU (closed NXP tools), PowerQuad (FFT/FIR/CORDIC) | NPU column, NXP channel |
 | Teensy 4.0 / 4.1 | i.MX RT1062 (M7 @600 MHz) | 2×FlexIO, DMA, CM7 dual-issue | teensy_loader_cli; the performance MCU |
 | Arduino UNO R4 / classic UNO R3 | RA4M1 / ATmega328P | DAC/CTSU / —— | reach play only; R3 via avrdude |
 | TI MSP430FR LaunchPads | MSP430FR (+ **LEA** accel) | LEA vector math, FRAM | **EnergyTrace = the T0 measurement reference** |
 | TI MSPM0 LaunchPads | M0+ | analog blocks | $0.5-class parts |
-| **SiLabs xG24 Dev Kit** | EFR32MG24 (M33) | AI/ML accel (MVP), radio | **on-board AEM = T0 energy telemetry without bench gear** |
+| **SiLabs xG24 Pro Kit** (PK6010A — NOT the Dev Kit, which lacks AEM) | EFR32MG24 (M33) | MVP AI/ML accel (≈6× energy vs M33), radio | **WSTK/WPK mainboard AEM = T0 energy telemetry without bench gear** |
 | Ambiq Apollo4/5 EVB | M4F/M55 subthreshold | low-power GPU (4), Helium (5) | the µW-class floor; J-Link |
-| Alif Ensemble DevKit | M55×2 + **Ethos-U55×2** | dual NPU, dual core | most aggressive NPU-class part |
+| Alif Ensemble DK-E7 | M55-HP+**Ethos-U55-256** & M55-HE+**Ethos-U55-128** | dual NPU, dual core | **the only true Ethos-U part in this matrix** (open Vela toolchain; ST/NXP NPUs need closed tools). Published: 76× energy vs M55-alone MobileNetV2. E4/E6/E8 successors ship Ethos-U85 |
 | WCH CH32V003 dev board | RV32EC @48 MHz | —— | $0.10 CPU; minichlink/wchisp; the "TEI on ten cents" stunt |
 | Sipeed Longan Nano | GD32VF103 (RV32IMAC) | DMA | dfu-util; cheap RISC-V |
 
@@ -85,16 +85,21 @@ maintains). This is the rehearsal for purpose-built TEI silicon.
 | **OrangeCrab** | ECP5-25F | prjtrellis, **DFU** | **ECP5 in Feather form factor** — FPGA-to-Feather literally |
 | Colorlight i5/i9 | ECP5 | prjtrellis | $15-30 repurposed LED controllers |
 | Butterstick | ECP5-85F | prjtrellis | |
-| **Tang Nano 9K / 20K** | Gowin GW1NR/GW2A | **Apicula** | $15-30; huge hobby momentum |
-| Fomu | iCE40UP5K | icestorm | also in Tier A for UX |
-| QuickLogic Qomu / SparkFun QuickLogic Thing+ | EOS S3 (M4 + eFPGA) | **QORC — vendor-open incl. FPGA** | MCU+FPGA hybrid, fully open |
-| Arty A7 / S7, Basys3, Cmod A7 | Xilinx 7-series | openXC7 (maturing) or Vivado (scriptable); openFPGALoader flashes | gateway to the university market |
+| **Tang Nano 9K / 20K** | Gowin GW1NR/GW2A | **Apicula 0.32** (PLL/BRAM/DSP/DDR-IO; openFPGALoader from git) | $15-30; huge hobby momentum |
+| Fomu | iCE40UP5K | icestorm | dormant/stock-uncertain; historical |
+| Arty A7 / S7, Basys3, Cmod A7 | Xilinx 7-series | openXC7 (works for LiteX SoCs but NO static timing analysis) or Vivado (scriptable); openFPGALoader flashes | gateway to the university market |
 | PYNQ-Z2 / Zybo (bare-metal PS) | Zynq-7000 | Vivado; bare-metal A9 + fabric | no-Linux Zynq is viable |
 | DE10-Nano | Cyclone V | Quartus (scriptable) | MiSTer community = flashing culture exists |
 
-Soft-core menu for these: VexRiscv/VexiiRiscv (LiteX), NEORV32 (VHDL,
-exceptionally documented), picorv32, SERV (bit-serial — the *lowest-joule
-soft core*, a perfect TEI demonstration in itself).
+Soft-core menu: **NEORV32** (the standout — weekly releases, June 2026 HPM
+rework gives 13 hardware performance counters via standard CSRs; CI setups
+for iCEBreaker/UPduino/OrangeCrab/ULX3S/Tang Nano 9K+20K), VexRiscv /
+**VexiiRiscv** (the successor, merged in mainline LiteX; LiteX CSRStatus
+peripherals = ~15-line custom ledger counters with auto-generated firmware
+accessors), SERV (bit-serial, ~198 LUT — the *lowest-joule soft core*),
+picorv32 (caretaker mode). Apicula 0.32 (2026-04) fully supports Tang
+Nano 9K/20K incl. PLL/BRAM/DSP. The zero-hardware-programmer flow:
+**LiteX+VexRiscv on OrangeCrab via its foboot DFU bootloader.**
 
 ## Tier D — Pi-class, bare metal (no Linux, SD-image artifact)
 
@@ -109,7 +114,7 @@ simply our flat binary. Turnkey UX identical to Raspberry Pi OS, contents
 | Raspberry Pi 4 / CM4 | BCM2711 (4×A72) | mature | |
 | Raspberry Pi 5 | BCM2712 + **RP1** | workable; RP1 southbridge adds I/O complexity | document as "later" |
 | Raspberry Pi 3 | BCM2837 | mature | the docs/tutorials corpus |
-| BeagleBone Black / BeaglePlay | AM335x / AM62 | bare-metal possible; **PRU-ICSS** (2×200 MHz deterministic RT cores) | PRUs are a first-class substrate — the original "CPU-asleep worker" |
+| BeagleBone Black / BeaglePlay | AM335x (PRU 2×200 MHz) / AM625 (PRUSS 2× up to 333 MHz, no ICSSG) | bare-metal possible; **PRU-ICSS** deterministic RT cores | PRUs = first-class substrate; AM62x PRU Academy launched 2026-04 |
 | i.MX8M Plus EVK (M7 core) | A53×4 + M7 + NPU | M7 bare metal via RPMsg-less boot | asymmetric-core dispatch story |
 
 ## Priority picks (matches EMBEDDED-ROADMAP phasing)
@@ -122,9 +127,13 @@ simply our flat binary. Turnkey UX identical to Raspberry Pi OS, contents
    without-Linux proof that "our Yocto" is real. E3.
 4. **iCEBreaker + OrangeCrab** — soft-substrate bitstreams with
    fabric-maintained ledgers. E3/E4.
-5. **xG24 + MSP430FR** — the two T0 energy-measurement references that
-   anchor everyone else's calibration tables. Alongside E1 bench kit.
-6. **STM32N6 or MCX N947** — the NPU column. E5.
+5. **xG24 Pro Kit + MSP430FR5994** — the two T0 energy-measurement
+   references that anchor everyone else's calibration tables (the xG24
+   *Dev Kit* lacks AEM — Pro Kit / WPK mainboard required). Alongside E1
+   bench kit.
+6. **An NPU board** — Alif DK-E7 if the open Vela toolchain matters (the
+   only Ethos-U in the matrix); STM32N6 (Neural-ART) or MCX N947 (eIQ
+   Neutron) for reach, both behind closed vendor compilers. E5.
 
 ## Verification pass needed before E0
 
