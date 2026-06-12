@@ -146,22 +146,43 @@ Honeycomb emits queries, k8sgpt narrates analyzer output, Arduino's
 assistant never drives upload. The architecture is validated; we extend
 it.
 
-**The router** (per surface):
-- **Tier-0** — the deterministic command grammar (`flash pico2`,
-  `calibrate fft on pio`, `compare cpu vs pio for fft`). The contract.
-- **Tier-0.5** *(new)* — Chrome/Edge built-in Prompt API with JSON-schema
-  `responseConstraint` (Gemini Nano / Phi-4-mini): zero-download NL→
-  grammar for the majority browser.
-- **Tier-1** — in-browser WebGPU model, opt-in: **LFM2.5-350M Q4 ONNX
-  (276 MB)**, officially aimed at structured output/tool use; upgrade
-  path = a FunctionGemma-270M fine-tune on the TEI grammar once it
-  stabilizes (closed-grammar fine-tunes jump 58→85% on function calling).
-  Grammar-constrained decoding via WebLLM+xgrammar, or validate-and-retry
-  against the parser.
-- **Tier-2** — Claude API for deep narration/planning.
-- **Tier-3** *(new transport)* — an MCP server exposing `tei` ops
-  (the Nordic/ESP-IDF/Wokwi precedent), so users' own agents become a
-  free integration surface — with flash/erase as elicitation-gated tools.
+**Model freshness policy** (David, 2026-06-12): picks must be SOTA,
+multimodal where the class allows, and ≤2 months old at selection;
+in-class exceptions (nothing newer exists) are flagged with dates;
+every pick records its release date so staleness is self-evident.
+Audited 2026-06-12 against the frontier (GPT-5.5 2026-04/05, Gemini 3.5
+Flash 2026-05-19 — verified and not selected).
+
+**The router** (per surface, audited 2026-06-12):
+- **Tier-0** — the deterministic command grammar (`flash feather`,
+  `calibrate fft on m4`, `compare m7 vs m4 for fft`). The contract.
+- **Tier-0.5** — browser built-in: Chrome **Prompt API, GA in stable
+  148 (2026-05-05)** with Gemini Nano (image+audio input documented),
+  JSON-schema `responseConstraint`; Edge = Phi-4-mini. Zero-download
+  NL→grammar for the majority browser.
+- **Tier-1** — in-browser WebGPU, opt-in: **LFM2.5-350M Q4 ONNX, 276 MB
+  (released 2026-03-31 — flagged in-class exception, 12 days past the
+  window: nothing newer exists in the ≤500 MB structured-output browser
+  class; Qwen3.5 smalls older, Gemma 4 E2B larger, Qwen3.6 opens are
+  27B+)**. Upgrade path: FunctionGemma-class fine-tune on the TEI
+  grammar once it stabilizes. Constrained decoding via WebLLM+xgrammar
+  or validate-and-retry.
+- **Tier-1V** — in-browser vision (board photo → identification,
+  datasheet/pinout extraction): **LFM2.5-VL-450M (released 2026-04-11)**
+  — bounding boxes + function calling, sub-250 ms edge inference; the
+  freshest small web-runtime VLM, period.
+- **Tier-2** — frontier LMM API: **Claude Fable 5 (`claude-fable-5`,
+  GA 2026-06-09)** — newest GA frontier model from any vendor at audit
+  time; vision-capable. Used for deep narration, planning, and the
+  dispatch-explanation cards.
+- **Tier-3** — an MCP server exposing `tei` ops (the Nordic/ESP-IDF/
+  Wokwi precedent), so users' own agents become a free integration
+  surface — with flash/erase as elicitation-gated tools.
+- **Speech** (voice-command parity with napkin): STT **Moonshine v2
+  (2026-02-13 — flagged exception; no newer in-browser STT exists,
+  API-only realtime models don't qualify)**; TTS **Supertonic 3
+  (2026-04-29, in-window)** — 99M params, 31 languages, browser
+  WebGPU examples shipped.
 
 **v1 features, ranked** (effort → payoff):
 1. **Command-K: NL → grammar** — fuzzy in, the parsed exact command
