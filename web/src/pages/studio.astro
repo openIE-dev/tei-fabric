@@ -19,8 +19,8 @@ import Layout from '../layouts/Layout.astro';
   <p class="text-brand-gray text-sm max-w-3xl leading-relaxed">
     Preview status: the live ledger console below works today with any
     serial device speaking the teiOS JSON-lines protocol. One-click teiOS
-    flashing (WebUSB PICOBOOT for Pico 2, esptool for ESP32, DFU for
-    OrangeCrab-class FPGAs) lands with the E1 images.
+    flashing (UF2 drag-drop for the Feather fleet, WebUSB DFU for the
+    Portenta H7) lands with the E1 images.
   </p>
 </section>
 
@@ -79,15 +79,15 @@ const AMBER = '#F59E0B', CYAN = 'rgba(14,165,233,0.55)', GREEN = '#34d399', GRAY
 
 // ── board catalog (curated from docs/EMBEDDED-TARGETS.md) ─────────────
 const BOARDS = [
-  { name: 'Raspberry Pi Pico 2', tier: 'W1 + W2', via: 'WebUSB PICOBOOT or UF2 drag-drop', sub: 'M33 + Hazard3 + 12×PIO + DMA-sniffer — the 4-substrate demo', status: 'E1 — first images' },
-  { name: 'ESP32-C6', tier: 'W1', via: 'WebSerial (esptool-js)', sub: 'HP core ↔ LP RISC-V core (≈90× idle ratio) + radio upload', status: 'E2' },
-  { name: 'Raspberry Pi Zero 2 W', tier: 'W2', via: 'files on FAT — the not-Linux unlock', sub: '4×A53 bare metal; the SD-image flagship', status: 'E3' },
-  { name: 'OrangeCrab (ECP5)', tier: 'W1', via: 'WebUSB DFU (foboot)', sub: 'soft substrates: NEORV32/LiteX SoCs with ledger counters in fabric', status: 'E3' },
-  { name: 'Pico + teiProbe', tier: 'W3 bridge', via: 'one UF2 → browser-driven SWD/JTAG/SPI programmer', sub: 'flashes nRF, DFU-less STM32, FPGA SPI flash', status: 'E2' },
-  { name: 'Tang Nano 9K/20K', tier: 'W3', via: 'teiProbe bridge (Apicula bitstreams)', sub: '$15 FPGA; mass soft-substrate tier', status: 'E3' },
-  { name: 'nRF54L15-DK', tier: 'W3', via: 'teiProbe bridge (SWD)', sub: 'M33 + FLPR RISC-V coprocessor + DPPI', status: 'E5' },
-  { name: 'SiLabs xG24 Pro Kit', tier: 'W3', via: 'teiProbe bridge', sub: 'the T0 reference: firmware reads its own AEM current', status: 'E1 bench kit' },
-  { name: 'Feather / XIAO / UF2 fleet', tier: 'W2', via: 'UF2 drag-drop — every browser, even Safari', sub: 'RP2040/RP2350/nRF52840/SAMD51 form-factor family', status: 'E2' },
+  { name: 'Portenta H7 / H7 Lite', tier: 'W1', via: 'WebUSB DFU — browser-flashable today (double-tap reset)', sub: 'STM32H747 dual-core: M7@480 vs M4@240 — heterogeneous-core dispatch on one die', status: 'E1b flagship · on the bench' },
+  { name: 'Adafruit Feather fleet', tier: 'W2', via: 'UF2 drag-drop — every browser, even Safari', sub: 'RP2040 (PIO + DMA-sniffer), nRF52840 (PPI), SAMD51 (EVSYS+CCL)', status: 'E1a — first real ledger · on the bench' },
+  { name: 'Particle Tachyon', tier: 'Tier 0', via: 'tachyon-os (in-house bare-metal Rust OS)', sub: 'QCM6490: big.LITTLE + Hexagon NPU + 5G; PMIC ADCs = candidate self-telemetry', status: 'teiOS-on-Snapdragon · on the bench' },
+  { name: 'OpenMV AE3', tier: 'Tier 0', via: 'OpenMV / Alif SETOOLS', sub: 'Alif E3: dual M55 + dual Ethos-U55 — the open-Vela NPU + vision bundle', status: 'NPU column · on the bench' },
+  { name: 'Nicla Voice', tier: 'W3', via: 'Arduino / BLE DFU', sub: 'Syntiant NDP120: always-on audio inference at sub-mW while the host sleeps', status: 'the µW dispatch story · on the bench' },
+  { name: 'Nano Matter (preview)', tier: 'W3', via: 'Arduino core (onboard DAP)', sub: 'EFR32MG24: MVP AI accelerator + Matter/BLE radio', status: 'MVP substrate · on the bench' },
+  { name: 'Portenta C33', tier: 'W1', via: 'DFU / Arduino', sub: 'Renesas RA6M5 (M33) + ESP32-C3 radio for calibration upload', status: 'on the bench' },
+  { name: 'Coral Dev Board Mini', tier: 'teid', via: 'SD / fastboot (Mendel Linux)', sub: 'Edge TPU ~2 TOPS/W — J/inference rows via the delegate ledger', status: 'teid path · on the bench' },
+  { name: 'Raspberry Pi Zero 2 W', tier: 'W2', via: 'files on FAT — the not-Linux unlock', sub: '4×A53 bare metal; the SD-image flagship', status: 'E3 · on the bench' },
 ];
 const boardsEl = $('boards');
 for (const b of BOARDS) {

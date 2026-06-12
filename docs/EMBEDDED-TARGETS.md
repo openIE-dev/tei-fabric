@@ -24,6 +24,27 @@ tiered by flash path, best first.
 
 ---
 
+## The bench — David's actual inventory (plans target THESE first)
+
+The E-phases build against boards in hand, not boards on order.
+
+| Board (owned) | Silicon / substrates | Flash path | E-role |
+|---|---|---|---|
+| **Portenta H7 + H7 Lite** | STM32H747: **M7@480 + M4@240 dual-core** + DMA2D/Chrom-ART, hw JPEG | **DFU bootloader → WebDFU = W1 browser-flashable TODAY** (double-tap reset) | **E1b — the heterogeneous-core dispatch flagship**: same primitive raced M7 vs M4, priced, dispatched |
+| **Adafruit Feathers (various)** | RP2040 (PIO + **DMA sniffer**, M0+ → timer-proxy cycles), nRF52840 (PPI), SAMD51 (EVSYS+CCL), ESP32-class | UF2 drag-drop (W2, every browser) | **E1a — first real ledger**: teios-rp2350 ports to RP2040 Feather with minimal delta (same embassy-rp, same sniffer demo) |
+| **Particle Tachyon** | QCM6490: big.LITTLE + Hexagon NPU + Adreno + 5G; SPMI PMIC ADCs (candidate T0) | in-house (tachyon-os boot chain; EDL/fastboot) | teiOS-on-Snapdragon (Tier 0) |
+| **OpenMV AE3** | Alif E3: M55-HP + M55-HE + **dual Ethos-U55** (open Vela) | SETOOLS / OpenMV tooling | the NPU column + vision bundle (Tier 0) |
+| **Nicla Voice** | **Syntiant NDP120** always-on audio NPU + nRF52832 host | Arduino/BLE DFU | **the µW dispatch story**: NDP listens at sub-mW while the host sleeps — "sleep is a substrate" made audible |
+| **Nano Matter (community preview)** | SiLabs MGM240S (EFR32MG24): **MVP AI accel**, 802.15.4/BLE | Arduino core (onboard DAP) | MVP-accel substrate + Matter radio; xG24 silicon w/o WSTK AEM (no T0 on-board) |
+| **Portenta C33** | Renesas RA6M5 (M33) + ESP32-C3 radio | DFU / Arduino | Renesas-family beachhead; radio calibration upload |
+| **Coral Dev Board Mini** | MT8167S (4×A35) + **Edge TPU** (~2 TOPS/W), Mendel Linux | SD/fastboot (Linux-class) | teid path: Edge TPU J/inference rows via the delegate's accel_invocations |
+| **Raspberry Pi Zero 2 W** | BCM2710 4×A53 | **SD card, flat files on FAT (W2)** | E3 — the bare-metal image flagship (unchanged, in hand) |
+
+Bench gaps to note honestly: no RP2350 (Hazard3/mixed-arch demo waits or
+ships untested-on-hardware), no PPK2/bench energy meter confirmed —
+first measured-tier joules likely come from an INA228 breakout (~$10)
+or the Tachyon's PMIC ADCs.
+
 ## Tier 0 — boards already under OpenIE control (in-house flows)
 
 These jump every queue: control code exists today in `openie-fpga`

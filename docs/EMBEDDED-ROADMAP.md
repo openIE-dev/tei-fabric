@@ -178,6 +178,13 @@ the shape.
 
 ## 5. Reference targets (proposed; verify in research pass)
 
+**The bench rule: phases target boards David owns** (see "The bench" in
+EMBEDDED-TARGETS). E1 splits: **E1a** = RP2040 Feather port of the
+existing teios firmware (smallest delta to a real first ledger; UF2/W2);
+**E1b** = Portenta H7 dual-core dispatch (M7 vs M4 — true heterogeneous
+cores, WebDFU/W1 browser-flashable today). The Pico 2 build stays as the
+RP2350 reference but is hardware-unverified until one exists on the bench.
+
 **Tier-0 first (already under OpenIE control — see EMBEDDED-TARGETS):**
 the SynSense Xylo (ofpga-xylo full driver: the neuromorphic column's
 hardware calibration target), the Kria KV260 (pure-Rust no-Vivado
