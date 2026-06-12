@@ -178,6 +178,14 @@ the shape.
 
 ## 5. Reference targets (proposed; verify in research pass)
 
+**Tier-0 first (already under OpenIE control — see EMBEDDED-TARGETS):**
+the SynSense Xylo (ofpga-xylo full driver: the neuromorphic column's
+hardware calibration target), the Kria KV260 (pure-Rust no-Vivado
+bitstream flow on real UltraScale+ silicon), and the OpenMV AE3 (Alif
+E3, in hand via the OpenMV founder — the vision bundle + open-Vela NPU).
+These leapfrog the purchased-board phases below wherever they overlap.
+
+
 - **RP2350 (Pico 2)** — the heterogeneity demo: M33 vs Hazard3 vs PIO for
   the same primitive, huge community, cheap. Likely first Rust+Arduino+
   MicroPython target.

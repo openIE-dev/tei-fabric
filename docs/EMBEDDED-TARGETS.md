@@ -24,6 +24,19 @@ tiered by flash path, best first.
 
 ---
 
+## Tier 0 — boards already under OpenIE control (in-house flows)
+
+These jump every queue: control code exists today in `openie-fpga`
+(pure-Rust, no vendor tools), so teiOS integration is wiring, not
+porting. They are also the first REAL exotic substrates — the fabric's
+simulated columns get hardware calibration targets.
+
+| Board | Silicon | In-house flow (openie-fpga) | TEI significance |
+|---|---|---|---|
+| **SynSense Xylo Audio 2/3** (SYNS61201/65302) | neuromorphic ASIC — 1000/992 CuBa-LIF neurons | **`ofpga-xylo`: complete open driver** — 370+ register map, RAM bank layouts, bitshift-decay neuron model, cycle-accurate simulator, SPI programming path, USB, `ofpga-snn` compiler | **The fabric's neuromorphic column in physical silicon.** Real spike/SOP ledgers + measured joules from an actual SNN chip — the spiking dialect's DEFAULT_ACTIVITY and SOP_J calibrated against hardware, not Loihi papers |
+| **AMD Kria KV260** (K26 SOM, XCZU5EV) | Zynq UltraScale+ | **Pure-Rust bitstream toolchain, no Vivado** — CGRA/DLRA/RRA designs compile→place→route→program on the real die; ICAP hardware CRC accepts every word; PCAP readback verifies config bits (SILICON_VALIDATION.md, 2026-04). Known gap: PS↔PL data bridge for functional I/O is the named next milestone | The forge's UltraScale+ recipe is ALREADY OPEN-FLOW (was listed as vendor-tool Tier C2 — wrong for us). Soft substrates with fabric-synthesized ledger counters on a $250 board, license-free |
+| **OpenMV AE3** (Alif Ensemble E3: M55 + Ethos-U55) | MCU + the matrix's only open-toolchain NPU | In David's possession (via Kwabena Agyeman, OpenMV founder — direct channel); AE3 firmware development + carrier pinmap staged in `ofpga-foundry/hw` (order/bringup plans, GenX320 + Lepton + Iridium module row) | The OpenMV-analogue row of the ecosystem map made concrete: vision domain bundle on Ethos-U (open Vela flow) with the Joulo camera lineage; `ofpga-cam` (pure-Rust U3V/GigE/CSI-2 machine-vision drivers) seeds the same domain |
+
 ## Tier A — UF2 drag-drop (the Arduino-grade turnkey path)
 
 | Board | Silicon | On-die substrates for dispatch | Notes |
@@ -122,7 +135,7 @@ emits the bitstream; flashing needs the bridge or a CLI fallback).
 | Numato Mimas A7 | Artix-7 50T | 80 | Vivado free | bridge | |
 | PYNQ-Z2 / Zybo Z7-10/20 / Cora Z7 | Zynq-7000 | 110–300 | Vivado free | bridge | bare-metal A9 + fabric (no-Linux Zynq is viable) |
 | Arty Z7-20 | Zynq-7020 | 240 | Vivado free | bridge | |
-| **Kria KV260** | Zynq UltraScale+ K26 | 250 | Vivado/Vitis free for K26 | bridge | astonishing $/fabric; bare-metal A53/R5F possible |
+| **Kria KV260** | Zynq UltraScale+ K26 | 250 | **openie-fpga pure-Rust flow (no Vivado!)** — see Tier 0 | bridge | astonishing $/fabric; bare-metal A53/R5F possible |
 | ZUBoard 1CG | Zynq US+ 1CG | 160 | Vivado free | bridge | cheapest UltraScale+ |
 | DE10-Nano | Cyclone V SoC | 225 | Quartus Lite | bridge | MiSTer community = flashing culture |
 | DE10-Lite | MAX10 | 85–140 | Quartus Lite | bridge | academic staple |
