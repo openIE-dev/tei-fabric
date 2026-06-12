@@ -1,0 +1,21 @@
+[package]
+name = "tei-ledger"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.81"
+description = "TEI Embedded device contract: the event ledger, joule provenance, cost tables, and lowest-joule dispatch for current-generation MCUs (E0 of EMBEDDED-ROADMAP.md)."
+license = "MIT OR Apache-2.0"
+keywords = ["no_std", "embedded", "energy", "ledger"]
+categories = ["no-std", "embedded"]
+
+[dependencies]
+serde = { version = "1", default-features = false, features = ["derive"], optional = true }
+
+[dev-dependencies]
+serde_json = "1"
+
+[features]
+# The versioned-optional-integration convention (embedded-hal's defmt-03
+# pattern). Default truly empty: the bare crate is pure no_std types.
+default = []
+serde = ["dep:serde"]

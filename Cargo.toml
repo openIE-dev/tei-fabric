@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/embedded/tei-ledger",
     "crates/tei-stack",
     "crates/tei-ir",
     "crates/tei-substrate-traits",
