@@ -193,7 +193,87 @@ the shape.
 - Not vendor benchmarking — tables are measured, sourced, and reproducible;
   no comparative marketing, ever (the numbers speak or stay out).
 
-## 8. Open questions for the verification research pass
+## 8. Verified engineering decisions (research pass 1, 2026-06-11)
+
+Web-verified findings that freeze previously-open choices. Sources in the
+research transcripts; key URLs inline.
+
+**Repo + release shape**
+- **LVGL's in-repo-manifests pattern wins**: one `tei-embedded` repo carrying
+  `library.properties` (Arduino), `idf_component.yml` (ESP registry),
+  `zephyr/module.yml`, `library.json` (PlatformIO) — every channel releases
+  atomically with the core. (TinyUSB's separate-wrapper-repo lags by
+  construction; TFLM's no-releases model is the cautionary tale — its
+  abandoned Arduino wrapper got delisted and the namespace ceded.)
+- **Memfault's SDK is the structural precedent**: portable core + `ports/`,
+  a `tei_platform_*.h` contract the integrator implements, out-of-tree
+  Zephyr module + listing in Zephyr's external-modules docs index (the
+  Memfault/Golioth route; default-manifest inclusion is not the goal).
+- One config header (`tei_config.h`, tusb_config/lv_conf-style) + optional
+  Kconfig shims per RTOS.
+
+**Rust core, per-ecosystem**
+- **Embassy needs no fork or wrapper**: `embassy-executor`'s `trace` feature
+  exposes seven `_embassy_trace_*` extern fns (task new/exec begin/end/
+  ready, executor idle) resolved at link time — tei-embassy implements
+  them and per-task ledgers come free; optionally also the `rtos-trace`
+  backend (SystemView users get TEI data) and an embassy-time driver for
+  active/sleep attribution. Pin embassy-executor 0.8–0.10 (pre-1.0 churn).
+- **Ledger telemetry channel**: defmt 1.0 (wire format now stable) for
+  human logs; **postcard-rpc topics** (no_std serde, embassy-usb transport
+  out of the box) for the structured ledger stream Studio consumes.
+- **Arduino**: `precompiled=true` + per-ABI `.a` under `src/{build.mcu}/`
+  (cortex-m0plus / cortex-m33 / esp32* / riscv32*) + thin camelCase C++
+  singleton (`TEI.begin(); TEI.run(FFT, buf)`; ledger implements
+  `Printable` so `Serial.println(TEI.ledger())` just works). Caveat
+  verified: per-core `compiler.libraries.ldflags` support is uneven —
+  CI must link-test each core. A Rust-core Arduino library appears to be
+  genuinely novel; tei would be the early mover. ESP32 PlatformIO docs
+  must point at the pioarduino fork (official platform froze at Arduino 2.x).
+- **MicroPython**: the emlearn dual route — per-arch native `.mpy`
+  (Rust staticlib via `MPY_LD_FLAGS`, `LINK_RUNTIME=1`, armv7emsp/
+  armv7emdp/xtensawin/rv32imc × ABI 6.3) on a self-hosted mip index, plus
+  USER_C_MODULES for firmware builds needing DMA/counter access natmods
+  can't reach. **CircuitPython cannot load native .mpy** (confirmed open
+  issue) — ship a pure-Python shim in the Community Bundle now; upstream
+  a shared-bindings module as the long game (the ulab path).
+- **Zephyr**: west module; **`tei,energy-table` devicetree binding** for
+  per-board J/op data — novel for Zephyr (zephyr,power-state carries no
+  power numbers) but validated by Linux DT precedent (`opp-microwatt`,
+  `dynamic-power-coefficient`). Rust core ships as `west blobs` prebuilt
+  `.a` per arch (zephyr-lang-rust is official but too narrow to depend on).
+- **ESP-IDF**: registry component with per-target prebuilt `.a` —
+  **Slint already ships Rust-as-staticlib on the ESP registry**, the
+  direct precedent. `targets:` gating + examples/ + upload-components-ci.
+
+**TEI Studio verdict**
+- **Tauri-first, web flasher as the additive marketing surface.** The
+  decisive facts: Pi SD imaging is categorically impossible in-browser
+  (WebUSB blocks the mass-storage class); browser flashing is
+  Chromium-only in practice (Safari opposed, Firefox experimental); and
+  the best tools are Rust crates Studio links directly — probe-rs (lib,
+  MIT/Apache, RP2350 since 0.27, RTT in-process), espflash, raw disk
+  write. No sidecar daemon (Arduino IDE 2.x's gRPC daemon handshake is
+  its worst support ticket — lesson absorbed).
+- The web path still matters and works TODAY for the two v1 boards:
+  esptool-js/WebSerial for ESP32-class (ESP Launchpad/Web Tools-proven,
+  manifest-driven, third-party-hostable) and **WebUSB PICOBOOT for
+  RP2040/RP2350** (picoflash.org + Arm's picotool.js prove it) — so
+  fabric.thermoedge.ai gets a "Connect & flash teiOS" page for Pico 2 +
+  ESP32 with zero install, and Studio handles everything else.
+- UX patterns to copy verbatim: Thonny's "bootloader volume detected →
+  offer firmware" dialog; Raspberry Pi Imager's three-choice flow and
+  runtime JSON image catalog (the forge publishes the same shape);
+  Nordic PPK2's live scrolling current trace (~100 ksps) as the
+  live-ledger view's gold standard.
+
+**CI norms adopted**: compile-sketches matrix + arduino-lint (Arduino),
+wokwi-ci with wait-serial ledger assertions (functional only — simulated
+cycles ≠ energy), QEMU/unix-port natmod tests (MicroPython), twister +
+native_sim (Zephyr), embedded-test + self-hosted RP2350 runner (HIL),
+yocto-check-layer + layer index (meta-tei).
+
+## 9. Open questions for research pass 2 (in flight)
 
 (Three research sweeps were scoped — per-family energy measurement reality,
 on-die substrate inventory + energy-aware dispatch prior art, ecosystem
