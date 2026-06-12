@@ -70,26 +70,69 @@ tiered by flash path, best first.
 | WCH CH32V003 dev board | RV32EC @48 MHz | —— | $0.10 CPU; minichlink/wchisp; the "TEI on ten cents" stunt |
 | Sipeed Longan Nano | GD32VF103 (RV32IMAC) | DMA | dfu-util; cheap RISC-V |
 
-## Tier C — FPGA via open toolchain (openFPGALoader + Yosys/nextpnr)
+## Tier C — FPGA boards, the full sub-$500 field
 
 The FPGA targets are special: the forge doesn't just flash firmware, it
 ships **soft substrates** — LiteX/VexRiscv or NEORV32 SoCs with TEI event
 counters synthesized into the fabric (a ledger the hardware itself
 maintains). This is the rehearsal for purpose-built TEI silicon.
+Prices are early-2026 street; verify before E-phase pinning.
 
-| Board | FPGA | Open flow | Notes |
-|---|---|---|---|
-| **iCEBreaker** | iCE40UP5K | icestorm (100% open) | the open-FPGA teaching board |
-| iCEstick / UPduino / Alchitry Cu | iCE40 | icestorm | $20-50 |
-| **ULX3S** | ECP5-85F | prjtrellis | the open-flow flagship; RISC-V SoC capable |
-| **OrangeCrab** | ECP5-25F | prjtrellis, **DFU** | **ECP5 in Feather form factor** — FPGA-to-Feather literally |
-| Colorlight i5/i9 | ECP5 | prjtrellis | $15-30 repurposed LED controllers |
-| Butterstick | ECP5-85F | prjtrellis | |
-| **Tang Nano 9K / 20K** | Gowin GW1NR/GW2A | **Apicula 0.32** (PLL/BRAM/DSP/DDR-IO; openFPGALoader from git) | $15-30; huge hobby momentum |
-| Fomu | iCE40UP5K | icestorm | dormant/stock-uncertain; historical |
-| Arty A7 / S7, Basys3, Cmod A7 | Xilinx 7-series | openXC7 (works for LiteX SoCs but NO static timing analysis) or Vivado (scriptable); openFPGALoader flashes | gateway to the university market |
-| PYNQ-Z2 / Zybo (bare-metal PS) | Zynq-7000 | Vivado; bare-metal A9 + fabric | no-Linux Zynq is viable |
-| DE10-Nano | Cyclone V | Quartus (scriptable) | MiSTer community = flashing culture exists |
+**Web-flash path legend**: DFU = browser-flashable today via webdfu (W1);
+bridge = teiProbe SPI/JTAG (W3); vendor = vendor cable/tool only (forge
+emits the bitstream; flashing needs the bridge or a CLI fallback).
+
+### C1 — fully open toolchain (Yosys + nextpnr; the forge owns the whole flow)
+
+| Board | FPGA | ~$ | Flow | Web flash | Notes |
+|---|---|---|---|---|---|
+| **iCEBreaker** (+ bitsy) | iCE40UP5K | 75 | icestorm | bridge | the open-FPGA teaching board |
+| iCEstick | iCE40HX1K | 40 | icestorm | bridge | tiny classic |
+| **UPduino v3.1** | iCE40UP5K | 30 | icestorm | bridge | cheapest UP5K |
+| TinyFPGA BX | iCE40LP8K | 38 | icestorm | own USB bootloader | stock intermittent |
+| Go Board (Nandland) | iCE40HX1K | 65 | icestorm | bridge | tutorial-rich |
+| Alchitry Cu | iCE40HX8K | 50 | icestorm | bridge | stackable Io/Br shields |
+| Olimex iCE40HX8K-EVB | iCE40HX8K | 50 | icestorm | bridge | EU supply |
+| Fomu | iCE40UP5K | 35 | icestorm | **DFU** | dormant/stock-uncertain; historical |
+| **ULX3S** (12F–85F) | ECP5 | 115–250 | prjtrellis | **DFU-class (fujprog/esp32 OTA)** | the open-flow flagship |
+| **OrangeCrab** (25F/85F) | ECP5 | 99–129 | prjtrellis | **DFU (foboot)** | **ECP5 in Feather form factor; the zero-programmer flow** |
+| Butterstick | ECP5-85F | 120 | prjtrellis | DFU (foboot-class) | high-IO syzygy |
+| **Colorlight i5 / i9 / i9+** | ECP5-25/45K | 15–50 (+~20 ext board) | prjtrellis | bridge | recycled LED controllers — the cheapest real ECP5s |
+| icesugar-pro | ECP5-25F | 60 | prjtrellis | drag-drop (iCELink MSC!) | SD-card-sized |
+| LogicBone | ECP5-45F | 130 | prjtrellis | DFU | BeagleBone form factor |
+| Lattice ECP5-EVN | ECP5-85F | 115 | prjtrellis | bridge | official eval, cheap for 85F |
+| **Tang Nano 9K / 20K** | Gowin GW1NR-9 / GW2A-18 | 15 / 30 | **Apicula 0.32** (PLL/BRAM/DSP OK) | bridge (BL702 USB-JTAG; openFPGALoader from git) | huge hobby momentum |
+| Tang Nano 1K / 4K | GW1NZ/GW1NSR | 10–15 | Apicula (partial) | bridge | impulse-buy tier |
+| Tang Primer 20K / 25K | GW2A / GW5A-25 | 30–45 | Apicula (20K yes; 25K/GW5A maturing) | bridge | SODIMM SOM + dock |
+| Tang Mega 60K / 138K | GW5AT | 60–250 | vendor (GW5A Apicula WIP) | bridge | PCIe-class hobby boards |
+| OLIMEX/CCGM GateMate eval | Cologne Chip CCGM1A1 | 50–110 | **Yosys synth + free vendor P&R** | bridge | the European open-ish fabric; EU sovereignty angle |
+| CrossLink-NX EVN | Lattice Nexus | 130 | prjoxide (maturing) | bridge | Nexus open flow |
+
+### C2 — free vendor toolchain (forge scripts it; bitstream still reproducible)
+
+| Board | FPGA | ~$ | Tool | Web flash | Notes |
+|---|---|---|---|---|---|
+| **Arty A7-35/100** | Artix-7 | 130–300 | Vivado free (or openXC7, no STA) | bridge | the university standard |
+| Arty S7 / Cmod A7 / Cmod S7 | Spartan/Artix-7 | 80–150 | Vivado free | bridge | breadboard-able 7-series |
+| Basys3 | Artix-7 35T | 160 | Vivado free | bridge | intro-course classic |
+| Nexys A7-100T | Artix-7 100T | 350 | Vivado free | bridge | bigger classrooms |
+| **EBAZ4205** | Zynq-7010 | 20–35 | Vivado free | bridge | recycled miner control board — the $25 Zynq |
+| QMTech boards (Artix/Kintex/Zynq/Cyclone) | XC7A35T…**XC7K325T** | 30–120 | Vivado free (K325T needs openXC7 or license workarounds) | bridge | AliExpress value kings; Kintex-325T under $120 |
+| Alchitry Au / Au+ | Artix-7 35T/100T | 100–300 | Vivado free | bridge | maker-friendly Xilinx |
+| Numato Mimas A7 | Artix-7 50T | 80 | Vivado free | bridge | |
+| PYNQ-Z2 / Zybo Z7-10/20 / Cora Z7 | Zynq-7000 | 110–300 | Vivado free | bridge | bare-metal A9 + fabric (no-Linux Zynq is viable) |
+| Arty Z7-20 | Zynq-7020 | 240 | Vivado free | bridge | |
+| **Kria KV260** | Zynq UltraScale+ K26 | 250 | Vivado/Vitis free for K26 | bridge | astonishing $/fabric; bare-metal A53/R5F possible |
+| ZUBoard 1CG | Zynq US+ 1CG | 160 | Vivado free | bridge | cheapest UltraScale+ |
+| DE10-Nano | Cyclone V SoC | 225 | Quartus Lite | bridge | MiSTer community = flashing culture |
+| DE10-Lite | MAX10 | 85–140 | Quartus Lite | bridge | academic staple |
+| DE0-Nano | Cyclone IV | 100 | Quartus Lite | bridge | legacy but everywhere |
+| Cyclone 10 LP eval | C10LP | 90 | Quartus Lite | bridge | |
+| **Efinix Xyloni** | Trion T8 | 35 | Efinity (free license) | bridge | the $35 alt-architecture |
+| Efinix Ti60 F225 dev | Titanium Ti60 | 150 | Efinity | bridge | efficiency-class fabric |
+| **PolarFire SoC Discovery** | MPFS095T | 132 | Libero (free Silver) | bridge | **hard RISC-V cores + fabric** — a TEI-shaped SoC |
+| PolarFire SoC Icicle | MPFS250T | 499 | Libero free | bridge | just inside the cap; the serious RISC-V+FPGA board |
+| Renesas ForgeFPGA eval | SLG47910 | 50 | Go Configure (free) | bridge | sub-$1 FPGA class |
 
 Soft-core menu: **NEORV32** (the standout — weekly releases, June 2026 HPM
 rework gives 13 hardware performance counters via standard CSRs; CI setups
@@ -100,6 +143,13 @@ accessors), SERV (bit-serial, ~198 LUT — the *lowest-joule soft core*),
 picorv32 (caretaker mode). Apicula 0.32 (2026-04) fully supports Tang
 Nano 9K/20K incl. PLL/BRAM/DSP. The zero-hardware-programmer flow:
 **LiteX+VexRiscv on OrangeCrab via its foboot DFU bootloader.**
+
+FPGA priority within the web-only doctrine: **OrangeCrab and ULX3S first**
+(DFU = direct W1 browser flash of bitstreams), **Tang Nano 9K/20K and
+Colorlight** as the price-floor mass tier (W3 bridge), **iCEBreaker** for
+teaching, **EBAZ4205/KV260** as the value outliers, **PolarFire Discovery**
+for the hard-RISC-V story. Every C1 board's bitstream is fully
+reproducible by the forge with zero vendor licenses.
 
 ## Tier D — Pi-class, bare metal (no Linux, SD-image artifact)
 
