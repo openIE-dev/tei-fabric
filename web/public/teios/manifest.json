@@ -1,0 +1,55 @@
+{
+ "name": "teiOS images",
+ "version": "0.1.0",
+ "built": "2026-06-12",
+ "images": [
+  {
+   "board_id": "feather-rp2040",
+   "file": "/teios/teios-feather-rp2040.uf2",
+   "uf2_family": "rp2040",
+   "bytes": 117248,
+   "sha256": "09d94bdb2fd349a51a1211b09d4805a321f921fc56d3c79e8eebae81976e01e8",
+   "install_tier": "W2",
+   "drive_name": "RPI-RP2",
+   "firmware": "teios 0.1",
+   "protocol": "tei-jsonl-v0",
+   "substrates": [
+    "cpu",
+    "dma-sniffer"
+   ],
+   "joules_provenance": "table (ILLUSTRATIVE \u2014 pending bench calibration)"
+  },
+  {
+   "board_id": "pico",
+   "file": "/teios/teios-pico.uf2",
+   "uf2_family": "rp2040",
+   "bytes": 117248,
+   "sha256": "4bad254214887cea5925453c6eecf182f99f5cd3ec99372587645a82be5b8920",
+   "install_tier": "W2",
+   "drive_name": "RPI-RP2",
+   "firmware": "teios 0.1",
+   "protocol": "tei-jsonl-v0",
+   "substrates": [
+    "cpu",
+    "dma-sniffer"
+   ],
+   "joules_provenance": "table (ILLUSTRATIVE \u2014 pending bench calibration)"
+  },
+  {
+   "board_id": "pico2",
+   "file": "/teios/teios-pico2.uf2",
+   "uf2_family": "rp2350-arm-s",
+   "bytes": 116224,
+   "sha256": "3b488b4226f3d5fb35bb3a6f22e47ce7d765318a6d87a6d497c3a57a6880097b",
+   "install_tier": "W2",
+   "drive_name": "RPI-RP2",
+   "firmware": "teios 0.1",
+   "protocol": "tei-jsonl-v0",
+   "substrates": [
+    "cpu",
+    "dma-sniffer"
+   ],
+   "joules_provenance": "table (ILLUSTRATIVE \u2014 pending bench calibration)"
+  }
+ ]
+}

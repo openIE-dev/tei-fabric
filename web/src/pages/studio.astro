@@ -17,10 +17,10 @@ import Layout from '../layouts/Layout.astro';
     on hardware you already own.
   </p>
   <p class="text-brand-gray text-sm max-w-3xl leading-relaxed">
-    Preview status: the live ledger console below works today with any
-    serial device speaking the teiOS JSON-lines protocol. One-click teiOS
-    flashing (UF2 drag-drop for the Feather fleet, WebUSB DFU for the
-    Portenta H7) lands with the E1 images.
+    The live ledger console works today with any device speaking the
+    teiOS JSON-lines protocol — and the first teiOS images are here:
+    UF2 downloads below for the Feather RP2040 and Pico-class boards
+    (drag-drop, any browser). WebUSB DFU for the Portenta H7 is next.
   </p>
 </section>
 
@@ -97,7 +97,8 @@ const AMBER = '#F59E0B', CYAN = 'rgba(14,165,233,0.55)', GREEN = '#34d399', GRAY
 // ── board catalog (curated from docs/EMBEDDED-TARGETS.md) ─────────────
 const BOARDS = [
   { name: 'Portenta H7 / H7 Lite', tier: 'W1', via: 'WebUSB DFU — browser-flashable today (double-tap reset)', sub: 'STM32H747 dual-core: M7@480 vs M4@240 — heterogeneous-core dispatch on one die', status: 'E1b flagship · on the bench' },
-  { name: 'Adafruit Feather fleet', tier: 'W2', via: 'UF2 drag-drop — every browser, even Safari', sub: 'RP2040 (PIO + DMA-sniffer), nRF52840 (PPI), SAMD51 (EVSYS+CCL)', status: 'E1a — first real ledger · on the bench' },
+  { name: 'Adafruit Feather RP2040', tier: 'W2', via: 'UF2 drag-drop — every browser, even Safari', sub: 'CPU vs DMA-sniffer CRC race, dispatched live — the E1a firmware', status: 'FLASHABLE NOW · on the bench', uf2: '/teios/teios-feather-rp2040.uf2' },
+  { name: 'Raspberry Pi Pico / Pico 2', tier: 'W2', via: 'UF2 drag-drop', sub: 'Pico = RP2040 build; Pico 2 = RP2350 build (hardware-unverified: none on the bench)', status: 'FLASHABLE NOW', uf2: '/teios/teios-pico.uf2', uf2b: { label: 'Pico 2', url: '/teios/teios-pico2.uf2' } },
   { name: 'Particle Tachyon', tier: 'Tier 0', via: 'tachyon-os (in-house bare-metal Rust OS)', sub: 'QCM6490: big.LITTLE + Hexagon NPU + 5G; PMIC ADCs = candidate self-telemetry', status: 'teiOS-on-Snapdragon · on the bench' },
   { name: 'OpenMV AE3', tier: 'Tier 0', via: 'OpenMV / Alif SETOOLS', sub: 'Alif E3: dual M55 + dual Ethos-U55 — the open-Vela NPU + vision bundle', status: 'NPU column · on the bench' },
   { name: 'Nicla Voice', tier: 'W3', via: 'Arduino / BLE DFU', sub: 'Syntiant NDP120: always-on audio inference at sub-mW while the host sleeps', status: 'the µW dispatch story · on the bench' },
@@ -115,7 +116,12 @@ for (const b of BOARDS) {
       <span class="font-mono text-[10px] text-brand-amber">${b.tier}</span></div>
     <p class="text-brand-gray text-[12px] leading-relaxed mb-2">${b.sub}</p>
     <p class="font-mono text-[10px] text-brand-light tracking-wider">${b.via}</p>
-    <p class="font-mono text-[10px] text-brand-gray mt-2 uppercase">${b.status}</p>`;
+    <p class="font-mono text-[10px] text-brand-gray mt-2 uppercase">${b.status}</p>
+    ${b.uf2 ? `<div class="mt-3 flex gap-2">
+        <a href="${b.uf2}" download class="font-mono text-[10px] tracking-wider px-3 py-1.5 rounded border border-brand-amber/50 text-brand-amber hover:bg-brand-amber/10 transition-colors">⬇ FLASH teiOS (UF2)</a>
+        ${b.uf2b ? `<a href="${b.uf2b.url}" download class="font-mono text-[10px] tracking-wider px-3 py-1.5 rounded border border-white/15 text-brand-light hover:border-brand-amber/50 transition-colors">⬇ ${b.uf2b.label}</a>` : ''}
+      </div>
+      <p class="text-brand-gray text-[10px] mt-2">hold BOOTSEL → plug in → drag onto RPI-RP2 → CONNECT above</p>` : ''}`;
   boardsEl.appendChild(d);
 }
 
