@@ -53,6 +53,16 @@ import Layout from '../layouts/Layout.astro';
       <div class="relative aspect-[16/8]">
         <canvas id="chart" class="absolute inset-0 w-full h-full"></canvas>
       </div>
+      <div id="selstrip" class="mt-3 hidden">
+        <div class="flex items-center justify-between mb-2">
+          <p class="font-mono text-[10px] text-brand-amber uppercase tracking-wider">selection</p>
+          <div class="flex gap-2">
+            <button id="btn-clear-sel" class="font-mono text-[10px] text-brand-gray hover:text-brand-light underline decoration-dotted">clear</button>
+            <button id="btn-publish-sel" class="font-mono text-[10px] tracking-wider px-3 py-1 rounded border border-brand-amber/40 text-brand-amber hover:bg-brand-amber/10 transition-colors">PUBLISH SELECTION → fabric</button>
+          </div>
+        </div>
+        <div id="selstats" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 font-mono text-[11px]"></div>
+      </div>
       <div id="log" class="mt-3 h-40 overflow-y-auto font-mono text-[11px] leading-relaxed text-brand-gray bg-black/30 rounded-lg p-3"></div>
     </div>
   </div>
@@ -74,6 +84,13 @@ import Layout from '../layouts/Layout.astro';
 </section>
 
 <script is:inline>
+const API_BASE = (() => {
+  const url = new URL(window.location.href);
+  const o = url.searchParams.get('api');
+  if (o) return o;
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return 'http://localhost:9651';
+  return '';  // prod: same-origin /api/* via Caddy (fabric + studio hosts both proxy)
+})();
 function $(id) { return document.getElementById(id); }
 const AMBER = '#F59E0B', CYAN = 'rgba(14,165,233,0.55)', GREEN = '#34d399', GRAY = '#64748B';
 
@@ -107,7 +124,9 @@ const canvas = $('chart'), ctx = canvas.getContext('2d');
 function dpr() { return devicePixelRatio || 1; }
 function resize() { const r = canvas.getBoundingClientRect(); canvas.width = r.width * dpr(); canvas.height = r.height * dpr(); draw(); }
 new ResizeObserver(resize).observe(canvas);
-const series = new Map(); // substrate -> [{t, j}]
+const series = new Map(); // substrate -> [{t, j, msg}]
+let sel = null;           // {t0, t1} in chart time
+let lastX = null;         // px<->t mapping cache from draw()
 const colors = [AMBER, '#0ea5e9', GREEN, '#f472b6', '#a78bfa'];
 let t0 = null;
 function draw() {
@@ -125,11 +144,20 @@ function draw() {
   if (yMax === yMin) { yMax *= 1.5; yMin *= 0.5; }
   const px = x => padL + (x - xMin) / (xMax - xMin || 1) * (W - padL - padR);
   const py = y => H - padB - (y - yMin) / (yMax - yMin) * (H - padT - padB);
+  lastX = { xMin, xMax, padL, padR, W };
   ctx.strokeStyle = 'rgba(148,163,184,0.12)'; ctx.fillStyle = GRAY; ctx.font = `${10*d}px "JetBrains Mono", monospace`;
   for (let i = 0; i <= 3; i++) {
     const v = yMin + (yMax - yMin) * i / 3, y = py(v);
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
     ctx.fillText(v.toExponential(1) + ' J', 6*d, y + 3*d);
+  }
+  if (sel && lastX) {
+    const x0 = px(Math.max(sel.t0, xMin)), x1 = px(Math.min(sel.t1, xMax));
+    ctx.fillStyle = 'rgba(245,158,11,0.10)';
+    ctx.fillRect(x0, padT, Math.max(1, x1 - x0), H - padT - padB);
+    ctx.strokeStyle = AMBER; ctx.lineWidth = 1.2*d;
+    ctx.beginPath(); ctx.moveTo(x0, padT); ctx.lineTo(x0, H - padB); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x1, padT); ctx.lineTo(x1, H - padB); ctx.stroke();
   }
   let ci = 0;
   for (const [name, pts] of series) {
@@ -161,7 +189,7 @@ function handleLine(line) {
     const t = (Date.now() - (t0 ??= Date.now())) / 1000;
     if (j != null) {
       if (!series.has(m.substrate)) series.set(m.substrate, []);
-      const pts = series.get(m.substrate); pts.push({ t, j });
+      const pts = series.get(m.substrate); pts.push({ t, j, msg: m });
       if (pts.length > 300) pts.shift();
       draw();
     }
@@ -249,6 +277,93 @@ $('btn-demo').addEventListener('click', () => {
       alternatives: [{ substrate: 'cpu@150mhz', j_per_op: cpuJ }] }));
     handleLine(JSON.stringify({ type: 'check', ok: true }));
   }, 1000);
+});
+
+// ── selection: drag on the chart → region → joules → publish ──────────
+function evT(ev) {
+  if (!lastX) return null;
+  const r = canvas.getBoundingClientRect();
+  const xpx = (ev.clientX - r.left) * dpr();
+  const { xMin, xMax, padL, padR, W } = lastX;
+  const frac = (xpx - padL) / (W - padL - padR);
+  return xMin + Math.min(1, Math.max(0, frac)) * (xMax - xMin);
+}
+let dragging = false;
+canvas.addEventListener('pointerdown', ev => {
+  const t = evT(ev); if (t == null) return;
+  dragging = true; sel = { t0: t, t1: t };
+  canvas.setPointerCapture(ev.pointerId);
+});
+canvas.addEventListener('pointermove', ev => {
+  if (!dragging || !sel) return;
+  const t = evT(ev); if (t == null) return;
+  sel.t1 = t; draw(); renderSelection();
+});
+canvas.addEventListener('pointerup', () => {
+  dragging = false;
+  if (sel && Math.abs(sel.t1 - sel.t0) < 0.05) { sel = null; draw(); }
+  renderSelection();
+});
+
+function selRows() {
+  if (!sel) return [];
+  const [a, b] = [Math.min(sel.t0, sel.t1), Math.max(sel.t0, sel.t1)];
+  const rows = [];
+  for (const [name, pts] of series) {
+    const inSel = pts.filter(p => p.t >= a && p.t <= b);
+    if (!inSel.length) continue;
+    const sum = inSel.reduce((s, p) => s + p.j, 0);
+    const nOps = inSel.reduce((s, p) => s + (p.msg.n_ops || 1), 0);
+    rows.push({
+      substrate: name, runs: inSel.length, nOps,
+      joules: sum, jPerOp: sum / nOps, dt: b - a,
+      sample: inSel[inSel.length - 1].msg,
+    });
+  }
+  return rows;
+}
+function renderSelection() {
+  const strip = $('selstrip'), el = $('selstats');
+  const rows = selRows();
+  if (!rows.length) { strip.classList.add('hidden'); return; }
+  strip.classList.remove('hidden');
+  el.innerHTML = '';
+  for (const r of rows) {
+    const d = document.createElement('div');
+    d.className = 'bg-black/30 rounded-lg p-2';
+    d.innerHTML = `<div class="text-brand-amber">${r.substrate}</div>
+      <div class="text-brand-light">${r.joules.toExponential(2)} J · ${r.runs} runs</div>
+      <div class="text-brand-gray">${r.jPerOp.toExponential(2)} J/op · Δt ${r.dt.toFixed(1)}s · ${r.sample.ledger?.joules_source || '?'}</div>`;
+    el.appendChild(d);
+  }
+}
+$('btn-clear-sel').addEventListener('click', () => { sel = null; draw(); renderSelection(); });
+$('btn-publish-sel').addEventListener('click', async () => {
+  const rows = selRows(); if (!rows.length) return;
+  const btn = $('btn-publish-sel');
+  btn.disabled = true; btn.textContent = 'PUBLISHING…';
+  let ok = 0, fail = 0;
+  for (const r of rows) {
+    const report = {
+      board_id: r.sample.board_id || boardId || 'unknown',
+      substrate: r.substrate,
+      primitive_id: r.sample.primitive_id ?? 0,
+      n_ops: r.nOps,
+      ledger: r.sample.ledger || {},
+      j_per_op: r.jPerOp,
+    };
+    try {
+      const resp = await fetch(`${API_BASE}/api/calibration/reports`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(report),
+      });
+      resp.ok ? ok++ : fail++;
+      if (!resp.ok) logLine('publish HTTP ' + resp.status + ': ' + (await resp.text()).slice(0, 120), '#f87171');
+    } catch (e) { fail++; logLine('publish error: ' + (e && e.message || e), '#f87171'); }
+  }
+  btn.textContent = fail ? `PUBLISHED ${ok}, FAILED ${fail}` : `PUBLISHED ${ok} ROW${ok === 1 ? '' : 'S'} ✓`;
+  setTimeout(() => { btn.disabled = false; btn.textContent = 'PUBLISH SELECTION → fabric'; }, 3000);
+  logLine(`published ${ok} calibration row(s) to the fabric` + (fail ? ` (${fail} failed)` : ''), ok ? GREEN : '#f87171');
 });
 
 resize();

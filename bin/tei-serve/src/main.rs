@@ -61,6 +61,10 @@ struct AppState {
     /// output). When set, /api/dispatch prices with these by default.
     calibration: Arc<Mutex<Option<SubstrateParams>>>,
     calibration_path: Arc<std::path::PathBuf>,
+    /// Append-only store of device calibration reports (the embedded
+    /// EventLedger contract's POST target). JSONL, one report per line.
+    reports_path: Arc<std::path::PathBuf>,
+    reports_lock: Arc<Mutex<()>>,
 }
 
 impl AppState {
@@ -183,6 +187,86 @@ async fn delete_calibration(State(state): State<AppState>) -> Json<serde_json::V
     let _ = std::fs::remove_file(state.calibration_path.as_ref());
     info!("calibration cleared");
     Json(serde_json::json!({ "calibrated": false }))
+}
+
+/// POST /api/calibration/reports — a device publishes a measured (or
+/// proxy) J/op row: the tei-ledger CalibrationReport JSON shape
+/// {board_id, substrate, primitive_id, n_ops, ledger, j_per_op}.
+/// Appended as JSONL with a server timestamp; honest provenance is
+/// preserved verbatim from the device.
+async fn post_calibration_report(
+    State(state): State<AppState>,
+    Json(mut report): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    for key in ["board_id", "substrate", "primitive_id", "n_ops", "ledger", "j_per_op"] {
+        if report.get(key).is_none() {
+            return Err((StatusCode::BAD_REQUEST, format!("missing field: {key}")));
+        }
+    }
+    if !report["j_per_op"].is_number() || report["j_per_op"].as_f64().unwrap_or(-1.0) <= 0.0 {
+        return Err((StatusCode::BAD_REQUEST, "j_per_op must be a positive number".into()));
+    }
+    report["received_unix_ms"] = serde_json::json!(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0)
+    );
+    let line = serde_json::to_string(&report)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    {
+        let _g = state.reports_lock.lock().unwrap();
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(state.reports_path.as_ref())
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("store: {e}")))?;
+        writeln!(f, "{line}")
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("store: {e}")))?;
+    }
+    info!(
+        "calibration report: {} {} prim={} {:.3e} J/op",
+        report["board_id"].as_str().unwrap_or("?"),
+        report["substrate"].as_str().unwrap_or("?"),
+        report["primitive_id"],
+        report["j_per_op"].as_f64().unwrap_or(0.0)
+    );
+    Ok(Json(serde_json::json!({ "stored": true })))
+}
+
+/// GET /api/calibration/reports?board_id=&substrate=&limit= — the
+/// community J/op rows, newest last. The fabric hub's board cards and
+/// Studio's cost-table browser read this.
+async fn get_calibration_reports(
+    State(state): State<AppState>,
+    axum::extract::Query(q): axum::extract::Query<HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    let limit: usize = q.get("limit").and_then(|s| s.parse().ok()).unwrap_or(200);
+    let mut out = Vec::new();
+    if let Ok(content) = std::fs::read_to_string(state.reports_path.as_ref()) {
+        for line in content.lines() {
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+                continue;
+            };
+            if let Some(b) = q.get("board_id") {
+                if v.get("board_id").and_then(|x| x.as_str()) != Some(b.as_str()) {
+                    continue;
+                }
+            }
+            if let Some(sub) = q.get("substrate") {
+                if v.get("substrate").and_then(|x| x.as_str()) != Some(sub.as_str()) {
+                    continue;
+                }
+            }
+            out.push(v);
+        }
+    }
+    let n = out.len();
+    if n > limit {
+        out.drain(..n - limit);
+    }
+    Json(serde_json::json!({ "count": out.len(), "reports": out }))
 }
 
 async fn post_dispatch(
@@ -588,12 +672,19 @@ async fn main() -> anyhow::Result<()> {
         info!("loaded calibration from {}", calibration_path.display());
     }
 
+    let reports_path = std::path::PathBuf::from(
+        std::env::var("CALIBRATION_REPORTS_PATH")
+            .unwrap_or_else(|_| "calibration-reports.jsonl".to_string()),
+    );
+
     let state = AppState {
         stack,
         substrates,
         uploads: Arc::new(UploadState::default()),
         calibration: Arc::new(Mutex::new(calibration)),
         calibration_path: Arc::new(calibration_path),
+        reports_path: Arc::new(reports_path),
+        reports_lock: Arc::new(Mutex::new(())),
     };
 
     let cors = CorsLayer::new()
@@ -612,6 +703,10 @@ async fn main() -> anyhow::Result<()> {
             get(get_calibration)
                 .post(post_calibration)
                 .delete(delete_calibration),
+        )
+        .route(
+            "/api/calibration/reports",
+            get(get_calibration_reports).post(post_calibration_report),
         )
         .route("/api/dispatch/stream", post(post_dispatch_stream))
         .route("/api/execute", post(post_execute))
