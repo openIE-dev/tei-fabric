@@ -1,0 +1,257 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+<Layout title="TEI Studio" description="The turnkey face of thermodynamic compute on current-generation hardware. Connect a board, see its joules live — install nothing, ever.">
+
+<section class="max-w-5xl mx-auto px-6 pt-20 pb-10">
+  <p class="section-label mb-5">TEI Studio &middot; preview</p>
+  <h1 class="font-display text-5xl md:text-6xl font-bold text-brand-white leading-[1.05] tracking-tight mb-6">
+    Your board's <span class="text-brand-amber italic">joules</span>, live.
+  </h1>
+  <p class="text-brand-light text-lg md:text-xl max-w-3xl leading-relaxed mb-4">
+    TEI Studio is a web page — install nothing, ever. Connect a board running
+    teiOS and watch its event ledger stream: every primitive it executes,
+    which on-die substrate ran it, and what that work cost in joules. The
+    same measured-not-assumed discipline as the
+    <a href="/run" class="text-brand-amber hover:underline">fabric's simulators</a>,
+    on hardware you already own.
+  </p>
+  <p class="text-brand-gray text-sm max-w-3xl leading-relaxed">
+    Preview status: the live ledger console below works today with any
+    serial device speaking the teiOS JSON-lines protocol. One-click teiOS
+    flashing (WebUSB PICOBOOT for Pico 2, esptool for ESP32, DFU for
+    OrangeCrab-class FPGAs) lands with the E1 images.
+  </p>
+</section>
+
+<section class="max-w-7xl mx-auto px-6 pb-12">
+  <div class="grid lg:grid-cols-[380px_1fr] gap-6">
+    <!-- connect panel -->
+    <div class="glass-card p-6 self-start">
+      <p class="section-label mb-3">Console</p>
+      <p id="serial-support" class="text-brand-gray text-[13px] leading-relaxed mb-4"></p>
+      <button id="btn-connect" class="primary w-full">CONNECT A BOARD →</button>
+      <div class="grid grid-cols-2 gap-3 mt-4">
+        <div>
+          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Baud</label>
+          <input id="baud" type="number" value="115200" />
+        </div>
+        <div>
+          <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Demo</label>
+          <button id="btn-demo" class="w-full font-mono text-[11px] tracking-wider px-3 py-2 rounded-lg border border-white/15 text-brand-light hover:border-brand-amber/50 hover:text-brand-amber transition-colors">SIMULATE</button>
+        </div>
+      </div>
+      <div id="stats" class="mt-6 space-y-2 font-mono text-[12px] text-brand-light" style="display:none;"></div>
+    </div>
+
+    <!-- live ledger -->
+    <div class="glass-card p-6">
+      <div class="flex items-baseline justify-between mb-4">
+        <p class="section-label">live ledger</p>
+        <p id="conn-state" class="font-mono text-[10px] text-brand-gray uppercase tracking-wider">disconnected</p>
+      </div>
+      <div class="relative aspect-[16/8]">
+        <canvas id="chart" class="absolute inset-0 w-full h-full"></canvas>
+      </div>
+      <div id="log" class="mt-3 h-40 overflow-y-auto font-mono text-[11px] leading-relaxed text-brand-gray bg-black/30 rounded-lg p-3"></div>
+    </div>
+  </div>
+</section>
+
+<section class="max-w-7xl mx-auto px-6 pb-24">
+  <p class="section-label mb-5">Boards &middot; the install paths</p>
+  <div id="boards" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+  <p class="text-brand-gray text-[12px] mt-6 leading-relaxed max-w-3xl">
+    Install tiers: <span class="text-brand-light">W1</span> = direct browser
+    flash (WebSerial/WebUSB) · <span class="text-brand-light">W2</span> =
+    file-write, works in every browser (UF2 drag-drop; Pi-class boards are
+    flat files on a FAT card, because teiOS is not Linux) ·
+    <span class="text-brand-light">W3</span> = the teiProbe bridge — one
+    drag-drop UF2 turns any $4 Pico into a browser-driven programmer for
+    everything else. The full matrix lives in the
+    <a href="https://github.com/openIE-dev/tei-fabric/blob/main/docs/EMBEDDED-TARGETS.md" class="text-brand-amber hover:underline">target catalog</a>.
+  </p>
+</section>
+
+<script is:inline>
+function $(id) { return document.getElementById(id); }
+const AMBER = '#F59E0B', CYAN = 'rgba(14,165,233,0.55)', GREEN = '#34d399', GRAY = '#64748B';
+
+// ── board catalog (curated from docs/EMBEDDED-TARGETS.md) ─────────────
+const BOARDS = [
+  { name: 'Raspberry Pi Pico 2', tier: 'W1 + W2', via: 'WebUSB PICOBOOT or UF2 drag-drop', sub: 'M33 + Hazard3 + 12×PIO + DMA-sniffer — the 4-substrate demo', status: 'E1 — first images' },
+  { name: 'ESP32-C6', tier: 'W1', via: 'WebSerial (esptool-js)', sub: 'HP core ↔ LP RISC-V core (≈90× idle ratio) + radio upload', status: 'E2' },
+  { name: 'Raspberry Pi Zero 2 W', tier: 'W2', via: 'files on FAT — the not-Linux unlock', sub: '4×A53 bare metal; the SD-image flagship', status: 'E3' },
+  { name: 'OrangeCrab (ECP5)', tier: 'W1', via: 'WebUSB DFU (foboot)', sub: 'soft substrates: NEORV32/LiteX SoCs with ledger counters in fabric', status: 'E3' },
+  { name: 'Pico + teiProbe', tier: 'W3 bridge', via: 'one UF2 → browser-driven SWD/JTAG/SPI programmer', sub: 'flashes nRF, DFU-less STM32, FPGA SPI flash', status: 'E2' },
+  { name: 'Tang Nano 9K/20K', tier: 'W3', via: 'teiProbe bridge (Apicula bitstreams)', sub: '$15 FPGA; mass soft-substrate tier', status: 'E3' },
+  { name: 'nRF54L15-DK', tier: 'W3', via: 'teiProbe bridge (SWD)', sub: 'M33 + FLPR RISC-V coprocessor + DPPI', status: 'E5' },
+  { name: 'SiLabs xG24 Pro Kit', tier: 'W3', via: 'teiProbe bridge', sub: 'the T0 reference: firmware reads its own AEM current', status: 'E1 bench kit' },
+  { name: 'Feather / XIAO / UF2 fleet', tier: 'W2', via: 'UF2 drag-drop — every browser, even Safari', sub: 'RP2040/RP2350/nRF52840/SAMD51 form-factor family', status: 'E2' },
+];
+const boardsEl = $('boards');
+for (const b of BOARDS) {
+  const d = document.createElement('div');
+  d.className = 'glass-card p-5';
+  d.innerHTML = `<div class="flex items-baseline justify-between mb-2">
+      <span class="text-brand-white font-semibold">${b.name}</span>
+      <span class="font-mono text-[10px] text-brand-amber">${b.tier}</span></div>
+    <p class="text-brand-gray text-[12px] leading-relaxed mb-2">${b.sub}</p>
+    <p class="font-mono text-[10px] text-brand-light tracking-wider">${b.via}</p>
+    <p class="font-mono text-[10px] text-brand-gray mt-2 uppercase">${b.status}</p>`;
+  boardsEl.appendChild(d);
+}
+
+// ── chart: joules per run, by substrate ───────────────────────────────
+const canvas = $('chart'), ctx = canvas.getContext('2d');
+function dpr() { return devicePixelRatio || 1; }
+function resize() { const r = canvas.getBoundingClientRect(); canvas.width = r.width * dpr(); canvas.height = r.height * dpr(); draw(); }
+new ResizeObserver(resize).observe(canvas);
+const series = new Map(); // substrate -> [{t, j}]
+const colors = [AMBER, '#0ea5e9', GREEN, '#f472b6', '#a78bfa'];
+let t0 = null;
+function draw() {
+  const W = canvas.width, H = canvas.height, d = dpr();
+  ctx.clearRect(0, 0, W, H);
+  const all = [...series.values()].flat();
+  if (all.length < 2) {
+    ctx.fillStyle = GRAY; ctx.font = `${12*d}px "JetBrains Mono", monospace`;
+    ctx.fillText('waiting for ledger lines…', 20*d, H/2);
+    return;
+  }
+  const padL = 86*d, padB = 30*d, padT = 14*d, padR = 14*d;
+  const xs = all.map(p => p.t), ys = all.map(p => p.j);
+  let xMin = Math.min(...xs), xMax = Math.max(...xs), yMin = Math.min(...ys), yMax = Math.max(...ys);
+  if (yMax === yMin) { yMax *= 1.5; yMin *= 0.5; }
+  const px = x => padL + (x - xMin) / (xMax - xMin || 1) * (W - padL - padR);
+  const py = y => H - padB - (y - yMin) / (yMax - yMin) * (H - padT - padB);
+  ctx.strokeStyle = 'rgba(148,163,184,0.12)'; ctx.fillStyle = GRAY; ctx.font = `${10*d}px "JetBrains Mono", monospace`;
+  for (let i = 0; i <= 3; i++) {
+    const v = yMin + (yMax - yMin) * i / 3, y = py(v);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.fillText(v.toExponential(1) + ' J', 6*d, y + 3*d);
+  }
+  let ci = 0;
+  for (const [name, pts] of series) {
+    const c = colors[ci++ % colors.length];
+    ctx.strokeStyle = c; ctx.lineWidth = 2*d; ctx.beginPath();
+    pts.forEach((p, i) => i ? ctx.lineTo(px(p.t), py(p.j)) : ctx.moveTo(px(p.t), py(p.j)));
+    ctx.stroke();
+    ctx.fillStyle = c; ctx.fillText(name, padL + 8*d + (ci-1)*150*d, padT + 10*d);
+  }
+}
+
+// ── ledger stream handling (the teiOS JSON-lines protocol) ────────────
+const counts = { ledger: 0, dispatch: 0, check_ok: 0, check_fail: 0 };
+let lastDispatch = null, boardId = null;
+function logLine(s, cls) {
+  const el = $('log'); const div = document.createElement('div');
+  if (cls) div.style.color = cls;
+  div.textContent = s; el.appendChild(div);
+  while (el.childElementCount > 200) el.removeChild(el.firstChild);
+  el.scrollTop = el.scrollHeight;
+}
+function handleLine(line) {
+  line = line.trim(); if (!line) return;
+  let m; try { m = JSON.parse(line); } catch { logLine(line); return; }
+  if (m.type === 'ledger') {
+    counts.ledger++;
+    boardId = m.board_id || boardId;
+    const j = m.ledger && m.ledger.joules;
+    const t = (Date.now() - (t0 ??= Date.now())) / 1000;
+    if (j != null) {
+      if (!series.has(m.substrate)) series.set(m.substrate, []);
+      const pts = series.get(m.substrate); pts.push({ t, j });
+      if (pts.length > 300) pts.shift();
+      draw();
+    }
+    logLine(`ledger ${m.substrate} · ${m.ledger?.cycles ?? '—'} cyc · ${j != null ? j.toExponential(2) + ' J (' + (m.ledger.joules_source || '?') + ')' : 'unpriced'}`);
+  } else if (m.type === 'dispatch') {
+    counts.dispatch++; lastDispatch = m;
+    logLine(`dispatch → ${m.chosen} @ ${Number(m.j_per_op).toExponential(2)} J/op`, AMBER);
+  } else if (m.type === 'check') {
+    m.ok ? counts.check_ok++ : counts.check_fail++;
+    if (!m.ok) logLine('CHECK FAILED', '#f87171');
+  } else { logLine(line); }
+  renderStats();
+}
+function renderStats() {
+  const el = $('stats'); el.style.display = '';
+  const rows = [
+    ['BOARD', boardId ?? '—'],
+    ['LEDGERS', counts.ledger],
+    ['DISPATCHES', counts.dispatch, AMBER],
+    ['CHECKS', `${counts.check_ok} ok${counts.check_fail ? ' · ' + counts.check_fail + ' FAIL' : ''}`, counts.check_fail ? '#f87171' : GREEN],
+  ];
+  if (lastDispatch) rows.push(['CHOSEN SUBSTRATE', lastDispatch.chosen, AMBER]);
+  el.innerHTML = '';
+  for (const [k, v, color] of rows) {
+    const div = document.createElement('div');
+    div.className = 'flex justify-between';
+    div.innerHTML = `<span class="text-brand-gray">${k}</span><span${color ? ` style="color:${color}" class="font-bold"` : ''}>${v}</span>`;
+    el.appendChild(div);
+  }
+}
+
+// ── WebSerial ──────────────────────────────────────────────────────────
+const hasSerial = !!navigator.serial;
+$('serial-support').textContent = hasSerial
+  ? 'WebSerial available. Plug in a board running teiOS (or anything speaking the JSON-lines ledger protocol) and connect.'
+  : 'This browser has no WebSerial (Chromium-only for now) — the SIMULATE demo still works, and UF2/file installs never need it.';
+let port = null, reader = null;
+async function connect() {
+  if (!hasSerial) return;
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: parseInt($('baud').value) || 115200 });
+    $('conn-state').textContent = 'connected';
+    $('btn-connect').textContent = 'DISCONNECT';
+    const dec = new TextDecoderStream();
+    port.readable.pipeTo(dec.writable);
+    reader = dec.readable.getReader();
+    let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += value;
+      let i; while ((i = buf.indexOf('\n')) >= 0) { handleLine(buf.slice(0, i)); buf = buf.slice(i + 1); }
+    }
+  } catch (e) {
+    logLine('serial: ' + (e.message || e), '#f87171');
+  } finally {
+    $('conn-state').textContent = 'disconnected';
+    $('btn-connect').textContent = 'CONNECT A BOARD →';
+    try { reader?.releaseLock(); await port?.close(); } catch {}
+    port = null;
+  }
+}
+$('btn-connect').addEventListener('click', () => {
+  if (port) { reader?.cancel(); } else connect();
+});
+
+// ── simulator: emits protocol-faithful lines so the console is testable
+//    (and demo-able) with zero hardware ─────────────────────────────────
+let demoTimer = null;
+$('btn-demo').addEventListener('click', () => {
+  if (demoTimer) { clearInterval(demoTimer); demoTimer = null; $('btn-demo').textContent = 'SIMULATE'; return; }
+  $('btn-demo').textContent = 'STOP';
+  $('conn-state').textContent = 'simulated board';
+  let n = 0;
+  demoTimer = setInterval(() => {
+    n++;
+    const cpuJ = 96e-6 * (1 + 0.05 * Math.sin(n / 5));
+    const dmaJ = 41e-6 * (1 + 0.04 * Math.cos(n / 7));
+    handleLine(JSON.stringify({ type: 'ledger', board_id: 'pico2-sim', substrate: 'cpu@150mhz', primitive_id: 36, n_ops: 1,
+      ledger: { cycles: 14400000 + (n % 7) * 1000, dma_transfers: 0, adc_samples: 0, accel_invocations: 0, sleep_us: 0, active_us: 96000, joules: cpuJ, joules_source: 'table' } }));
+    handleLine(JSON.stringify({ type: 'ledger', board_id: 'pico2-sim', substrate: 'dma-sniffer', primitive_id: 36, n_ops: 1,
+      ledger: { cycles: 0, dma_transfers: 16384, adc_samples: 0, accel_invocations: 1, sleep_us: 90000, active_us: 6000, joules: dmaJ, joules_source: 'table' } }));
+    handleLine(JSON.stringify({ type: 'dispatch', primitive_id: 36, chosen: 'dma-sniffer', j_per_op: dmaJ,
+      alternatives: [{ substrate: 'cpu@150mhz', j_per_op: cpuJ }] }));
+    handleLine(JSON.stringify({ type: 'check', ok: true }));
+  }, 1000);
+});
+
+resize();
+</script>
+
+</Layout>

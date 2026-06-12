@@ -1,5 +1,8 @@
 [workspace]
 resolver = "3"
+# Firmware projects build for embedded targets with their own profiles
+# and cargo config; they consume crates/embedded/tei-ledger by path.
+exclude = ["embedded/teios-rp2350"]
 members = [
     "crates/embedded/tei-ledger",
     "crates/tei-stack",

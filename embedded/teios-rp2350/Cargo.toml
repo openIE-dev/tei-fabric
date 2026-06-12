@@ -1,0 +1,44 @@
+# teiOS E1 — Raspberry Pi Pico 2 (RP2350) firmware.
+#
+# Standalone project (excluded from the root workspace: different target,
+# embedded-only dependency tree). Builds for thumbv8m.main-none-eabihf by
+# default (.cargo/config.toml); host tests run the `lib` portion only:
+#
+#     cargo test --lib --target aarch64-apple-darwin
+
+[package]
+name = "teios-rp2350"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+description = "teiOS E1: priced-primitive dispatch demo on RP2350 — CRC32 on cpu vs DMA sniffer, event ledger streamed as JSON lines over USB CDC."
+
+[dependencies]
+# The TEI Embedded device contract (E0). Core only — no serde on target;
+# the wire format is produced by this crate's hand-rolled JSON writer and
+# locked to tei-ledger's serde shape by host tests.
+tei-ledger = { path = "../../crates/embedded/tei-ledger" }
+heapless = { version = "0.9", default-features = false }
+
+# Firmware-only dependencies: never built for the host, so `cargo test`
+# on the host triple stays pure-Rust and fast.
+[target.'cfg(all(target_arch = "arm", target_os = "none"))'.dependencies]
+embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread"] }
+embassy-rp = { version = "0.10.0", features = ["rp235xa", "time-driver", "critical-section-impl", "binary-info", "unstable-pac"] }
+embassy-time = "0.5.1"
+embassy-usb = "0.6.0"
+cortex-m = { version = "0.7.6", features = ["inline-asm"] }
+cortex-m-rt = "0.7"
+static_cell = "2.1"
+panic-halt = "1.0"
+
+[dev-dependencies]
+# Host tests pin the hand-rolled JSON writer to the canonical serde shape.
+tei-ledger = { path = "../../crates/embedded/tei-ledger", features = ["serde"] }
+serde_json = "1"
+
+[profile.release]
+debug = true       # symbols in the ELF; stripped from the UF2 by picotool
+lto = "fat"
+codegen-units = 1
