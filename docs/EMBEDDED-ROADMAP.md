@@ -1,0 +1,155 @@
+# TEI Embedded — the fabric model on current-generation hardware
+
+**Status**: exploration draft · **Owner**: tei-fabric core · **Thesis date**: 2026-06-11
+
+---
+
+## 1. Why
+
+tei-fabric prices computational primitives in joules, executes them, counts
+what physically happened in an event ledger, and feeds measured energy back
+to replace assumed constants. Purpose-built substrates (p-bit arrays,
+photonic meshes, adiabatic logic) are coming — but the *programming model*
+should not wait for them.
+
+Current microcontrollers already are heterogeneous fabrics in miniature:
+a main core plus PIO state machines, low-power coprocessors, filter/CORDIC
+accelerators, NPUs, DMA engines, and hardware event routing that does work
+while the CPU sleeps. Each block has a different joules-per-op. Nobody
+dispatches across them on measured energy; everybody dispatches on
+folklore.
+
+**The goal**: ship the toolchain and ecosystem support that lets today's
+chips *exhibit the fabric's features* — priced primitives, event ledgers,
+measured-not-assumed calibration, lowest-joule dispatch — so that when the
+purpose-built hardware arrives, the developer community already speaks the
+model. The chips change; the contract doesn't.
+
+## 2. The governing principle: turnkey wins
+
+Raspberry Pi and Arduino did not win on hardware merit. They won because
+the first-run experience is minutes: flash an image, `begin()`, blink.
+Every deliverable below is judged by **minutes-to-first-ledger** — the
+time from "heard about it" to seeing your own board print measured joules
+for work it just did. Depth (calibration, dispatch policy, fabric upload)
+unlocks progressively behind that first moment, never in front of it.
+
+Concretely, the turnkey artifact per ecosystem is defined *first*, and the
+architecture serves it:
+
+| Ecosystem | Turnkey artifact | First-run target |
+|---|---|---|
+| Arduino | Library Manager install → `TEI.begin(); TEI.run(FFT, buf)` → ledger on Serial | < 5 min |
+| MicroPython / CircuitPython | `mip install tei` / bundle → `import tei` → ledger repr | < 5 min |
+| Rust / Embassy | `cargo add tei-ledger` + one wrapper type around the executor | < 15 min |
+| Raspberry Pi / Yocto | flashable demo image; `teictl run fft` prints ledger + dispatch choice | < 10 min |
+| ESP-IDF | component registry `idf.py add-dependency "openie/tei"` | < 10 min |
+| Zephyr | west module + `CONFIG_TEI=y`, energy tables in devicetree | < 30 min |
+
+## 3. The device contract (what is identical everywhere)
+
+Three shapes, all already canon in the fabric, all serializable small:
+
+1. **Primitive identity** — the Periodic Stack id space (`stack.json`).
+   Embedded profile = a small subset (matmul/MAC, FFT/DCT, filter, sort,
+   hash, sample/threshold, CRC/crypto, …) with the same ids the fabric
+   uses, so a ledger from an RP2350 and one from the photonic column are
+   rows in the same table.
+2. **The embedded EventLedger** — counters that current hardware can
+   count cheaply, replacing the sim columns' counters:
+   `{cycles, instructions?, dma_transfers, adc_samples, accel_invocations,
+   sleep_us, active_us, joules?: Option, joules_source: measured|cycles_proxy|table}`.
+   `joules` is honest about provenance — a board with a coulomb counter
+   reports `measured`; a bare board reports `cycles_proxy` against its
+   calibrated per-state power table; an uncalibrated board reports `table`
+   (shipped defaults) and says so.
+3. **The calibration report** — `{board_id, substrate ("cpu@…MHz",
+   "pio", "ulp", "npu", …), primitive_id, n_ops, ledger, j_per_op}` —
+   POSTable to the fabric's existing `/api/calibration` family. The
+   fabric-side store we already built becomes the aggregation point for
+   community-measured J/op tables per board, the same way it already
+   holds measured constants for the sim columns.
+
+The dispatch rule is also identical: given a primitive and the board's
+calibrated cost table, run it on the lowest-joule substrate available.
+On an RP2350 that choice set is {M33 core, Hazard3 core, PIO, DMA+sniffer};
+on purpose-built hardware it becomes {CPU, p-bit array, mesh}. Same API.
+
+## 4. Architecture: one core, thin bindings
+
+One `no_std` Rust core crate owns the contract types + dispatch logic +
+cycles-proxy energy model. Everything else is a thin binding:
+
+```
+tei-ledger (no_std core: types, cost tables, proxy model, serde)
+├── tei-embassy        Rust: executor instrumentation, per-task ledgers
+├── tei-arduino        C++ wrapper (core compiled as staticlib, C ABI)
+├── tei-micropython    native module (same C ABI)
+├── tei-circuitpython  shared-bindings module
+├── tei-zephyr         west module; energy tables via devicetree bindings
+└── tei-linux (teid)   Yocto/RPi daemon: hwmon/INA sensors, RAPL-class,
+                       systemd service, talks to fabric.thermoedge.ai
+```
+
+The C-ABI staticlib trick (one Rust core, every ecosystem links it) is the
+maintenance-minimizing shape; precedent: TinyUSB/lvgl ship one C core into
+every ecosystem, TFLM ships one C++ core. We invert the language but keep
+the shape.
+
+**Energy measurement tiers** (a board is in exactly one tier per substrate):
+
+- **T0 measured** — on-board coulomb counter / power monitor readable by
+  firmware (INA228/PAC1934-class, EFM32 AEM, fuel gauges). Real joules.
+- **T1 calibrated proxy** — DWT CYCCNT / mcycle × a per-power-state table
+  calibrated once on a bench (PPK2/Joulescope/Otii with GPIO markers) or
+  crowd-sourced from T0 boards of the same family via the fabric store.
+- **T2 shipped table** — defaults from datasheets; honest `joules_source:
+  table`. Still useful: dispatch *ratios* between substrates are far more
+  stable than absolute watts.
+
+## 5. Reference targets (proposed; verify in research pass)
+
+- **RP2350 (Pico 2)** — the heterogeneity demo: M33 vs Hazard3 vs PIO for
+  the same primitive, huge community, cheap. Likely first Rust+Arduino+
+  MicroPython target.
+- **ESP32-C6 or -P4** — LP core vs HP core dispatch + Wi-Fi upload of
+  calibration reports to the fabric; ESP-IDF component registry reach.
+- **Raspberry Pi (4/5/Zero 2)** — the Linux/Yocto/teid flagship and the
+  turnkey image; hwmon/INA HATs for T0 measurement; the board everyone
+  already owns.
+- Stretch: one Ethos-U board (STM32N6 / MCX N / Alif) for the NPU column,
+  one nRF54 for the VPR coprocessor + PPI story, MSP430 EnergyTrace as the
+  T0-measurement reference.
+
+## 6. Phasing (each phase ends with a turnkey artifact)
+
+| Phase | Deliverable | Turnkey artifact |
+|---|---|---|
+| **E0** | `tei-ledger` no_std core: types, embedded ledger, cost tables, proxy model, C ABI | crates.io publish; `cargo add tei-ledger` works on stable |
+| **E1** | RP2350: Embassy instrumentation + PIO-vs-core dispatch demo; bench calibration kit (PPK2 scripts) | Pico 2 UF2 demo: hold BOOTSEL, drag, serial prints a live ledger + "FFT ran on PIO, 41 µJ vs 96 µJ on core" |
+| **E2** | Arduino + MicroPython bindings over the same core | Library Manager + mip packages; copy-paste sketch prints a ledger |
+| **E3** | `teid` for Linux (RPi/Yocto): hwmon/INA, systemd, fabric upload; meta-tei layer | flashable RPi image; `teictl run` + web ledger view |
+| **E4** | Fabric integration: `/api/calibration` accepts board reports; fabric.thermoedge.ai page showing community J/op tables per board | your board's measurement appears on the public cost surface |
+| **E5** | Zephyr module + ESP-IDF component; devicetree energy bindings | `CONFIG_TEI=y`; `idf.py add-dependency` |
+
+## 7. What this is not
+
+- Not an RTOS, not a scheduler replacement — it instruments and advises
+  the executor you already use (Embassy task, FreeRTOS task, loop()).
+- Not a power-management framework — Zephyr PM et al. manage states;
+  TEI *prices work* and chooses where work runs. It composes with PM.
+- Not vendor benchmarking — tables are measured, sourced, and reproducible;
+  no comparative marketing, ever (the numbers speak or stay out).
+
+## 8. Open questions for the verification research pass
+
+(Three research sweeps were scoped — per-family energy measurement reality,
+on-die substrate inventory + energy-aware dispatch prior art, ecosystem
+packaging norms. They were interrupted; re-run before E0 freezes the
+ledger counter set.)
+
+- Which counters are cheaply countable per family (decides ledger fields).
+- Whether any on-die T0 measurement exists beyond EFM32 AEM / EnergyTrace.
+- Ethos-U delegate model details for the NPU substrate column.
+- MicroPython native-module vs frozen-py tradeoff for the binding.
+- Whether devicetree is the right home for Zephyr energy tables.
