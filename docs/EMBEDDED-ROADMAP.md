@@ -86,13 +86,14 @@ on purpose-built hardware it becomes {CPU, p-bit array, mesh}. Same API.
   recipe in → reproducible teiOS image out (`.uf2`/`.bin`/`.bit`/`.img`),
   with the board's energy tables baked in.
 - **TEI Studio** — the turnkey face (the Arduino-IDE/Thonny lesson, applied).
-  Desktop app (Tauri — Rust core, web UI, so the /run live-view components
-  we already ship on fabric.thermoedge.ai are reused verbatim): detect a
-  plugged board → one-click flash teiOS → **live ledger console** streaming
-  joules per primitive → cost-table browser → run a calibration → publish
-  the measurement to the fabric. Code editing comes later; flashing +
-  *seeing your board's joules* is the wedge. Studio invokes the forge;
-  users never meet the forge directly.
+  **A web page — install nothing, ever** (doctrine; see the web-only
+  verdict in §8): connect a board → flash teiOS from the browser →
+  **live ledger console** streaming joules per primitive → cost-table
+  browser → run a calibration → publish the measurement to the fabric.
+  The /run live-view components already on fabric.thermoedge.ai are
+  reused verbatim. Code editing comes later; flashing + *seeing your
+  board's joules* is the wedge. Studio invokes the forge's published
+  image catalog; users never meet the forge directly.
 
 Minutes-to-first-ledger through Studio: plug in a Pico 2 → Studio offers
 "Flash teiOS" → 10 seconds later the ledger view is live. That is the
@@ -246,26 +247,55 @@ research transcripts; key URLs inline.
   **Slint already ships Rust-as-staticlib on the ESP registry**, the
   direct precedent. `targets:` gating + examples/ + upload-components-ci.
 
-**TEI Studio verdict**
-- **Tauri-first, web flasher as the additive marketing surface.** The
-  decisive facts: Pi SD imaging is categorically impossible in-browser
-  (WebUSB blocks the mass-storage class); browser flashing is
-  Chromium-only in practice (Safari opposed, Firefox experimental); and
-  the best tools are Rust crates Studio links directly — probe-rs (lib,
-  MIT/Apache, RP2350 since 0.27, RTT in-process), espflash, raw disk
-  write. No sidecar daemon (Arduino IDE 2.x's gRPC daemon handshake is
-  its worst support ticket — lesson absorbed).
-- The web path still matters and works TODAY for the two v1 boards:
-  esptool-js/WebSerial for ESP32-class (ESP Launchpad/Web Tools-proven,
-  manifest-driven, third-party-hostable) and **WebUSB PICOBOOT for
-  RP2040/RP2350** (picoflash.org + Arm's picotool.js prove it) — so
-  fabric.thermoedge.ai gets a "Connect & flash teiOS" page for Pico 2 +
-  ESP32 with zero install, and Studio handles everything else.
-- UX patterns to copy verbatim: Thonny's "bootloader volume detected →
-  offer firmware" dialog; Raspberry Pi Imager's three-choice flow and
-  runtime JSON image catalog (the forge publishes the same shape);
-  Nordic PPK2's live scrolling current trace (~100 ksps) as the
-  live-ledger view's gold standard.
+**TEI Studio verdict — WEB-ONLY install, for every device (doctrine)**
+
+Decision (David, 2026-06-11, overriding the research's Tauri-first
+recommendation): there is no desktop app to install. TEI Studio is a web
+page; every supported device gets teiOS from the browser. Where the
+browser "can't," we innovate around it. Three install tiers, all web:
+
+- **Tier W1 — direct browser flash** (Chromium WebSerial/WebUSB, all
+  production-proven): esptool-js for the ESP family (the ESP Launchpad /
+  Web Tools stack); **WebUSB PICOBOOT** for RP2040/RP2350 (picoflash.org
+  and Arm's picotool.js prove it, Pico 2 included); **WebUSB DFU**
+  (webdfu) for STM32 DfuSe ROM bootloaders — and for FPGAs we
+  preferentially target the DFU-bootloader boards (**Fomu, OrangeCrab**),
+  which makes "flash a bitstream from a web page" real; DAPjs CMSIS-DAP
+  for boards with DAPLink interface chips (micro:bit-class — flashing
+  over WebUSB-HID since 2018). probe-rs-in-WASM (upstream work in
+  flight, demo at inspect.probe.rs) is the future unification of this tier.
+- **Tier W2 — file-write install (works in EVERY browser incl. Safari)**:
+  UF2 targets are a file download + drag to the BOOTSEL drive — no API
+  needed at all. **And the Pi-class innovation: because teiOS is not
+  Linux, a Pi install is just FILES on a FAT partition** (the GPU
+  bootloader loads our flat kernel img + config.txt from FAT — no ext4,
+  no partition surgery). `showDirectoryPicker()` → user picks the SD
+  card → Studio writes the teiOS boot set. The "not Linux at all"
+  decision is precisely what makes browser Pi-install possible where
+  Raspberry Pi OS needs a native imager. (Cards >32 GB ship exFAT and
+  need a one-time FAT32 format via the OS dialog — documented, still
+  zero install.)
+- **Tier W3 — the teiProbe bridge ($4 universal web programmer)**: for
+  SWD-only parts (nRF, STM32 without DFU, SAMD…) and FPGA SPI flash,
+  Studio offers a one-time drag-drop: a **teiProbe UF2 onto any Pico**
+  (debugprobe/CMSIS-DAP lineage, PIO-driven SWD/JTAG/SPI). The browser
+  then drives the bridge over WebUSB to flash the real target. One
+  drag-drop mints the programmer for everything the browser can't reach
+  directly. This also gives Safari/Firefox users a path: the bridge
+  setup is Tier W2 (a file drag), and only the final hop needs Chromium.
+
+Honest envelope: the full matrix is Chromium-first (Safari opposes
+WebSerial/WebUSB; Firefox is Nightly-experimental). Tier W2 covers every
+browser; Studio detects capability and routes. A Tauri wrapper can come
+later for offline/fleet use — it is a wrapper around the same web app,
+never the primary path.
+
+UX patterns to copy verbatim: Thonny's "bootloader volume detected →
+offer firmware" dialog; Raspberry Pi Imager's three-choice flow and
+runtime JSON image catalog (the forge publishes exactly that shape, à la
+ESP Launchpad's vendor-hostable TOML); Nordic PPK2's live scrolling
+current trace as the live-ledger view's gold standard. The live ledger
+console is WebSerial (or WebUSB vendor CDC) streaming postcard frames.
 
 **CI norms adopted**: compile-sketches matrix + arduino-lint (Arduino),
 wokwi-ci with wait-serial ledger assertions (functional only — simulated
