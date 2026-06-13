@@ -3,29 +3,30 @@ import Layout from '../layouts/Layout.astro';
 ---
 <Layout title="TEI Studio" description="The turnkey face of thermodynamic compute on current-generation hardware. Connect a board, see its joules live — install nothing, ever.">
 
-<section class="max-w-5xl mx-auto px-6 pt-20 pb-10">
-  <p class="section-label mb-5">TEI Studio &middot; preview</p>
-  <h1 class="font-display text-5xl md:text-6xl font-bold text-brand-white leading-[1.05] tracking-tight mb-6">
-    Your board's <span class="text-brand-amber italic">joules</span>, live.
-  </h1>
-  <p class="text-brand-light text-lg md:text-xl max-w-3xl leading-relaxed mb-4">
-    TEI Studio is a web page — install nothing, ever. Connect a board running
-    teiOS and watch its event ledger stream: every primitive it executes,
-    which on-die substrate ran it, and what that work cost in joules. The
-    same measured-not-assumed discipline as the
-    <a href="/run" class="text-brand-amber hover:underline">fabric's simulators</a>,
-    on hardware you already own.
-  </p>
-  <p class="text-brand-gray text-sm max-w-3xl leading-relaxed">
-    The live ledger console works today with any device speaking the
-    teiOS JSON-lines protocol — and the first teiOS images are here:
-    UF2 downloads below for the Feather RP2040 and Pico-class boards
-    (drag-drop, any browser). WebUSB DFU for the Portenta H7 is next.
-  </p>
-</section>
+<section class="max-w-[1500px] mx-auto px-6 pt-10 pb-24">
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div>
+      <h1 class="font-display text-2xl font-bold text-brand-white tracking-tight">TEI <span class="text-brand-amber italic">Studio</span></h1>
+      <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mt-1">the browser workbench for compute — program · build · flash · measure in joules · deploy · built on teiOS</p>
+    </div>
+    <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider">cmd-K commands · install nothing, ever</p>
+  </div>
 
-<section class="max-w-7xl mx-auto px-6 pb-12">
-  <div class="grid lg:grid-cols-[380px_1fr] gap-6">
+  <div class="flex gap-5">
+    <nav id="rail" class="flex flex-col gap-1 shrink-0 w-32">
+      <button data-ws="code"    class="ws-btn">CODE</button>
+      <button data-ws="build"   class="ws-btn">BUILD</button>
+      <button data-ws="flash"   class="ws-btn">FLASH</button>
+      <button data-ws="console" class="ws-btn">CONSOLE</button>
+      <button data-ws="data"    class="ws-btn ws-soon">DATA</button>
+      <button data-ws="ai"      class="ws-btn">AI</button>
+      <button data-ws="fleet"   class="ws-btn ws-soon">FLEET</button>
+      <button data-ws="hub"     class="ws-btn">HUB</button>
+    </nav>
+
+    <div class="flex-1 min-w-0">
+      <div id="ws-console" class="ws">
+        <div class="grid lg:grid-cols-[380px_1fr] gap-6">
     <!-- connect panel -->
     <div class="glass-card p-6 self-start">
       <p class="section-label mb-3">Console</p>
@@ -60,6 +61,9 @@ import Layout from '../layouts/Layout.astro';
       <div class="relative aspect-[16/8]">
         <canvas id="chart" class="absolute inset-0 w-full h-full"></canvas>
       </div>
+      <div class="relative h-9 mt-1" title="event lane — click an event to select around it">
+        <canvas id="lane" class="absolute inset-0 w-full h-full cursor-pointer"></canvas>
+      </div>
       <div id="selstrip" class="mt-3 hidden">
         <div class="flex items-center justify-between mb-2">
           <p class="font-mono text-[10px] text-brand-amber uppercase tracking-wider">selection</p>
@@ -73,10 +77,63 @@ import Layout from '../layouts/Layout.astro';
       <div id="log" class="mt-3 h-40 overflow-y-auto font-mono text-[11px] leading-relaxed text-brand-gray bg-black/30 rounded-lg p-3"></div>
     </div>
   </div>
-</section>
 
-<section class="max-w-7xl mx-auto px-6 pb-24">
-  <p class="section-label mb-5">Boards &middot; the install paths</p>
+      </div>
+
+      <div id="ws-code" class="ws hidden">
+        <div class="grid lg:grid-cols-[1fr_320px] gap-5">
+          <div class="glass-card p-4">
+            <div class="flex items-center justify-between mb-3">
+              <p class="section-label">app.rs — your program on teiOS</p>
+              <div class="flex gap-2 items-center">
+                <span id="code-state" class="font-mono text-[10px] text-brand-gray uppercase"></span>
+                <button id="btn-code-reset" class="font-mono text-[10px] text-brand-gray hover:text-brand-light underline decoration-dotted">reset to template</button>
+              </div>
+            </div>
+            <div id="code-editor" class="rounded-lg overflow-hidden border border-white/10 text-[13px]"></div>
+          </div>
+          <div class="glass-card p-5 self-start">
+            <p class="section-label mb-3">the teiOS app surface</p>
+            <p class="text-brand-gray text-[12px] leading-relaxed mb-3">
+              An app is a function teiOS schedules. Everything it does is
+              ledgered; everything it runs is dispatched to the lowest-joule
+              substrate the board's cost table knows.</p>
+            <pre class="font-mono text-[11px] text-brand-light bg-black/30 rounded-lg p-3 leading-relaxed overflow-x-auto">run(FFT, buf)      -> Ledger
+run_on(PIO, ...)   -> Ledger
+cheapest(FFT)      -> Substrate
+ledger().joules    -> Option&lt;f64&gt;
+publish(report)    -> fabric</pre>
+            <p class="text-brand-gray text-[11px] leading-relaxed mt-3">
+              Edits build through the forge (BUILD tab). The unmodified
+              template maps to the shipped image — flashable right now.</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="ws-build" class="ws hidden">
+        <div class="glass-card p-6 max-w-2xl">
+          <p class="section-label mb-3">forge build</p>
+          <div class="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label class="block font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-1.5">Target</label>
+              <select id="build-target" class="w-full bg-black/40 rounded-lg px-3 py-2 font-mono text-[12px] text-brand-white border border-white/10">
+                <option value="feather-rp2040">Adafruit Feather RP2040</option>
+                <option value="pico">Raspberry Pi Pico</option>
+                <option value="pico2">Raspberry Pi Pico 2</option>
+                <option value="portenta-h7" disabled>Portenta H7 (image building — E1b)</option>
+              </select>
+            </div>
+            <div class="flex items-end"><button id="btn-build" class="primary w-full">BUILD →</button></div>
+          </div>
+          <div id="build-out" class="font-mono text-[11px] text-brand-gray bg-black/30 rounded-lg p-3 min-h-[80px] whitespace-pre-wrap">the forge resolves your CODE tab source against the target.
+unmodified template -> the shipped, tested image (instant).
+modified source -> the forge build service (sandboxed builders; the
+next backend milestone — honest status, not a dead button).</div>
+        </div>
+      </div>
+
+      <div id="ws-flash" class="ws hidden">
+        <p class="section-label mb-5">Boards &middot; the install paths</p>
   <div id="boards" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
   <p class="text-brand-gray text-[12px] mt-6 leading-relaxed max-w-3xl">
     Install tiers: <span class="text-brand-light">W1</span> = direct browser
@@ -88,7 +145,40 @@ import Layout from '../layouts/Layout.astro';
     everything else. The full matrix lives in the
     <a href="https://github.com/openIE-dev/tei-fabric/blob/main/docs/EMBEDDED-TARGETS.md" class="text-brand-amber hover:underline">target catalog</a>.
   </p>
+
+      </div>
+
+      <div id="ws-data" class="ws hidden"><div class="glass-card p-6 max-w-xl"><p class="section-label mb-2">data</p><p class="text-brand-gray text-[13px]">Board data capture &amp; analysis lands after the console's dataset export. The joule traces in CONSOLE are the first dataset.</p></div></div>
+      <div id="ws-fleet" class="ws hidden"><div class="glass-card p-6 max-w-xl"><p class="section-label mb-2">fleet</p><p class="text-brand-gray text-[13px]">Multi-board operations + OTA land after Improv WiFi provisioning — boards will POST ledgers home without a browser tether.</p></div></div>
+
+      <div id="ws-ai" class="ws hidden">
+        <div class="glass-card p-6 max-w-2xl">
+          <p class="section-label mb-3">ai — in front of the grammar, never around it</p>
+          <p class="text-brand-light text-[13px] leading-relaxed mb-3">Today: the cmd-K palette parses the deterministic Tier-0 grammar (try <span class="font-mono text-brand-amber">help</span>). Landing in order: Tier-0.5 zero-download translation (Chrome built-in Prompt API), Tier-1 in-browser LFM2.5-350M, dispatch-decision explanation cards on the console's anomaly chips, calibration-plan generation, model dev + deploy per board with measured J/inference.</p>
+          <button id="btn-open-ck" class="font-mono text-[11px] tracking-wider px-4 py-2 rounded-lg border border-brand-amber/40 text-brand-amber hover:bg-brand-amber/10 transition-colors">OPEN cmd-K</button>
+        </div>
+      </div>
+
+      <div id="ws-hub" class="ws hidden">
+        <div class="glass-card p-6">
+          <div class="flex items-center justify-between mb-4">
+            <p class="section-label">hub — the community calibration store</p>
+            <button id="btn-hub-refresh" class="font-mono text-[10px] text-brand-gray hover:text-brand-light underline decoration-dotted">refresh</button>
+          </div>
+          <div id="hub-table" class="font-mono text-[12px] text-brand-light overflow-x-auto">loading…</div>
+        </div>
+      </div>
+    </div>
+  </div>
 </section>
+
+<style>
+  .ws-btn { font-size: 11px; letter-spacing: 0.08em; text-align: left; font-family: 'JetBrains Mono', monospace;
+    padding: 9px 14px; border-radius: 10px; color: rgb(100 116 139); border: 1px solid transparent; transition: all .15s; }
+  .ws-btn:hover { color: rgb(226 232 240); }
+  .ws-btn.active { color: #F59E0B; background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.25); }
+  .ws-soon { opacity: 0.45; }
+</style>
 
 <!-- command-K palette: Tier-0 deterministic grammar (STUDIO-DESIGN §5).
      Fuzzy in → exact parsed command rendered → Enter executes. Tiers
@@ -147,9 +237,63 @@ for (const b of BOARDS) {
 // ── chart: joules per run, by substrate ───────────────────────────────
 const canvas = $('chart'), ctx = canvas.getContext('2d');
 function dpr() { return devicePixelRatio || 1; }
-function resize() { const r = canvas.getBoundingClientRect(); canvas.width = r.width * dpr(); canvas.height = r.height * dpr(); draw(); }
+function resize() { const r = canvas.getBoundingClientRect(); canvas.width = r.width * dpr(); canvas.height = r.height * dpr(); laneResize(); draw(); drawLane(); }
 new ResizeObserver(resize).observe(canvas);
 const series = new Map(); // substrate -> [{t, j, msg}]
+const events = [];        // {t, kind: 'ledger'|'dispatch'|'check', substrate?, ok?, chosen?}
+const lane = $('lane'), lctx = lane.getContext('2d');
+function laneResize() { const r = lane.getBoundingClientRect(); lane.width = r.width * dpr(); lane.height = r.height * dpr(); }
+function subColor(name) {
+  const keys = [...series.keys()];
+  const i = keys.indexOf(name);
+  return colors[(i < 0 ? keys.length : i) % colors.length];
+}
+function drawLane() {
+  if (!lane.width) laneResize();
+  const W = lane.width, H = lane.height, d = dpr();
+  lctx.clearRect(0, 0, W, H);
+  if (!lastX || !events.length) return;
+  const { xMin, xMax, padL, padR } = lastX;
+  const px = t => padL + (t - xMin) / (xMax - xMin || 1) * (W - padL - padR);
+  lctx.strokeStyle = 'rgba(148,163,184,0.15)';
+  lctx.beginPath(); lctx.moveTo(padL, H/2); lctx.lineTo(W - padR, H/2); lctx.stroke();
+  for (const e of events) {
+    if (e.t < xMin || e.t > xMax) continue;
+    const x = px(e.t);
+    if (e.kind === 'ledger') {
+      lctx.fillStyle = subColor(e.substrate);
+      lctx.beginPath(); lctx.arc(x, H * 0.30, 2.2*d, 0, 7); lctx.fill();
+    } else if (e.kind === 'dispatch') {
+      lctx.fillStyle = AMBER;
+      lctx.save(); lctx.translate(x, H * 0.62); lctx.rotate(Math.PI/4);
+      lctx.fillRect(-2.4*d, -2.4*d, 4.8*d, 4.8*d); lctx.restore();
+    } else if (e.kind === 'check' && !e.ok) {
+      lctx.strokeStyle = '#f87171'; lctx.lineWidth = 1.6*d;
+      lctx.beginPath();
+      lctx.moveTo(x - 3*d, H * 0.78 - 3*d); lctx.lineTo(x + 3*d, H * 0.78 + 3*d);
+      lctx.moveTo(x + 3*d, H * 0.78 - 3*d); lctx.lineTo(x - 3*d, H * 0.78 + 3*d);
+      lctx.stroke();
+    }
+  }
+  if (sel) {
+    const x0 = px(Math.max(Math.min(sel.t0, sel.t1), xMin)), x1 = px(Math.min(Math.max(sel.t0, sel.t1), xMax));
+    lctx.fillStyle = 'rgba(245,158,11,0.10)';
+    lctx.fillRect(x0, 0, Math.max(1, x1 - x0), H);
+  }
+}
+lane.addEventListener('click', ev => {
+  if (!lastX || !events.length) return;
+  const r = lane.getBoundingClientRect();
+  const xpx = (ev.clientX - r.left) * dpr();
+  const { xMin, xMax, padL, padR } = lastX;
+  const t = xMin + Math.min(1, Math.max(0, (xpx - padL) / (lane.width - padL - padR))) * (xMax - xMin);
+  let best = null, bd = 1e9;
+  for (const e of events) { const d2 = Math.abs(e.t - t); if (d2 < bd) { bd = d2; best = e; } }
+  if (!best) return;
+  sel = { t0: best.t - 1.0, t1: best.t + 1.0 };
+  draw(); drawLane(); renderSelection();
+  logLine(`selected ±1s around ${best.kind}${best.substrate ? ' (' + best.substrate + ')' : ''} @ ${best.t.toFixed(1)}s`, '#0ea5e9');
+});
 let sel = null;           // {t0, t1} in chart time
 let lastX = null;         // px<->t mapping cache from draw()
 const colors = [AMBER, '#0ea5e9', GREEN, '#f472b6', '#a78bfa'];
@@ -239,7 +383,9 @@ function handleLine(line) {
       if (!series.has(m.substrate)) series.set(m.substrate, []);
       const pts = series.get(m.substrate); pts.push({ t, j, msg: m });
       if (pts.length > 300) pts.shift();
-      draw(); renderProv();
+      events.push({ t, kind: 'ledger', substrate: m.substrate });
+      if (events.length > 900) events.shift();
+      draw(); drawLane(); renderProv();
     }
     logLine(`ledger ${m.substrate} · ${m.ledger?.cycles ?? '—'} cyc · ${j != null ? j.toExponential(2) + ' J (' + (m.ledger.joules_source || '?') + ')' : 'unpriced'}`);
   } else if (m.type === 'dispatch') {
@@ -247,10 +393,16 @@ function handleLine(line) {
     if (lastDispatch && lastDispatch.chosen !== m.chosen)
       issue('flip:' + lastDispatch.chosen + '>' + m.chosen, `dispatch flip ${lastDispatch.chosen}→${m.chosen}`, 'warn');
     lastDispatch = m;
+    events.push({ t: (Date.now() - (t0 ??= Date.now())) / 1000, kind: 'dispatch', chosen: m.chosen });
     logLine(`dispatch → ${m.chosen} @ ${Number(m.j_per_op).toExponential(2)} J/op`, AMBER);
+    drawLane();
   } else if (m.type === 'check') {
     m.ok ? counts.check_ok++ : counts.check_fail++;
-    if (!m.ok) { logLine('CHECK FAILED', '#f87171'); issue('check-fail', 'check failed', 'err'); }
+    if (!m.ok) {
+      logLine('CHECK FAILED', '#f87171'); issue('check-fail', 'check failed', 'err');
+      events.push({ t: (Date.now() - (t0 ??= Date.now())) / 1000, kind: 'check', ok: false });
+      drawLane();
+    }
   } else { logLine(line); }
   renderStats();
 }
@@ -353,7 +505,7 @@ canvas.addEventListener('pointerdown', ev => {
 canvas.addEventListener('pointermove', ev => {
   if (!dragging || !sel) return;
   const t = evT(ev); if (t == null) return;
-  sel.t1 = t; draw(); renderSelection();
+  sel.t1 = t; draw(); drawLane(); renderSelection();
 });
 canvas.addEventListener('pointerup', () => {
   dragging = false;
@@ -438,7 +590,7 @@ const GRAMMAR = [
   { re: /^stop$/i, cmd: 'stop', describe: () => 'stop the simulated board',
     run: () => { if (demoTimer) $('btn-demo').click(); } },
   { re: /^clear$/i, cmd: 'clear', describe: () => 'clear chart series, selection, and log',
-    run: () => { series.clear(); sel = null; t0 = null; odometerJ = 0; issues.clear(); $('log').innerHTML = ''; draw(); renderSelection(); renderProv(); } },
+    run: () => { series.clear(); events.length = 0; sel = null; t0 = null; odometerJ = 0; issues.clear(); $('log').innerHTML = ''; draw(); drawLane(); renderSelection(); renderProv(); } },
   { re: /^baud\s+(\d{3,7})$/i, cmd: 'baud', describe: m => `set serial baud to ${m[1]}`,
     run: m => { $('baud').value = m[1]; logLine(`baud set to ${m[1]} (takes effect on next connect)`); } },
   { re: /^select\s+last\s+(\d+)\s*s(econds)?$/i, cmd: 'select', describe: m => `select the last ${m[1]} seconds of the trace`,
@@ -500,7 +652,142 @@ window.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); ckOverlay.classList.contains('hidden') ? ckShow() : ckHide(); }
 });
 
+// ── workspaces: the rail IS the IDE ──────────────────────────────────
+const WS = ['code','build','flash','console','data','ai','fleet','hub'];
+function wsShow(name) {
+  if (!WS.includes(name)) name = 'console';
+  for (const w of WS) {
+    document.getElementById('ws-' + w)?.classList.toggle('hidden', w !== name);
+    document.querySelector(`#rail [data-ws="${w}"]`)?.classList.toggle('active', w === name);
+  }
+  if (history.replaceState) history.replaceState(null, '', '#' + name);
+  if (name === 'console') { resize(); }
+  if (name === 'hub') hubLoad();
+  if (name === 'code') window.dispatchEvent(new Event('tei-code-shown'));
+}
+document.getElementById('rail').addEventListener('click', e => {
+  const b = e.target.closest('[data-ws]');
+  if (b) wsShow(b.dataset.ws);
+});
+$('btn-open-ck')?.addEventListener('click', () => ckShow());
+
+// ── HUB: the community store browser ─────────────────────────────────
+async function hubLoad() {
+  const el = $('hub-table');
+  try {
+    const r = await fetch(`${API_BASE}/api/calibration/reports?limit=100`).then(x => x.json());
+    if (!r.count) { el.innerHTML = '<span class="text-brand-gray">no community rows yet — publish one from a CONSOLE selection.</span>'; return; }
+    const rows = r.reports.slice().reverse();
+    el.innerHTML = '<table class="w-full"><thead><tr class="text-brand-gray text-left">' +
+      '<th class="pr-4 pb-2">board</th><th class="pr-4 pb-2">substrate</th><th class="pr-4 pb-2">prim</th>' +
+      '<th class="pr-4 pb-2">J/op</th><th class="pr-4 pb-2">n_ops</th><th class="pr-4 pb-2">provenance</th><th class="pb-2">when</th></tr></thead><tbody>' +
+      rows.map(x => `<tr class="border-t border-white/5">
+        <td class="pr-4 py-1.5 text-brand-white">${x.board_id}</td>
+        <td class="pr-4 py-1.5 text-brand-amber">${x.substrate}</td>
+        <td class="pr-4 py-1.5">${x.primitive_id}</td>
+        <td class="pr-4 py-1.5">${Number(x.j_per_op).toExponential(2)}</td>
+        <td class="pr-4 py-1.5">${x.n_ops}</td>
+        <td class="pr-4 py-1.5 text-brand-gray">${x.ledger?.joules_source || '?'}</td>
+        <td class="py-1.5 text-brand-gray">${x.received_unix_ms ? new Date(x.received_unix_ms).toLocaleString() : '—'}</td></tr>`).join('') +
+      '</tbody></table>';
+  } catch { el.innerHTML = '<span class="text-brand-gray">store unreachable.</span>'; }
+}
+$('btn-hub-refresh')?.addEventListener('click', hubLoad);
+
+// ── BUILD: forge resolution v0 ───────────────────────────────────────
+$('btn-build')?.addEventListener('click', () => {
+  const t = $('build-target').value;
+  const modified = window.__teiCodeModified === true;
+  const out = $('build-out');
+  if (!modified) {
+    const file = t === 'pico2' ? '/teios/teios-pico2.uf2' : (t === 'pico' ? '/teios/teios-pico.uf2' : '/teios/teios-feather-rp2040.uf2');
+    out.textContent = `forge: source matches the shipped template for ${t}.
+artifact: ${file} (tested image — identical build)
+sha256 + size: see /teios/manifest.json
+→ downloading; FLASH tab has the 3-step install.`;
+    const a = document.createElement('a'); a.href = file; a.download = ''; a.click();
+  } else {
+    out.textContent = `forge: your app.rs differs from the template.
+custom builds run on the forge build service — sandboxed per-job
+builders (arbitrary source on a build host is arbitrary code
+execution; we don't cut that corner). It is the next backend
+milestone. Until then: reset to template builds instantly, or run
+the toolchain locally (embedded/teios-rp2040/README.md, two commands).`;
+  }
+});
+
+// default workspace from hash; CONSOLE is the proof-of-life default.
+// hashchange covers same-document navigation (back/forward, deep links).
+wsShow((location.hash || '#console').slice(1));
+window.addEventListener('hashchange', () => wsShow((location.hash || '#console').slice(1)));
+
 resize();
+</script>
+
+<script>
+// CODE workspace: CodeMirror 6 (bundled, self-hosted — no CDN)
+import { EditorView, basicSetup } from 'codemirror';
+import { rust } from '@codemirror/lang-rust';
+import { EditorState } from '@codemirror/state';
+
+const TEMPLATE = `//! your app on teiOS — scheduled, ledgered, dispatched.
+//!
+//! This is the E1 demo app: race CRC32 over a 64 KiB buffer on every
+//! substrate the board has, price both from the cost table, dispatch
+//! to the cheapest, stream the ledgers. Edit it; the forge builds it.
+
+use teios::{app, Primitive, Ledger};
+
+#[app::main]
+async fn main(mut tei: app::Tei) {
+    let buf = tei.pattern_buffer(64 * 1024);
+    loop {
+        // run on every substrate the cost table knows for this primitive
+        let cpu: Ledger = tei.run_on("cpu", Primitive::HASH, &buf).await;
+        let dma: Ledger = tei.run_on("dma-sniffer", Primitive::HASH, &buf).await;
+        tei.check(cpu.result == dma.result);
+
+        // THE dispatch rule: lowest measured joule wins
+        let chosen = tei.cheapest(Primitive::HASH);
+        tei.dispatch_line(chosen);
+
+        tei.sleep_ms(1000).await;
+    }
+}
+`;
+const KEY = 'teios-app-src-v0';
+const saved = localStorage.getItem(KEY);
+const startDoc = saved ?? TEMPLATE;
+
+const view = new EditorView({
+  parent: document.getElementById('code-editor'),
+  state: EditorState.create({
+    doc: startDoc,
+    extensions: [
+      basicSetup, rust(),
+      EditorView.theme({
+        '&': { backgroundColor: 'rgba(0,0,0,0.35)', maxHeight: '520px' },
+        '.cm-content': { fontFamily: '"JetBrains Mono", monospace', fontSize: '13px' },
+        '.cm-gutters': { backgroundColor: 'transparent', border: 'none', color: '#475569' },
+      }, { dark: true }),
+      EditorView.updateListener.of(u => {
+        if (u.docChanged) {
+          const src = u.state.doc.toString();
+          localStorage.setItem(KEY, src);
+          window.__teiCodeModified = src !== TEMPLATE;
+          const st = document.getElementById('code-state');
+          if (st) st.textContent = window.__teiCodeModified ? 'modified — builds via forge service' : 'template — maps to shipped image';
+        }
+      }),
+    ],
+  }),
+});
+window.__teiCodeModified = startDoc !== TEMPLATE;
+const st = document.getElementById('code-state');
+if (st) st.textContent = window.__teiCodeModified ? 'modified — builds via forge service' : 'template — maps to shipped image';
+document.getElementById('btn-code-reset')?.addEventListener('click', () => {
+  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: TEMPLATE } });
+});
 </script>
 
 </Layout>

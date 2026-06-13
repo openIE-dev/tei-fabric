@@ -1,5 +1,41 @@
 # TEI Studio — design constitution
 
+**THE FRAME (corrected 2026-06-12, David):** Studio is not a console.
+It is **the hub for 100% of programming, data analysis, AI development,
+deployment, and usage of microcontrollers, FPGAs, and computing tools —
+from the browser — built around teiOS.** The category is the unified
+workbench (what VS Code + Arduino IDE + Edge Impulse + Jupyter +
+a fleet console are separately, as one portal); the joule ledger
+console specified in §3 below is ONE workspace inside it. Studio's
+information architecture is therefore an IDE shell:
+
+| Workspace | What lives there | Status |
+|---|---|---|
+| **CODE** | editor + teiOS app API (the program you're writing for the board) | v0: template editing |
+| **BUILD** | the forge as a service: source/config → image, streaming logs | design below; service next |
+| **FLASH** | image catalog + manifests + install paths (W1/W2/W3) | live |
+| **CONSOLE** | the ledger multimeter (§3) — trace, selections, odometer, issues | live |
+| **DATA** | capture + analysis of board data beyond joules | later |
+| **AI** | the grammar palette + tiers (§5); model dev/deploy per board | palette live |
+| **FLEET** | many boards, OTA, provisioning | later |
+| **HUB** | the community calibration store, board cards, leaderboards | v0: reports browser |
+
+**The forge build service (BUILD workspace backend)**: POST source/
+config + target → server-side build (the same toolchains that build
+teios-* today) → streamed logs → UF2/bin artifact + hash, flashable
+from FLASH. Hard requirement before arbitrary user code builds:
+sandboxed builders (container/jail per job) — arbitrary Rust on the
+build host is arbitrary code execution; v0 ships parameterized builds
+(validated config → env/features) which need no sandbox. The builder
+needs the source tree — build hosts are dev-class machines, never the
+bare web server.
+
+Everything below this line is the original constitution and remains in
+force *within* the workspaces it describes (§1 first-run = FLASH+CONSOLE
+flow; §3 = the CONSOLE workspace; §5 = the AI layer across all
+workspaces).
+
+
 **Status**: synthesis of the 2026-06-12 three-sweep survey (web embedded
 tooling · studio HMI patterns · AI-in-the-tool), ~250 sources, adversarially
 fact-checked. Companion to EMBEDDED-ROADMAP.md (§3.5 product trio, §8
