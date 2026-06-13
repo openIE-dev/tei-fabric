@@ -1,0 +1,47 @@
+[package]
+name = "teios-h747"
+version = "0.1.0"
+edition = "2021"
+description = "teiOS E1b — Arduino Portenta H7 (STM32H747XI). Dual-core M7+M4 heterogeneous dispatch; CRC32 raced on the M7 software path vs the STM32 hardware CRC peripheral, ledgered + dispatched, JSON lines over USB CDC. Lives ABOVE Arduino's bootloader (app base 0x08040000)."
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "teios-h747"
+path = "src/main.rs"
+
+[lib]
+name = "teios_h747"
+path = "src/lib.rs"
+
+[dependencies]
+tei-ledger = { path = "../../crates/embedded/tei-ledger", features = ["serde"] }
+teios-core = { path = "../teios-core" }
+
+# Embedded-only deps (built only for the ARM target; host `cargo test`
+# of the lib never pulls the embassy stack).
+[target.'cfg(all(target_arch = "arm", target_os = "none"))'.dependencies]
+embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread"] }
+embassy-stm32 = { version = "0.4", features = ["stm32h747xi-cm7", "time-driver-any", "exti", "unstable-pac"] }
+embassy-time = "0.5.1"
+embassy-usb = "0.6.0"
+embassy-futures = "0.1"
+# single-core critical-section: the M7 runs the firmware alone (the M4
+# is not booted), so the single-core impl is correct here.
+cortex-m = { version = "0.7.6", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m-rt = "0.7"
+static_cell = "2.1"
+heapless = { version = "0.9", default-features = false }
+panic-halt = "1.0"
+
+[dev-dependencies]
+serde_json = "1"
+
+[features]
+default = ["board-portenta-h7"]
+board-portenta-h7 = []
+board-portenta-h7-lite = []
+
+[profile.release]
+opt-level = "s"
+lto = true
+debug = 2

@@ -4,6 +4,7 @@ resolver = "3"
 # and cargo config; they consume crates/embedded/tei-ledger by path.
 # teios-core is the board-independent half both firmwares share.
 exclude = [
+    "embedded/teios-h747",
     "embedded/teios-app-rp2040",
     "embedded/teios-core",
     "embedded/teios-rp2350",
