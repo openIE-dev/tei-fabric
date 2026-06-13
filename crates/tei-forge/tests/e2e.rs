@@ -169,6 +169,57 @@ fn nicla_voice_app_builds_to_a_valid_bin() {
     assert_eq!(data[3], 0x20, "initial SP should target 0x20000000 SRAM");
 }
 
+const DEFAULT_APP_RA: &str = r#"
+use crate::fw::tei::{Tei, TeiError};
+use teios_ra6m5::{PRIMITIVE_HASH, SUBSTRATE_CRC_HW, SUBSTRATE_M33};
+
+pub fn app(tei: &mut Tei) -> Result<(), TeiError> {
+    let m33 = tei.run_on(SUBSTRATE_M33, PRIMITIVE_HASH)?;
+    let hw = tei.run_on(SUBSTRATE_CRC_HW, PRIMITIVE_HASH)?;
+    tei.check(m33.result, hw.result)?;
+    tei.dispatch(PRIMITIVE_HASH)?;
+    tei.sleep_ms(1000);
+    Ok(())
+}
+"#;
+
+#[test]
+#[ignore = "runs a full cargo cross-build (needs thumbv8m.main-none-eabihf target)"]
+fn portenta_c33_app_builds_to_a_valid_bin() {
+    let Some(opts) = opts() else {
+        eprintln!("SKIP: workspace root not found");
+        return;
+    };
+    if target("portenta-c33").is_none() {
+        panic!("portenta-c33 target missing");
+    }
+    let req = ForgeRequest {
+        target: "portenta-c33".into(),
+        app_source: DEFAULT_APP_RA.into(),
+    };
+    let t0 = Instant::now();
+    let res = build(&req, &opts);
+    let secs = t0.elapsed().as_secs_f64();
+    eprintln!(
+        "forge ra6m5 build: ok={} bytes={} family={} ext={} sha={} in {:.1}s",
+        res.ok, res.bytes, res.uf2_family, res.artifact_ext, res.sha256, secs
+    );
+    if !res.ok {
+        eprintln!("logs:\n{}", res.logs);
+    }
+    assert!(res.ok, "portenta-c33 default app must build");
+    assert_eq!(res.uf2_family, "ra6m5");
+    assert_eq!(res.artifact_ext, "bin");
+    assert!(res.bytes > 0);
+    let bin = res.artifact_path.expect("artifact path");
+    assert_eq!(bin.extension().and_then(|e| e.to_str()), Some("bin"));
+    let data = std::fs::read(&bin).expect("read bin");
+    // RA6M5 SRAM is at 0x20000000, so the initial SP (first word) has
+    // MSB 0x20 — pins a real vectored image at flash base 0x0.
+    assert!(data.len() > 1024, "bin should be non-trivial");
+    assert_eq!(data[3], 0x20, "initial SP should target 0x20000000 SRAM");
+}
+
 #[test]
 #[ignore = "runs a full cargo cross-build"]
 fn broken_app_returns_compiler_error_not_panic() {

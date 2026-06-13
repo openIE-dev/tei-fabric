@@ -124,6 +124,7 @@ publish(report)    -> fabric</pre>
                 <option value="portenta-h7-lite">Arduino Portenta H7 Lite (E1b · DFU .bin)</option>
                 <option value="nicla-voice">Arduino Nicla Voice (E1c · nRF52832 · UART)</option>
                 <option value="nicla-sense">Arduino Nicla Sense ME (E1c · nRF52832 · UART)</option>
+                <option value="portenta-c33">Arduino Portenta C33 (E1d · RA6M5 · semihosting)</option>
               </select>
             </div>
             <div class="flex items-end"><button id="btn-build" class="primary w-full">BUILD →</button></div>
@@ -734,6 +735,8 @@ $('btn-build')?.addEventListener('click', async () => {
             flashHint = `→ downloading UF2; FLASH tab has the 3-step install.`;
           } else if (res.uf2_family === 'nrf52832') {
             flashHint = `→ downloading .bin (nRF52832 · ledger streams over UART @115200, not USB):\n  probe-rs download --chip nRF52832_xxAA --binary-format bin --base-address 0x0 teios-${t}.bin`;
+          } else if (res.uf2_family === 'ra6m5') {
+            flashHint = `→ downloading .bin (RA6M5 · ledger streams over semihosting to the debug probe):\n  probe-rs download --chip R7FA6M5BH --binary-format bin --base-address 0x0 teios-${t}.bin`;
           } else {
             flashHint = `→ downloading .bin; flash via DFU (double-tap reset):\n  dfu-util -d 2341:035b -a 0 -s 0x08040000:leave -D teios-${t}.bin`;
           }
@@ -757,7 +760,7 @@ ${(res.logs || '').slice(-2000)}`;
   // unmodified template maps to the shipped tested image; modified
   // source needs a build host. Only the RP2040/RP2350 images ship
   // pre-built — H7 (.bin) always needs the forge.
-  if (t.startsWith('portenta-h7') || t.startsWith('nicla-')) {
+  if (t.startsWith('portenta-') || t.startsWith('nicla-')) {
     out.textContent = `no build host connected. ${t} is built by the forge (cross-compiled to a .bin) — there is no pre-shipped image.
 Point Studio at a build host with ?api=http://host:9651 (studio.thermoedge.ai is one).`;
   } else if (!modified) {

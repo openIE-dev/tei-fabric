@@ -203,6 +203,18 @@ pub const TARGETS: &[Target] = &[
         features: &["board-nicla-sense"],
         no_default_features: true,
     },
+    // Portenta C33 — Renesas RA6M5 (Cortex-M33), bare-metal (no embassy
+    // HAL), CRCA hardware-CRC substrate, semihosting transport,
+    // probe-flashed .bin (E1d). Skeleton is the teios-ra6m5 crate.
+    Target {
+        id: "portenta-c33",
+        skeleton: "embedded/teios-ra6m5",
+        triple: "thumbv8m.main-none-eabihf",
+        packaging: Packaging::Bin,
+        family: "ra6m5",
+        features: &["board-portenta-c33"],
+        no_default_features: false,
+    },
 ];
 
 /// Look up a target by id.
