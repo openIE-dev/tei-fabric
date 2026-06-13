@@ -1,0 +1,17 @@
+{
+  "_comment": "Board visual assets for Studio's BOARD view. cad_step = the vendor's published 3D CAD (STEP); build-board-assets.sh converts it to <id>.glb via the authenticated `zoo` CLI. datasheet = vendor PDF. Only VERIFIED vendor URLs go here — unverified entries leave cad_step null and the UI shows the product page only.",
+  "boards": {
+    "pico": {
+      "datasheet": "https://datasheets.raspberrypi.com/pico/pico-datasheet.pdf",
+      "cad_step": "https://datasheets.raspberrypi.com/pico/Pico-R3-step.zip",
+      "cad_step_member": "Pico-R3.step",
+      "license": "Raspberry Pi — permissive hardware docs"
+    },
+    "feather-rp2040": { "datasheet": null, "cad_step": null, "note": "Adafruit publishes STEP on the product/learn page — confirm exact URL before adding." },
+    "portenta-h7": { "datasheet": null, "cad_step": null, "note": "Arduino publishes STEP in the Portenta H7 resources — confirm exact URL." },
+    "portenta-h7-lite": { "datasheet": null, "cad_step": null },
+    "portenta-c33": { "datasheet": null, "cad_step": null },
+    "nicla-voice": { "datasheet": null, "cad_step": null },
+    "nicla-sense": { "datasheet": null, "cad_step": null }
+  }
+}

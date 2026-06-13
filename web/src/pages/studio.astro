@@ -128,6 +128,13 @@ publish(report)    -> fabric</pre>
               <div id="board-ident" class="text-[12px] text-brand-gray space-y-1.5"></div>
             </div>
             <div class="glass-card p-5">
+              <p class="section-label mb-3">3D &amp; datasheet</p>
+              <div id="board-model" class="text-[12px] text-brand-gray space-y-2">
+                <div id="board-model-view"></div>
+                <div id="board-model-links" class="space-y-1.5"></div>
+              </div>
+            </div>
+            <div class="glass-card p-5">
               <p class="section-label mb-2">digital twin</p>
               <p class="text-brand-gray text-[11px] mb-3">Live teiOS activity when the board is attached (CONSOLE → connect). The running substrate and its dispatch verdict light up below.</p>
               <div id="board-twin-activity" class="font-mono text-[11px] text-brand-gray">connect a board in CONSOLE to see live dispatch.</div>
@@ -755,7 +762,9 @@ async function boardLoad(id) {
     ['price', b.price_usd ? '$' + b.price_usd.toFixed(2) : null],
   ].filter(([, v]) => v).map(([k, v]) =>
     `<div class="flex justify-between gap-3"><span class="text-brand-gray uppercase text-[10px] tracking-wider pt-0.5">${k}</span><span class="text-brand-white text-right">${v}</span></div>`
-  ).join('') + (b.url ? `<a href="${b.url}" target="_blank" rel="noopener" class="block mt-2 text-brand-amber text-[11px] hover:underline">datasheet / store ↗</a>` : '');
+  ).join('') + (b.url ? `<a href="${b.url}" target="_blank" rel="noopener" class="block mt-2 text-brand-amber text-[11px] hover:underline">product page ↗</a>` : '');
+
+  boardModel(id, b);
 
   const po = $('board-pinout'), lg = $('board-legend');
   if (!b.pinout) {
@@ -783,6 +792,39 @@ async function boardLoad(id) {
   for (const p of pins) if (!seen.has(p.kind)) seen.set(p.kind, p.color);
   lg.innerHTML = [...seen].map(([k, c]) =>
     `<span class="flex items-center gap-1.5 text-[10px] text-brand-gray"><span class="inline-block w-2.5 h-2.5 rounded-full" style="background:${c}"></span>${k}</span>`).join('');
+}
+
+// ── board 3D model + datasheet (vendor CAD → glTF, built offline) ─────
+let boardManifest = null;
+async function boardModel(id, b) {
+  const view = $('board-model-view'), links = $('board-model-links');
+  if (!view || !links) return;
+  if (boardManifest === null) {
+    try { boardManifest = await fetch('/boards/manifest.json').then(x => x.json()); }
+    catch { boardManifest = {}; }
+  }
+  const entry = (boardManifest.boards && boardManifest.boards[id]) || {};
+  // datasheet + vendor CAD source links (real, from the manifest)
+  const L = [];
+  if (entry.datasheet) L.push(`<a href="${entry.datasheet}" target="_blank" rel="noopener" class="block text-brand-amber text-[11px] hover:underline">datasheet (PDF) ↗</a>`);
+  if (entry.cad_step) L.push(`<a href="${entry.cad_step}" target="_blank" rel="noopener" class="block text-brand-gray text-[11px] hover:underline">vendor 3D CAD (STEP) ↗</a>`);
+  links.innerHTML = L.join('');
+
+  // probe the built glTF; render inline if present + a viewer is available
+  let has = false;
+  try { has = (await fetch(`/boards/${id}.glb`, { method: 'HEAD' })).ok; } catch {}
+  if (has) {
+    if (window.customElements && customElements.get('model-viewer')) {
+      view.innerHTML = `<model-viewer src="/boards/${id}.glb" camera-controls auto-rotate ar
+        style="width:100%;height:220px;background:#0a0d16;border-radius:8px" exposure="0.9"></model-viewer>`;
+    } else {
+      view.innerHTML = `<a href="/boards/${id}.glb" target="_blank" rel="noopener" class="text-brand-cyan text-[11px] hover:underline">↗ view 3D model (.glb)</a>
+        <p class="text-brand-gray/60 text-[10px] mt-1">inline viewer activates once model-viewer is self-hosted at /vendor/model-viewer.min.js</p>`;
+    }
+  } else {
+    view.innerHTML = `<p class="text-brand-gray text-[11px]">3D model pending — convert the vendor STEP:
+      <span class="text-brand-light">zoo auth login</span> then <span class="text-brand-light">web/scripts/build-board-assets.sh</span></p>`;
+  }
 }
 
 // ── digital twin: a live mirror of the running device's internal work ─
