@@ -30,11 +30,12 @@ The E-phases build against boards in hand, not boards on order.
 
 | Board (owned) | Silicon / substrates | Flash path | E-role |
 |---|---|---|---|
-| **Portenta H7 + H7 Lite** | STM32H747: **M7@480 + M4@240 dual-core** + DMA2D/Chrom-ART, hw JPEG | **DFU bootloader → WebDFU = W1 browser-flashable TODAY** (double-tap reset) | **E1b — the heterogeneous-core dispatch flagship**: same primitive raced M7 vs M4, priced, dispatched |
+| **Portenta H7 + H7 Lite** | STM32H747: **M7@480 + M4@240 dual-core** + STM32 hw-CRC peripheral, DMA2D/Chrom-ART, hw JPEG | **DFU bootloader → WebDFU = W1 browser-flashable** (double-tap reset). **LIVE forge target** — Studio compiles custom apps → `.bin` (dfu-util to 0x08040000) | **E1b SHIPPED (compile-verified)**: M7-software CRC32 vs the STM32 hw-CRC peripheral raced, priced, dispatched, true DWT CYCCNT. M4-core offload is the documented inter-core stretch. USB-HS/ULPI + 480 MHz RCC are bench-pending |
 | **Adafruit Feathers (various)** | RP2040 (PIO + **DMA sniffer**, M0+ → timer-proxy cycles), nRF52840 (PPI), SAMD51 (EVSYS+CCL), ESP32-class | UF2 drag-drop (W2, every browser) | **E1a — first real ledger**: teios-rp2350 ports to RP2040 Feather with minimal delta (same embassy-rp, same sniffer demo) |
 | **Particle Tachyon** | QCM6490: big.LITTLE + Hexagon NPU + Adreno + 5G; SPMI PMIC ADCs (candidate T0) | in-house (tachyon-os boot chain; EDL/fastboot) | teiOS-on-Snapdragon (Tier 0) |
 | **OpenMV AE3** | Alif E3: M55-HP + M55-HE + **dual Ethos-U55** (open Vela) | SETOOLS / OpenMV tooling | the NPU column + vision bundle (Tier 0) |
-| **Nicla Voice** | **Syntiant NDP120** always-on audio NPU + nRF52832 host | Arduino/BLE DFU | **the µW dispatch story**: NDP listens at sub-mW while the host sleeps — "sleep is a substrate" made audible |
+| **Nicla Voice** | **Syntiant NDP120** always-on audio NPU + nRF52832 host (M4F @ 64 MHz) | Arduino/BLE DFU (nRF52832 has **no USB** — transport is UART/BLE, not USB CDC) | **the µW dispatch story**: NDP listens at sub-mW while the host sleeps — "sleep is a substrate" made audible. teiOS host path = embassy-nrf (nrf52832); the NDP120 is a fixed-function NN substrate priced by inference |
+| **Nicla Sense ME** | **Bosch BHI260AP** programmable sensor-fusion hub + BME688 + nRF52832 host (M4F @ 64 MHz) | Arduino/BLE DFU (no USB on nRF52832) | the **sensor-fusion-as-substrate** row: BHI260's self-learning AI core runs fusion while the host sleeps. Same embassy-nrf host path as Nicla Voice; BHI260 priced by fusion-op |
 | **Nano Matter (community preview)** | SiLabs MGM240S (EFR32MG24): **MVP AI accel**, 802.15.4/BLE | Arduino core (onboard DAP) | MVP-accel substrate + Matter radio; xG24 silicon w/o WSTK AEM (no T0 on-board) |
 | **Portenta C33** | Renesas RA6M5 (M33) + ESP32-C3 radio | DFU / Arduino | Renesas-family beachhead; radio calibration upload |
 | **Coral Dev Board Mini** | MT8167S (4×A35) + **Edge TPU** (~2 TOPS/W), Mendel Linux | SD/fastboot (Linux-class) | teid path: Edge TPU J/inference rows via the delegate's accel_invocations |
@@ -44,6 +45,16 @@ Bench gaps to note honestly: no RP2350 (Hazard3/mixed-arch demo waits or
 ships untested-on-hardware), no PPK2/bench energy meter confirmed —
 first measured-tier joules likely come from an INA228 breakout (~$10)
 or the Tachyon's PMIC ADCs.
+
+**Forge-target status (what Studio's CODE→BUILD compiles today):**
+
+| Board | Forge target | Why / blocker |
+|---|---|---|
+| Feather RP2040, Pico | ✅ live (`.uf2`) | embassy-rp, native USB CDC, mass-storage flash |
+| Portenta H7 / H7 Lite | ✅ live (`.bin`, DFU) | embassy-stm32; USB-HS/RCC bench-pending but the build + image are real |
+| Nicla Voice, Nicla Sense ME | roadmap | embassy-nrf supports the nRF52832 host, but it has **no USB** — needs a UART/BLE transport for the ledger stream (not the USB-CDC pattern the forge skeletons assume) |
+| Portenta C33 | roadmap | Renesas RA6M5 — no mature embassy/Rust HAL yet; needs a non-embassy skeleton |
+| Tachyon, OpenMV AE3, Coral Mini, Pi Zero 2W | Tier 0 / in-house | own boot chains (tachyon-os, SETOOLS, Linux images), not the MCU forge pattern |
 
 ## Tier 0 — boards already under OpenIE control (in-house flows)
 
