@@ -785,32 +785,67 @@ async function boardLoad(id) {
     `<span class="flex items-center gap-1.5 text-[10px] text-brand-gray"><span class="inline-block w-2.5 h-2.5 rounded-full" style="background:${c}"></span>${k}</span>`).join('');
 }
 
-// ── digital twin: light up the live substrate + dispatch on the board ─
-let twinSubs = new Map(); // substrate -> last seen ms
+// ── digital twin: a live mirror of the running device's internal work ─
+// Honest scope: the ledger reports SUBSTRATE-level activity (which engine
+// ran, cycles, joules, the dispatch verdict) — not pin-level signals — so
+// the twin animates the live execution, not pins it can't observe.
+const twinStats = new Map(); // substrate -> {lastMs, cycles, joules, ticks}
 function twinSetConnected(on) {
   const el = $('board-twin'); if (!el) return;
   el.textContent = on ? '● live' : '○ not connected';
-  el.className = el.className.replace(/text-\S+$/, '') + (on ? ' text-brand-cyan' : ' text-brand-gray');
+  el.className = el.className.replace(/text-(brand-\w+)/g, '').trimEnd() + (on ? ' text-brand-cyan' : ' text-brand-gray');
+}
+function twinSpark(st) {
+  // mini sparkline of recent activity — cycles (always reported by the
+  // device) so the twin moves even when joules are unpriced on-device.
+  const v = st.hist || [];
+  if (v.length < 2) return '';
+  const max = Math.max(...v), min = Math.min(...v), span = (max - min) || 1, W = 72, H = 16;
+  const d = v.map((x, i) => `${(i / (v.length - 1) * W).toFixed(1)},${(H - (x - min) / span * H).toFixed(1)}`).join(' ');
+  return `<svg width="${W}" height="${H}" class="shrink-0"><polyline points="${d}" fill="none" stroke="currentColor" stroke-width="1" opacity="0.7"/></svg>`;
 }
 function twinRender() {
   const el = $('board-twin-activity'); if (!el) return;
-  const subs = [...twinSubs.keys()];
-  if (!subs.length) { return; }
+  if (!twinStats.size) return;
   const chosen = (typeof lastDispatch !== 'undefined' && lastDispatch) ? lastDispatch.chosen : null;
-  el.innerHTML = subs.map(s =>
-    `<div class="flex items-center gap-2 py-0.5">
-       <span class="inline-block w-2 h-2 rounded-full ${s === chosen ? 'bg-brand-amber' : 'bg-brand-cyan/60'}"></span>
-       <span class="${s === chosen ? 'text-brand-amber' : 'text-brand-light'}">${s}</span>
-       ${s === chosen ? '<span class="text-brand-gray text-[10px]">← dispatched</span>' : ''}
-     </div>`).join('');
+  const now = Date.now();
+  const rows = [...twinStats.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([s, st]) => {
+    const age = now - st.lastMs;
+    const live = age < 800;            // just ticked → pulse
+    const stale = age > 4000;          // gone quiet → dim
+    const isCh = s === chosen;
+    const dot = live
+      ? `<span class="relative flex w-2.5 h-2.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full ${isCh ? 'bg-brand-amber' : 'bg-brand-cyan'} opacity-75"></span><span class="relative inline-flex rounded-full w-2.5 h-2.5 ${isCh ? 'bg-brand-amber' : 'bg-brand-cyan'}"></span></span>`
+      : `<span class="inline-block w-2.5 h-2.5 rounded-full ${isCh ? 'bg-brand-amber' : 'bg-brand-cyan/40'}"></span>`;
+    return `<div class="flex items-center gap-2 py-1 ${stale ? 'opacity-40' : ''}">
+        ${dot}
+        <span class="${isCh ? 'text-brand-amber' : 'text-brand-light'} w-32 truncate">${s}</span>
+        <span class="text-brand-gray text-[10px] w-20 text-right">${st.cycles != null ? st.cycles.toLocaleString() + ' cyc' : '—'}</span>
+        <span class="text-brand-gray text-[10px] w-20 text-right">${st.joules ? st.joules.toExponential(1) + ' J' : ''}</span>
+        <span class="${isCh ? 'text-brand-amber' : 'text-brand-cyan'} ml-auto">${twinSpark(st)}</span>
+        ${isCh ? '<span class="text-brand-amber text-[10px] shrink-0">dispatched</span>' : ''}
+      </div>`;
+  }).join('');
+  el.innerHTML = `<div class="flex items-center justify-between mb-1.5 text-[10px] text-brand-gray uppercase tracking-wider">
+      <span>substrate</span><span>live execution mirror</span></div>${rows}`;
 }
-function twinLedger(substrate) {
+function twinLedger(substrate, ledger) {
   if (!substrate) return;
-  twinSubs.set(substrate, Date.now());
+  const st = twinStats.get(substrate) || { joules: 0, ticks: 0, hist: [] };
+  st.lastMs = Date.now();
+  st.cycles = ledger && ledger.cycles != null ? ledger.cycles : st.cycles;
+  if (ledger && ledger.joules != null) st.joules += ledger.joules;
+  if (st.cycles != null) { st.hist.push(st.cycles); if (st.hist.length > 24) st.hist.shift(); }
+  st.ticks++;
+  twinStats.set(substrate, st);
   twinSetConnected(true);
   twinRender();
 }
 function twinDispatch() { twinRender(); }
+// keep the pulse/decay animating while the BOARD tab is open
+setInterval(() => {
+  if (!document.getElementById('ws-board')?.classList.contains('hidden')) twinRender();
+}, 400);
 
 // ── BUILD: the real forge ────────────────────────────────────────────
 let forgeHost = null; // null until /api/forge/targets answers
