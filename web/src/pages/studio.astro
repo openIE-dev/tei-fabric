@@ -120,7 +120,8 @@ publish(report)    -> fabric</pre>
                 <option value="feather-rp2040">Adafruit Feather RP2040</option>
                 <option value="pico">Raspberry Pi Pico</option>
                 <option value="pico2">Raspberry Pi Pico 2</option>
-                <option value="portenta-h7" disabled>Portenta H7 (image building — E1b)</option>
+                <option value="portenta-h7">Arduino Portenta H7 (E1b · DFU .bin)</option>
+                <option value="portenta-h7-lite">Arduino Portenta H7 Lite (E1b · DFU .bin)</option>
               </select>
             </div>
             <div class="flex items-end"><button id="btn-build" class="primary w-full">BUILD →</button></div>
@@ -725,11 +726,15 @@ $('btn-build')?.addEventListener('click', async () => {
       else {
         const res = await r.json();
         if (res.ok) {
+          const ext = res.artifact_ext || 'uf2';
+          const flashHint = ext === 'bin'
+            ? `→ downloading .bin; flash via DFU (double-tap reset):\n  dfu-util -d 2341:035b -a 0 -s 0x08040000:leave -D teios-${t}.bin`
+            : `→ downloading UF2; FLASH tab has the 3-step install.`;
           out.textContent = `forge: BUILT ${t} · ${res.uf2_family} · ${res.bytes} bytes
 sha256 ${res.sha256}
-→ downloading UF2; FLASH tab has the 3-step install.`;
+${flashHint}`;
           const a = document.createElement('a');
-          a.href = `${API_BASE}/api/forge/artifact?h=${res.sha256}`; a.download = `teios-${t}.uf2`; a.click();
+          a.href = `${API_BASE}/api/forge/artifact?h=${res.sha256}`; a.download = `teios-${t}.${ext}`; a.click();
         } else {
           out.textContent = `forge: BUILD FAILED — ${res.error || 'error'}
 
@@ -743,8 +748,12 @@ ${(res.logs || '').slice(-2000)}`;
 
   // no build host (e.g. the public studio with no toolchain): the
   // unmodified template maps to the shipped tested image; modified
-  // source needs a build host.
-  if (!modified) {
+  // source needs a build host. Only the RP2040/RP2350 images ship
+  // pre-built — H7 (.bin) always needs the forge.
+  if (t.startsWith('portenta-h7')) {
+    out.textContent = `no build host connected. ${t} is built by the forge (cross-compiled to a DFU .bin) — there is no pre-shipped image.
+Point Studio at a build host with ?api=http://host:9651 (studio.thermoedge.ai is one).`;
+  } else if (!modified) {
     const file = t === 'pico2' ? '/teios/teios-pico2.uf2' : (t === 'pico' ? '/teios/teios-pico.uf2' : '/teios/teios-feather-rp2040.uf2');
     out.textContent = `no build host connected — but your source matches the shipped template for ${t}, so here is the tested image (identical build).
 sha256 + size: /teios/manifest.json

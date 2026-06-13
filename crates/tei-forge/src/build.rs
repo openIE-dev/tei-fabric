@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
 
-use crate::{sandbox, target, validate, ForgeRequest, ForgeResult, Target};
+use crate::{sandbox, target, validate, ForgeRequest, ForgeResult, Packaging, Target};
 
 /// Build knobs.
 #[derive(Debug, Clone)]
@@ -103,7 +103,7 @@ pub fn build(req: &ForgeRequest, opts: &BuildOpts) -> ForgeResult {
         return out;
     }
 
-    // 4. elf2uf2 → artifact
+    // 4. package the ELF → flashable artifact (UF2 or raw .bin)
     let elf = target_dir
         .join(tgt.triple)
         .join("release")
@@ -114,42 +114,111 @@ pub fn build(req: &ForgeRequest, opts: &BuildOpts) -> ForgeResult {
     if let Err(e) = fs::create_dir_all(&opts.results_dir) {
         return ForgeResult::failed(format!("results dir: {e}"), logs);
     }
-    let uf2 = opts.results_dir.join(format!(
-        "teios-{}-{}.uf2",
+    let ext = tgt.packaging.ext();
+    let artifact = opts.results_dir.join(format!(
+        "teios-{}-{}.{ext}",
         tgt.id,
         short_hash(&req.app_source)
     ));
-    let script = skeleton.join("scripts/elf2uf2.py");
-    let pkg = Command::new("python3")
-        .arg(&script)
-        .arg(&elf)
-        .arg(&uf2)
-        .current_dir(&proj)
-        .output();
-    match pkg {
-        Ok(o) if o.status.success() => {}
-        Ok(o) => {
-            let mut l = logs;
-            l.push_str("\n[elf2uf2]\n");
-            l.push_str(&String::from_utf8_lossy(&o.stderr));
-            return ForgeResult::failed("uf2 packaging failed", truncate_logs(l));
-        }
-        Err(e) => return ForgeResult::failed(format!("elf2uf2: {e}"), logs),
+    let pkg_result = match tgt.packaging {
+        Packaging::Uf2 => package_uf2(&skeleton, &elf, &artifact, &proj),
+        Packaging::Bin => package_bin(&elf, &artifact),
+    };
+    if let Err(e) = pkg_result {
+        let mut l = logs;
+        l.push_str(&format!("\n[package {ext}]\n{e}"));
+        return ForgeResult::failed(format!("{ext} packaging failed"), truncate_logs(l));
     }
 
     // 5. measure + hash
     let bytes = fs::metadata(&elf).map(|m| m.len() as usize).unwrap_or(0);
-    let (sha, _uf2_len) = sha256_file(&uf2).unwrap_or_default();
+    let (sha, _len) = sha256_file(&artifact).unwrap_or_default();
     let _ = &mut sandboxed;
     ForgeResult {
         ok: true,
-        artifact_path: Some(uf2),
-        uf2_family: tgt.uf2_family.to_string(),
+        artifact_path: Some(artifact),
+        uf2_family: tgt.family.to_string(),
+        artifact_ext: ext.to_string(),
         bytes,
         sha256: sha,
         logs,
         error: None,
     }
+}
+
+/// Package via the skeleton's `scripts/elf2uf2.py` (RP-class boards).
+fn package_uf2(skeleton: &Path, elf: &Path, out: &Path, proj: &Path) -> Result<(), String> {
+    let script = skeleton.join("scripts/elf2uf2.py");
+    let o = Command::new("python3")
+        .arg(&script)
+        .arg(elf)
+        .arg(out)
+        .current_dir(proj)
+        .output()
+        .map_err(|e| format!("spawn elf2uf2: {e}"))?;
+    if o.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&o.stderr).into_owned())
+    }
+}
+
+/// Package via `llvm-objcopy -O binary` (DFU boards). objcopy ships in
+/// the rust toolchain's sysroot, so no extra install is needed on the
+/// build host.
+fn package_bin(elf: &Path, out: &Path) -> Result<(), String> {
+    let objcopy = llvm_objcopy().ok_or("llvm-objcopy not found in rust sysroot")?;
+    let o = Command::new(&objcopy)
+        .arg("-O")
+        .arg("binary")
+        .arg(elf)
+        .arg(out)
+        .output()
+        .map_err(|e| format!("spawn llvm-objcopy: {e}"))?;
+    if o.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&o.stderr).into_owned())
+    }
+}
+
+/// Find `llvm-objcopy` under the active rust toolchain's sysroot.
+fn llvm_objcopy() -> Option<PathBuf> {
+    let out = Command::new("rustc").arg("--print").arg("sysroot").output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let sysroot = String::from_utf8(out.stdout).ok()?;
+    let sysroot = Path::new(sysroot.trim());
+    // bin/ layout: <sysroot>/lib/rustlib/<host>/bin/llvm-objcopy
+    for entry in walk_for(sysroot, "llvm-objcopy", 5) {
+        return Some(entry);
+    }
+    None
+}
+
+/// Shallow bounded search for a filename under `root` (depth-limited so a
+/// pathological sysroot can't hang the build).
+fn walk_for(root: &Path, name: &str, depth: usize) -> Vec<PathBuf> {
+    let mut hits = Vec::new();
+    if depth == 0 {
+        return hits;
+    }
+    let Ok(rd) = fs::read_dir(root) else {
+        return hits;
+    };
+    for e in rd.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            hits.extend(walk_for(&p, name, depth - 1));
+        } else if p.file_name().and_then(|n| n.to_str()) == Some(name) {
+            hits.push(p);
+        }
+        if !hits.is_empty() {
+            break;
+        }
+    }
+    hits
 }
 
 /// Spawn cargo (optionally under seatbelt), enforce the wall-timeout by

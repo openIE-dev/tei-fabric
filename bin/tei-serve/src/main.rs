@@ -218,7 +218,14 @@ async fn get_forge_targets(State(state): State<AppState>) -> Json<serde_json::Va
     let available = state.forge.is_some();
     let targets: Vec<_> = tei_forge::TARGETS
         .iter()
-        .map(|t| serde_json::json!({ "id": t.id, "uf2_family": t.uf2_family }))
+        .map(|t| {
+            serde_json::json!({
+                "id": t.id,
+                "uf2_family": t.family,
+                "family": t.family,
+                "artifact_ext": t.packaging.ext(),
+            })
+        })
         .collect();
     Json(serde_json::json!({ "build_host": available, "targets": targets }))
 }
@@ -248,16 +255,17 @@ async fn get_forge_artifact(
         .map_err(|e| (StatusCode::NOT_FOUND, format!("results: {e}")))?;
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("uf2") {
+        // Forge artifacts are UF2 (RP-class) or raw BIN (DFU boards).
+        let ext = path.extension().and_then(|e| e.to_str());
+        if ext != Some("uf2") && ext != Some("bin") {
             continue;
         }
         if let Ok(bytes) = std::fs::read(&path) {
-            
             if tei_forge::sha256_hex(&bytes) == want {
                 let fname = path
                     .file_name()
                     .and_then(|n| n.to_str())
-                    .unwrap_or("teios.uf2")
+                    .unwrap_or("teios.bin")
                     .to_string();
                 let headers = [
                     (axum::http::header::CONTENT_TYPE, "application/octet-stream".to_string()),

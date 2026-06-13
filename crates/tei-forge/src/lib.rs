@@ -65,9 +65,12 @@ pub struct ForgeResult {
     /// Path to the produced `.uf2` on the build host (the HTTP layer
     /// serves its bytes; not a URL).
     pub artifact_path: Option<PathBuf>,
-    /// UF2 family tag, e.g. "rp2040".
+    /// Flash/family tag, e.g. "rp2040" or "stm32h7".
     pub uf2_family: String,
-    /// Image bytes (payload, not the UF2 file size).
+    /// Artifact file extension (no dot): "uf2" or "bin".
+    #[serde(default)]
+    pub artifact_ext: String,
+    /// Image bytes (payload, not the artifact file size).
     pub bytes: usize,
     /// Hex SHA-256 of the produced UF2 file.
     pub sha256: String,
@@ -83,6 +86,7 @@ impl ForgeResult {
             ok: false,
             artifact_path: None,
             uf2_family: String::new(),
+            artifact_ext: String::new(),
             bytes: 0,
             sha256: String::new(),
             logs: logs.into(),
@@ -91,8 +95,31 @@ impl ForgeResult {
     }
 }
 
-/// One buildable skeleton: where it lives, its cross-target, and the UF2
-/// family/base the packager stamps.
+/// How a built ELF becomes a flashable artifact.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Packaging {
+    /// elf2uf2 via the skeleton's `scripts/elf2uf2.py` — mass-storage
+    /// drag-drop boards (RP2040/RP2350). Artifact is `.uf2`.
+    Uf2,
+    /// `llvm-objcopy -O binary` — DFU boards flashed with dfu-util
+    /// (Portenta H7). Artifact is `.bin`; the flash base lives in the
+    /// skeleton's `memory.x`, and the dfu-util `-s <base>` is documented
+    /// in the skeleton README (not stamped into the image).
+    Bin,
+}
+
+impl Packaging {
+    /// Artifact file extension (no dot).
+    pub fn ext(self) -> &'static str {
+        match self {
+            Packaging::Uf2 => "uf2",
+            Packaging::Bin => "bin",
+        }
+    }
+}
+
+/// One buildable skeleton: where it lives, its cross-target, and how its
+/// ELF is packaged into a flashable artifact.
 #[derive(Debug, Clone)]
 pub struct Target {
     pub id: &'static str,
@@ -100,8 +127,10 @@ pub struct Target {
     pub skeleton: &'static str,
     /// rustc target triple.
     pub triple: &'static str,
-    /// elf2uf2 family name (rp2040 → 0xe48bff56).
-    pub uf2_family: &'static str,
+    /// How the ELF is packaged.
+    pub packaging: Packaging,
+    /// Flash/family tag surfaced to the UI (rp2040 / stm32h7).
+    pub family: &'static str,
     /// Build features to pass (board id selection, boot2 choice).
     pub features: &'static [&'static str],
     /// `--no-default-features` when selecting a non-default board.
@@ -116,7 +145,8 @@ pub const TARGETS: &[Target] = &[
         id: "feather-rp2040",
         skeleton: "embedded/teios-app-rp2040",
         triple: "thumbv6m-none-eabi",
-        uf2_family: "rp2040",
+        packaging: Packaging::Uf2,
+        family: "rp2040",
         features: &["board-feather-rp2040"],
         no_default_features: false,
     },
@@ -124,8 +154,32 @@ pub const TARGETS: &[Target] = &[
         id: "pico",
         skeleton: "embedded/teios-app-rp2040",
         triple: "thumbv6m-none-eabi",
-        uf2_family: "rp2040",
+        packaging: Packaging::Uf2,
+        family: "rp2040",
         features: &["board-pico"],
+        no_default_features: true,
+    },
+    // Portenta H7 / H7 Lite — Cortex-M7, DFU-flashed .bin (E1b). The
+    // skeleton is the teios-h747 crate; its target/ default is gated so
+    // the forge cross-builds with --target thumbv7em-none-eabihf. The
+    // image is hardware-pending (USB-HS/RCC bench bring-up) but the
+    // build is real and the artifact valid — see the crate README.
+    Target {
+        id: "portenta-h7",
+        skeleton: "embedded/teios-h747",
+        triple: "thumbv7em-none-eabihf",
+        packaging: Packaging::Bin,
+        family: "stm32h7",
+        features: &["board-portenta-h7"],
+        no_default_features: false,
+    },
+    Target {
+        id: "portenta-h7-lite",
+        skeleton: "embedded/teios-h747",
+        triple: "thumbv7em-none-eabihf",
+        packaging: Packaging::Bin,
+        family: "stm32h7",
+        features: &["board-portenta-h7-lite"],
         no_default_features: true,
     },
 ];
