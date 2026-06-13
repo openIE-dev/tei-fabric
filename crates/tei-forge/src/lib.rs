@@ -47,6 +47,10 @@ mod validate;
 pub use build::{build, BuildOpts};
 pub use validate::{validate, DENYLIST};
 
+/// Re-export the board registry so the HTTP layer (which deps only this
+/// crate) can read identity + pinouts without a separate chipdb dep.
+pub use ofpga_chipdb;
+
 /// What Studio's BUILD tab POSTs: a target board id and the contents of
 /// the user's `src/app.rs`.
 #[derive(Debug, Clone, Serialize, Deserialize)]

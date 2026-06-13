@@ -15,6 +15,7 @@ import Layout from '../layouts/Layout.astro';
   <div class="flex gap-5">
     <nav id="rail" class="flex flex-col gap-1 shrink-0 w-32">
       <button data-ws="code"    class="ws-btn">CODE</button>
+      <button data-ws="board"   class="ws-btn">BOARD</button>
       <button data-ws="build"   class="ws-btn">BUILD</button>
       <button data-ws="flash"   class="ws-btn">FLASH</button>
       <button data-ws="console" class="ws-btn">CONSOLE</button>
@@ -106,6 +107,31 @@ publish(report)    -> fabric</pre>
             <p class="text-brand-gray text-[11px] leading-relaxed mt-3">
               Edits build through the forge (BUILD tab). The unmodified
               template maps to the shipped image — flashable right now.</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="ws-board" class="ws hidden">
+        <div class="flex flex-wrap gap-3 mb-4 items-center">
+          <select id="board-select" class="bg-black/40 rounded-lg px-3 py-2 font-mono text-[12px] text-brand-white border border-white/10"></select>
+          <span id="board-twin" class="font-mono text-[10px] tracking-wider px-2.5 py-1 rounded-full border border-white/10 text-brand-gray">○ not connected</span>
+        </div>
+        <div class="grid lg:grid-cols-[1fr_320px] gap-5">
+          <div class="glass-card p-5 overflow-auto">
+            <p class="section-label mb-3">pinout</p>
+            <div id="board-pinout" class="font-mono text-[11px]"></div>
+            <div id="board-legend" class="flex flex-wrap gap-x-4 gap-y-1.5 mt-4 pt-4 border-t border-white/10"></div>
+          </div>
+          <div class="flex flex-col gap-4">
+            <div class="glass-card p-5">
+              <p class="section-label mb-3">board</p>
+              <div id="board-ident" class="text-[12px] text-brand-gray space-y-1.5"></div>
+            </div>
+            <div class="glass-card p-5">
+              <p class="section-label mb-2">digital twin</p>
+              <p class="text-brand-gray text-[11px] mb-3">Live teiOS activity when the board is attached (CONSOLE → connect). The running substrate and its dispatch verdict light up below.</p>
+              <div id="board-twin-activity" class="font-mono text-[11px] text-brand-gray">connect a board in CONSOLE to see live dispatch.</div>
+            </div>
           </div>
         </div>
       </div>
@@ -392,6 +418,7 @@ function handleLine(line) {
       draw(); drawLane(); renderProv();
     }
     logLine(`ledger ${m.substrate} · ${m.ledger?.cycles ?? '—'} cyc · ${j != null ? j.toExponential(2) + ' J (' + (m.ledger.joules_source || '?') + ')' : 'unpriced'}`);
+    twinLedger(m.substrate, m.ledger);
   } else if (m.type === 'dispatch') {
     counts.dispatch++;
     if (lastDispatch && lastDispatch.chosen !== m.chosen)
@@ -399,6 +426,7 @@ function handleLine(line) {
     lastDispatch = m;
     events.push({ t: (Date.now() - (t0 ??= Date.now())) / 1000, kind: 'dispatch', chosen: m.chosen });
     logLine(`dispatch → ${m.chosen} @ ${Number(m.j_per_op).toExponential(2)} J/op`, AMBER);
+    twinDispatch(m.chosen, m.j_per_op);
     drawLane();
   } else if (m.type === 'check') {
     m.ok ? counts.check_ok++ : counts.check_fail++;
@@ -657,7 +685,7 @@ window.addEventListener('keydown', e => {
 });
 
 // ── workspaces: the rail IS the IDE ──────────────────────────────────
-const WS = ['code','build','flash','console','data','ai','fleet','hub'];
+const WS = ['code','board','build','flash','console','data','ai','fleet','hub'];
 function wsShow(name) {
   if (!WS.includes(name)) name = 'console';
   for (const w of WS) {
@@ -667,6 +695,7 @@ function wsShow(name) {
   if (history.replaceState) history.replaceState(null, '', '#' + name);
   if (name === 'console') { resize(); }
   if (name === 'hub') hubLoad();
+  if (name === 'board') boardPopulate().then(() => boardLoad());
   if (name === 'code') window.dispatchEvent(new Event('tei-code-shown'));
 }
 document.getElementById('rail').addEventListener('click', e => {
@@ -697,6 +726,91 @@ async function hubLoad() {
   } catch { el.innerHTML = '<span class="text-brand-gray">store unreachable.</span>'; }
 }
 $('btn-hub-refresh')?.addEventListener('click', hubLoad);
+
+// ── BOARD: visual board view (chipdb-driven pinout + digital twin) ────
+let boardLoaded = null;
+async function boardPopulate() {
+  const sel = $('board-select'); if (!sel || sel.options.length) return;
+  try {
+    const r = await fetch(`${API_BASE}/api/forge/targets`).then(x => x.json());
+    for (const t of (r.targets || [])) {
+      const o = document.createElement('option');
+      o.value = t.id; o.textContent = t.name ? (t.chip ? `${t.name} · ${t.chip}` : t.name) : t.id;
+      sel.appendChild(o);
+    }
+    sel.addEventListener('change', () => boardLoad(sel.value));
+  } catch {}
+}
+async function boardLoad(id) {
+  if (!id) { const s = $('board-select'); id = s && s.value; }
+  if (!id || id === boardLoaded) return;
+  boardLoaded = id;
+  let b;
+  try { b = await fetch(`${API_BASE}/api/forge/board?id=${encodeURIComponent(id)}`).then(x => x.json()); }
+  catch { $('board-ident').innerHTML = '<span class="text-brand-gray">board service unreachable.</span>'; return; }
+
+  $('board-ident').innerHTML = [
+    ['name', b.name], ['vendor', b.vendor], ['chip', b.chip],
+    ['family', b.chip_family], ['clock', b.clock_mhz ? b.clock_mhz + ' MHz' : null],
+    ['price', b.price_usd ? '$' + b.price_usd.toFixed(2) : null],
+  ].filter(([, v]) => v).map(([k, v]) =>
+    `<div class="flex justify-between gap-3"><span class="text-brand-gray uppercase text-[10px] tracking-wider pt-0.5">${k}</span><span class="text-brand-white text-right">${v}</span></div>`
+  ).join('') + (b.url ? `<a href="${b.url}" target="_blank" rel="noopener" class="block mt-2 text-brand-amber text-[11px] hover:underline">datasheet / store ↗</a>` : '');
+
+  const po = $('board-pinout'), lg = $('board-legend');
+  if (!b.pinout) {
+    po.innerHTML = '<span class="text-brand-gray">Identity only — no datasheet-verified pin map for this board yet. (We don\'t guess pinouts.)</span>';
+    lg.innerHTML = ''; return;
+  }
+  // dual-column physical layout: first half down the left, second half down the right.
+  const pins = b.pinout.pins, half = Math.ceil(pins.length / 2);
+  const left = pins.slice(0, half), right = pins.slice(half);
+  const pinRow = (p, flip) => {
+    const dot = `<span class="inline-block w-2.5 h-2.5 rounded-full shrink-0" style="background:${p.color}"></span>`;
+    const num = `<span class="text-brand-gray w-6 ${flip ? 'text-left' : 'text-right'} shrink-0">${p.number}</span>`;
+    const nm = `<span class="text-brand-white truncate" title="${(p.functions||[]).join(' · ')}">${p.name}</span>`;
+    const fns = `<span class="text-brand-gray/60 truncate text-[10px]" title="${(p.functions||[]).join(' · ')}">${(p.functions||[]).join(' ')}</span>`;
+    return flip
+      ? `<div class="flex items-center gap-2 py-0.5">${num}${dot}${nm}<span class="flex-1"></span>${fns}</div>`
+      : `<div class="flex items-center gap-2 py-0.5">${fns}<span class="flex-1"></span>${nm}${dot}${num}</div>`;
+  };
+  po.innerHTML = `<div class="grid grid-cols-2 gap-x-6">
+    <div>${left.map(p => pinRow(p, false)).join('')}</div>
+    <div>${right.map(p => pinRow(p, true)).join('')}</div></div>`;
+
+  // legend: distinct kinds present
+  const seen = new Map();
+  for (const p of pins) if (!seen.has(p.kind)) seen.set(p.kind, p.color);
+  lg.innerHTML = [...seen].map(([k, c]) =>
+    `<span class="flex items-center gap-1.5 text-[10px] text-brand-gray"><span class="inline-block w-2.5 h-2.5 rounded-full" style="background:${c}"></span>${k}</span>`).join('');
+}
+
+// ── digital twin: light up the live substrate + dispatch on the board ─
+let twinSubs = new Map(); // substrate -> last seen ms
+function twinSetConnected(on) {
+  const el = $('board-twin'); if (!el) return;
+  el.textContent = on ? '● live' : '○ not connected';
+  el.className = el.className.replace(/text-\S+$/, '') + (on ? ' text-brand-cyan' : ' text-brand-gray');
+}
+function twinRender() {
+  const el = $('board-twin-activity'); if (!el) return;
+  const subs = [...twinSubs.keys()];
+  if (!subs.length) { return; }
+  const chosen = (typeof lastDispatch !== 'undefined' && lastDispatch) ? lastDispatch.chosen : null;
+  el.innerHTML = subs.map(s =>
+    `<div class="flex items-center gap-2 py-0.5">
+       <span class="inline-block w-2 h-2 rounded-full ${s === chosen ? 'bg-brand-amber' : 'bg-brand-cyan/60'}"></span>
+       <span class="${s === chosen ? 'text-brand-amber' : 'text-brand-light'}">${s}</span>
+       ${s === chosen ? '<span class="text-brand-gray text-[10px]">← dispatched</span>' : ''}
+     </div>`).join('');
+}
+function twinLedger(substrate) {
+  if (!substrate) return;
+  twinSubs.set(substrate, Date.now());
+  twinSetConnected(true);
+  twinRender();
+}
+function twinDispatch() { twinRender(); }
 
 // ── BUILD: the real forge ────────────────────────────────────────────
 let forgeHost = null; // null until /api/forge/targets answers

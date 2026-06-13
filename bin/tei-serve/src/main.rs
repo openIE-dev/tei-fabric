@@ -239,6 +239,49 @@ async fn get_forge_targets(State(state): State<AppState>) -> Json<serde_json::Va
     Json(serde_json::json!({ "build_host": available, "targets": targets }))
 }
 
+/// GET /api/forge/board?id=<board> — full board view data for Studio's
+/// BOARD workspace: chipdb identity + the color-coded pinout (if a
+/// datasheet-verified one exists; otherwise `pinout: null`).
+async fn get_forge_board(
+    axum::extract::Query(q): axum::extract::Query<HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let id = q
+        .get("id")
+        .cloned()
+        .ok_or((StatusCode::BAD_REQUEST, "missing ?id=<board>".into()))?;
+    let board = tei_forge::ofpga_chipdb::boards::find_board(&id)
+        .ok_or((StatusCode::NOT_FOUND, format!("unknown board: {id}")))?;
+
+    let pinout = tei_forge::ofpga_chipdb::pinout::pinout(&id).map(|p| {
+        let pins: Vec<_> = p
+            .pins
+            .iter()
+            .map(|pin| {
+                serde_json::json!({
+                    "number": pin.number,
+                    "name": pin.name,
+                    "kind": pin.kind.label(),
+                    "color": pin.kind.color(),
+                    "functions": pin.functions,
+                })
+            })
+            .collect();
+        serde_json::json!({ "rows": p.rows, "pins": pins })
+    });
+
+    Ok(Json(serde_json::json!({
+        "id": id,
+        "name": board.name,
+        "vendor": board.vendor,
+        "chip": board.fpga_device,
+        "chip_family": board.fpga_family,
+        "clock_mhz": board.clock_mhz,
+        "price_usd": board.price_usd,
+        "url": board.url,
+        "pinout": pinout,
+    })))
+}
+
 /// GET /api/forge/artifact?h=<sha256> — stream a produced UF2. The sha
 /// is matched against the results dir, so only forge-produced files in
 /// that dir are servable (no arbitrary path read).
@@ -837,6 +880,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .route("/api/forge/build", post(post_forge_build))
         .route("/api/forge/targets", get(get_forge_targets))
+        .route("/api/forge/board", get(get_forge_board))
         .route("/api/forge/artifact", get(get_forge_artifact))
         .route("/api/dispatch/stream", post(post_dispatch_stream))
         .route("/api/execute", post(post_execute))
