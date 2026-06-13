@@ -764,7 +764,7 @@ async function boardLoad(id) {
     `<div class="flex justify-between gap-3"><span class="text-brand-gray uppercase text-[10px] tracking-wider pt-0.5">${k}</span><span class="text-brand-white text-right">${v}</span></div>`
   ).join('') + (b.url ? `<a href="${b.url}" target="_blank" rel="noopener" class="block mt-2 text-brand-amber text-[11px] hover:underline">product page ↗</a>` : '');
 
-  boardModel(id, b);
+  boardModel(id);
 
   const po = $('board-pinout'), lg = $('board-legend');
   if (!b.pinout) {
@@ -796,7 +796,7 @@ async function boardLoad(id) {
 
 // ── board 3D model + datasheet (vendor CAD → glTF, built offline) ─────
 let boardManifest = null;
-async function boardModel(id, b) {
+async function boardModel(id) {
   const view = $('board-model-view'), links = $('board-model-links');
   if (!view || !links) return;
   if (boardManifest === null) {
@@ -814,12 +814,16 @@ async function boardModel(id, b) {
   let has = false;
   try { has = (await fetch(`/boards/${id}.glb`, { method: 'HEAD' })).ok; } catch {}
   if (has) {
+    // lazy-load the self-hosted model-viewer ESM only when a 3D board is
+    // actually viewed (the bundle is ~1 MB — never on first page load).
+    if (!(window.customElements && customElements.get('model-viewer'))) {
+      try { await import('/vendor/model-viewer.min.js'); } catch {}
+    }
     if (window.customElements && customElements.get('model-viewer')) {
-      view.innerHTML = `<model-viewer src="/boards/${id}.glb" camera-controls auto-rotate ar
-        style="width:100%;height:220px;background:#0a0d16;border-radius:8px" exposure="0.9"></model-viewer>`;
+      view.innerHTML = `<model-viewer src="/boards/${id}.glb" camera-controls auto-rotate touch-action="pan-y"
+        style="width:100%;height:240px;background:#0a0d16;border-radius:8px" exposure="0.9" shadow-intensity="0.4"></model-viewer>`;
     } else {
-      view.innerHTML = `<a href="/boards/${id}.glb" target="_blank" rel="noopener" class="text-brand-cyan text-[11px] hover:underline">↗ view 3D model (.glb)</a>
-        <p class="text-brand-gray/60 text-[10px] mt-1">inline viewer activates once model-viewer is self-hosted at /vendor/model-viewer.min.js</p>`;
+      view.innerHTML = `<a href="/boards/${id}.glb" target="_blank" rel="noopener" class="text-brand-cyan text-[11px] hover:underline">↗ view 3D model (.glb)</a>`;
     }
   } else {
     view.innerHTML = `<p class="text-brand-gray text-[11px]">3D model pending — convert the vendor STEP:
