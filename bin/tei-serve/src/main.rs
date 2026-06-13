@@ -65,6 +65,10 @@ struct AppState {
     /// EventLedger contract's POST target). JSONL, one report per line.
     reports_path: Arc<std::path::PathBuf>,
     reports_lock: Arc<Mutex<()>>,
+    /// The forge build service config — Some only where a cargo
+    /// toolchain + skeletons exist (a dev/build host, not the bare web
+    /// server). None ⇒ /api/forge reports "no build host".
+    forge: Arc<Option<tei_forge::BuildOpts>>,
 }
 
 impl AppState {
@@ -187,6 +191,86 @@ async fn delete_calibration(State(state): State<AppState>) -> Json<serde_json::V
     let _ = std::fs::remove_file(state.calibration_path.as_ref());
     info!("calibration cleared");
     Json(serde_json::json!({ "calibrated": false }))
+}
+
+/// POST /api/forge/build — compile a user teiOS app for a target board.
+/// Body: {target, app_source}. Returns the tei-forge ForgeResult
+/// (artifact_path is server-local; the UI fetches the bytes from
+/// /api/forge/artifact?h=<sha>). Runs on a blocking thread (cargo).
+async fn post_forge_build(
+    State(state): State<AppState>,
+    Json(req): Json<tei_forge::ForgeRequest>,
+) -> Result<Json<tei_forge::ForgeResult>, (StatusCode, String)> {
+    let Some(opts) = state.forge.as_ref().clone() else {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "this server is not a build host (no cargo toolchain / skeletons)".into(),
+        ));
+    };
+    let res = tokio::task::spawn_blocking(move || tei_forge::build(&req, &opts))
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("join: {e}")))?;
+    Ok(Json(res))
+}
+
+/// GET /api/forge/targets — the buildable target ids for the BUILD tab.
+async fn get_forge_targets(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let available = state.forge.is_some();
+    let targets: Vec<_> = tei_forge::TARGETS
+        .iter()
+        .map(|t| serde_json::json!({ "id": t.id, "uf2_family": t.uf2_family }))
+        .collect();
+    Json(serde_json::json!({ "build_host": available, "targets": targets }))
+}
+
+/// GET /api/forge/artifact?h=<sha256> — stream a produced UF2. The sha
+/// is matched against the results dir, so only forge-produced files in
+/// that dir are servable (no arbitrary path read).
+async fn get_forge_artifact(
+    State(state): State<AppState>,
+    axum::extract::Query(q): axum::extract::Query<HashMap<String, String>>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let opts = state
+        .forge
+        .as_ref()
+        .clone()
+        .ok_or((StatusCode::SERVICE_UNAVAILABLE, "no build host".into()))?;
+    let want = q
+        .get("h")
+        .cloned()
+        .ok_or((StatusCode::BAD_REQUEST, "missing ?h=<sha256>".into()))?;
+    if !want.chars().all(|c| c.is_ascii_hexdigit()) || want.len() != 64 {
+        return Err((StatusCode::BAD_REQUEST, "h must be a 64-hex sha256".into()));
+    }
+    // Scan the results dir for a UF2 whose sha256 matches.
+    let dir = &opts.results_dir;
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| (StatusCode::NOT_FOUND, format!("results: {e}")))?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("uf2") {
+            continue;
+        }
+        if let Ok(bytes) = std::fs::read(&path) {
+            
+            if tei_forge::sha256_hex(&bytes) == want {
+                let fname = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("teios.uf2")
+                    .to_string();
+                let headers = [
+                    (axum::http::header::CONTENT_TYPE, "application/octet-stream".to_string()),
+                    (
+                        axum::http::header::CONTENT_DISPOSITION,
+                        format!("attachment; filename=\"{fname}\""),
+                    ),
+                ];
+                return Ok((headers, bytes));
+            }
+        }
+    }
+    Err((StatusCode::NOT_FOUND, "no artifact with that hash".into()))
 }
 
 /// POST /api/calibration/reports — a device publishes a measured (or
@@ -677,6 +761,31 @@ async fn main() -> anyhow::Result<()> {
             .unwrap_or_else(|_| "calibration-reports.jsonl".to_string()),
     );
 
+    // Forge build host: enabled only where a cargo toolchain AND the
+    // skeleton tree are present. FORGE_WORKSPACE_ROOT overrides discovery.
+    let forge = {
+        let root = std::env::var("FORGE_WORKSPACE_ROOT")
+            .ok()
+            .map(std::path::PathBuf::from)
+            .or_else(|| {
+                std::env::current_dir()
+                    .ok()
+                    .and_then(|d| tei_forge::workspace_root(&d))
+            });
+        match root {
+            Some(r) if tei_forge::toolchain_available()
+                && r.join("embedded/teios-app-rp2040/Cargo.toml").is_file() =>
+            {
+                info!("forge build host: {}", r.display());
+                Some(tei_forge::BuildOpts::new(r))
+            }
+            _ => {
+                info!("forge: no build host (no toolchain/skeletons) — /api/forge reports unavailable");
+                None
+            }
+        }
+    };
+
     let state = AppState {
         stack,
         substrates,
@@ -685,6 +794,7 @@ async fn main() -> anyhow::Result<()> {
         calibration_path: Arc::new(calibration_path),
         reports_path: Arc::new(reports_path),
         reports_lock: Arc::new(Mutex::new(())),
+        forge: Arc::new(forge),
     };
 
     let cors = CorsLayer::new()
@@ -708,6 +818,9 @@ async fn main() -> anyhow::Result<()> {
             "/api/calibration/reports",
             get(get_calibration_reports).post(post_calibration_report),
         )
+        .route("/api/forge/build", post(post_forge_build))
+        .route("/api/forge/targets", get(get_forge_targets))
+        .route("/api/forge/artifact", get(get_forge_artifact))
         .route("/api/dispatch/stream", post(post_dispatch_stream))
         .route("/api/execute", post(post_execute))
         .route("/api/field-gpu-pack", post(post_field_gpu_pack))

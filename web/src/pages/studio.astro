@@ -694,25 +694,65 @@ async function hubLoad() {
 }
 $('btn-hub-refresh')?.addEventListener('click', hubLoad);
 
-// ── BUILD: forge resolution v0 ───────────────────────────────────────
-$('btn-build')?.addEventListener('click', () => {
+// ── BUILD: the real forge ────────────────────────────────────────────
+let forgeHost = null; // null until /api/forge/targets answers
+async function forgeProbe() {
+  try {
+    const r = await fetch(`${API_BASE}/api/forge/targets`).then(x => x.json());
+    forgeHost = !!r.build_host;
+  } catch { forgeHost = false; }
+}
+forgeProbe();
+
+$('btn-build')?.addEventListener('click', async () => {
   const t = $('build-target').value;
-  const modified = window.__teiCodeModified === true;
   const out = $('build-out');
+  const src = (window.__teiAppSource && window.__teiAppSource()) || '';
+  const modified = window.__teiCodeModified === true;
+  if (forgeHost === null) await forgeProbe();
+
+  if (forgeHost) {
+    // real compile through the forge
+    out.textContent = `forge: compiling ${t} on the build host…
+(cold ~40s, warm ~2s; sandboxed, network-denied)`;
+    const btn = $('btn-build'); btn.disabled = true; btn.textContent = 'BUILDING…';
+    try {
+      const r = await fetch(`${API_BASE}/api/forge/build`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: t, app_source: src }),
+      });
+      if (r.status === 503) { out.textContent = 'forge: this server is not a build host.'; forgeHost = false; }
+      else {
+        const res = await r.json();
+        if (res.ok) {
+          out.textContent = `forge: BUILT ${t} · ${res.uf2_family} · ${res.bytes} bytes
+sha256 ${res.sha256}
+→ downloading UF2; FLASH tab has the 3-step install.`;
+          const a = document.createElement('a');
+          a.href = `${API_BASE}/api/forge/artifact?h=${res.sha256}`; a.download = `teios-${t}.uf2`; a.click();
+        } else {
+          out.textContent = `forge: BUILD FAILED — ${res.error || 'error'}
+
+${(res.logs || '').slice(-2000)}`;
+        }
+      }
+    } catch (e) { out.textContent = 'forge: ' + (e?.message || e); }
+    btn.disabled = false; btn.textContent = 'BUILD →';
+    return;
+  }
+
+  // no build host (e.g. the public studio with no toolchain): the
+  // unmodified template maps to the shipped tested image; modified
+  // source needs a build host.
   if (!modified) {
     const file = t === 'pico2' ? '/teios/teios-pico2.uf2' : (t === 'pico' ? '/teios/teios-pico.uf2' : '/teios/teios-feather-rp2040.uf2');
-    out.textContent = `forge: source matches the shipped template for ${t}.
-artifact: ${file} (tested image — identical build)
-sha256 + size: see /teios/manifest.json
+    out.textContent = `no build host connected — but your source matches the shipped template for ${t}, so here is the tested image (identical build).
+sha256 + size: /teios/manifest.json
 → downloading; FLASH tab has the 3-step install.`;
     const a = document.createElement('a'); a.href = file; a.download = ''; a.click();
   } else {
-    out.textContent = `forge: your app.rs differs from the template.
-custom builds run on the forge build service — sandboxed per-job
-builders (arbitrary source on a build host is arbitrary code
-execution; we don't cut that corner). It is the next backend
-milestone. Until then: reset to template builds instantly, or run
-the toolchain locally (embedded/teios-rp2040/README.md, two commands).`;
+    out.textContent = `no build host connected. Your app.rs differs from the template, so it needs the forge build service (sandboxed per-job cargo).
+Point Studio at a build host with ?api=http://host:9651, or run locally: embedded/teios-app-rp2040 (two commands in its README).`;
   }
 });
 
@@ -782,6 +822,8 @@ const view = new EditorView({
     ],
   }),
 });
+// expose live source to the BUILD tab (these are separate module scripts)
+window.__teiAppSource = () => view.state.doc.toString();
 window.__teiCodeModified = startDoc !== TEMPLATE;
 const st = document.getElementById('code-state');
 if (st) st.textContent = window.__teiCodeModified ? 'modified — builds via forge service' : 'template — maps to shipped image';
