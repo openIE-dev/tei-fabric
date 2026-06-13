@@ -52,7 +52,7 @@ or the Tachyon's PMIC ADCs.
 |---|---|---|
 | Feather RP2040, Pico | ✅ live (`.uf2`) | embassy-rp, native USB CDC, mass-storage flash |
 | Portenta H7 / H7 Lite | ✅ live (`.bin`, DFU) | embassy-stm32; USB-HS/RCC bench-pending but the build + image are real |
-| Nicla Voice, Nicla Sense ME | roadmap | embassy-nrf supports the nRF52832 host, but it has **no USB** — needs a UART/BLE transport for the ledger stream (not the USB-CDC pattern the forge skeletons assume) |
+| Nicla Voice, Nicla Sense ME | ✅ live (`.bin`, E1c) | embassy-nrf nrf52832; **UART transport** (no USB) — first non-USB-CDC image. Workload hashed from flash (64 KB RAM). Single M4 substrate + accelerator menu entry ("sleep is a substrate"). UART pins + flash base bench-pending |
 | Portenta C33 | roadmap | Renesas RA6M5 — no mature embassy/Rust HAL yet; needs a non-embassy skeleton |
 | Tachyon, OpenMV AE3, Coral Mini, Pi Zero 2W | Tier 0 / in-house | own boot chains (tachyon-os, SETOOLS, Linux images), not the MCU forge pattern |
 

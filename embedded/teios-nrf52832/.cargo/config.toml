@@ -1,0 +1,6 @@
+# move to .cargo/config.toml to activate (writes there are gated in some envs)
+[build]
+target = "thumbv7em-none-eabihf"
+
+[target.thumbv7em-none-eabihf]
+rustflags = ["-C", "link-arg=--nmagic"]

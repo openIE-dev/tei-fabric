@@ -182,6 +182,27 @@ pub const TARGETS: &[Target] = &[
         features: &["board-portenta-h7-lite"],
         no_default_features: true,
     },
+    // Nicla Voice / Nicla Sense ME — nRF52832 (Cortex-M4F), UART
+    // transport (no USB on this part), DFU/probe-flashed .bin (E1c).
+    // Skeleton is the teios-nrf52832 crate.
+    Target {
+        id: "nicla-voice",
+        skeleton: "embedded/teios-nrf52832",
+        triple: "thumbv7em-none-eabihf",
+        packaging: Packaging::Bin,
+        family: "nrf52832",
+        features: &["board-nicla-voice"],
+        no_default_features: false,
+    },
+    Target {
+        id: "nicla-sense",
+        skeleton: "embedded/teios-nrf52832",
+        triple: "thumbv7em-none-eabihf",
+        packaging: Packaging::Bin,
+        family: "nrf52832",
+        features: &["board-nicla-sense"],
+        no_default_features: true,
+    },
 ];
 
 /// Look up a target by id.

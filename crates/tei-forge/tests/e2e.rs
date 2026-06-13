@@ -120,6 +120,55 @@ fn portenta_h7_app_builds_to_a_valid_bin() {
     assert_eq!(data[3], 0x24, "initial SP should target 0x24xxxxxx SRAM");
 }
 
+const DEFAULT_APP_NRF: &str = r#"
+use crate::fw::tei::{Tei, TeiError};
+use teios_nrf52832::{PRIMITIVE_HASH, SUBSTRATE_M4};
+
+pub async fn app(tei: &mut Tei<'_>) -> Result<(), TeiError> {
+    let _m4 = tei.run_on(SUBSTRATE_M4, PRIMITIVE_HASH).await?;
+    tei.dispatch(PRIMITIVE_HASH).await?;
+    tei.sleep_ms(1000).await;
+    Ok(())
+}
+"#;
+
+#[test]
+#[ignore = "runs a full cargo cross-build (needs thumbv7em-none-eabihf target)"]
+fn nicla_voice_app_builds_to_a_valid_bin() {
+    let Some(opts) = opts() else {
+        eprintln!("SKIP: workspace root not found");
+        return;
+    };
+    if target("nicla-voice").is_none() {
+        panic!("nicla-voice target missing");
+    }
+    let req = ForgeRequest {
+        target: "nicla-voice".into(),
+        app_source: DEFAULT_APP_NRF.into(),
+    };
+    let t0 = Instant::now();
+    let res = build(&req, &opts);
+    let secs = t0.elapsed().as_secs_f64();
+    eprintln!(
+        "forge nrf52832 build: ok={} bytes={} family={} ext={} sha={} in {:.1}s",
+        res.ok, res.bytes, res.uf2_family, res.artifact_ext, res.sha256, secs
+    );
+    if !res.ok {
+        eprintln!("logs:\n{}", res.logs);
+    }
+    assert!(res.ok, "nicla-voice default app must build");
+    assert_eq!(res.uf2_family, "nrf52832");
+    assert_eq!(res.artifact_ext, "bin");
+    assert!(res.bytes > 0);
+    let bin = res.artifact_path.expect("artifact path");
+    assert_eq!(bin.extension().and_then(|e| e.to_str()), Some("bin"));
+    let data = std::fs::read(&bin).expect("read bin");
+    // nRF52832 RAM is at 0x20000000, so the initial SP (first word) has
+    // MSB 0x20 — pins a real vectored image at flash base 0x0.
+    assert!(data.len() > 1024, "bin should be non-trivial");
+    assert_eq!(data[3], 0x20, "initial SP should target 0x20000000 SRAM");
+}
+
 #[test]
 #[ignore = "runs a full cargo cross-build"]
 fn broken_app_returns_compiler_error_not_panic() {

@@ -1,0 +1,43 @@
+[package]
+name = "teios-nrf52832"
+version = "0.1.0"
+edition = "2021"
+description = "teiOS E1c — Arduino Nicla Voice / Nicla Sense ME (Nordic nRF52832, Cortex-M4F @ 64 MHz). Software CRC32 on the M4 priced into a ledger and dispatched; the always-on AI accelerator (Syntiant NDP120 / Bosch BHI260AP) is a priced cost-table menu entry. JSON lines over UART (the nRF52832 has no USB)."
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "teios-nrf52832"
+path = "src/main.rs"
+
+[lib]
+name = "teios_nrf52832"
+path = "src/lib.rs"
+
+[dependencies]
+tei-ledger = { path = "../../crates/embedded/tei-ledger", features = ["serde"] }
+teios-core = { path = "../teios-core" }
+
+# Embedded-only deps (built only for the ARM target; host `cargo test`
+# of the lib never pulls the embassy stack).
+[target.'cfg(all(target_arch = "arm", target_os = "none"))'.dependencies]
+embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread"] }
+embassy-nrf = { version = "0.6", features = ["nrf52832", "time-driver-rtc1", "gpiote"] }
+embassy-time = "0.5.1"
+cortex-m = { version = "0.7.6", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m-rt = "0.7"
+static_cell = "2.1"
+heapless = { version = "0.9", default-features = false }
+panic-halt = "1.0"
+
+[dev-dependencies]
+serde_json = "1"
+
+[features]
+default = ["board-nicla-voice"]
+board-nicla-voice = []
+board-nicla-sense = []
+
+[profile.release]
+opt-level = "s"
+lto = true
+debug = 2
