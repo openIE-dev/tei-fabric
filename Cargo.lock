@@ -1059,6 +1059,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ofpga-chipdb"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1638,6 +1648,7 @@ dependencies = [
 name = "tei-forge"
 version = "0.1.0"
 dependencies = [
+ "ofpga-chipdb",
  "serde",
  "serde_json",
  "sha2",

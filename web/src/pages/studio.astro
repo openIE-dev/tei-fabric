@@ -704,6 +704,14 @@ async function forgeProbe() {
   try {
     const r = await fetch(`${API_BASE}/api/forge/targets`).then(x => x.json());
     forgeHost = !!r.build_host;
+    // Board identity is sourced from ofpga-chipdb (the single registry):
+    // relabel each forge target's dropdown option with the chipdb name +
+    // chip. Options without an API entry (e.g. pico2) are left untouched.
+    const sel = $('build-target');
+    for (const t of (r.targets || [])) {
+      const opt = sel && [...sel.options].find(o => o.value === t.id);
+      if (opt && t.name) opt.textContent = t.chip ? `${t.name} · ${t.chip}` : t.name;
+    }
   } catch { forgeHost = false; }
 }
 forgeProbe();

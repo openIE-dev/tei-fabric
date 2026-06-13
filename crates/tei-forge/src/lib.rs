@@ -222,6 +222,30 @@ pub fn target(id: &str) -> Option<&'static Target> {
     TARGETS.iter().find(|t| t.id == id)
 }
 
+/// The chipdb board backing a forge target — the canonical identity
+/// (name, vendor, chip, family, price, url). Board identity is owned by
+/// `ofpga-chipdb` (the single board registry); the forge `Target` carries
+/// only build-specific fields. The target id is registered as a chipdb
+/// alias, so this resolves for every target. Returns `None` only if a
+/// target was added without a matching chipdb entry (caught by tests).
+pub fn board_info(id: &str) -> Option<&'static ofpga_chipdb::boards::Board> {
+    ofpga_chipdb::boards::find_board(id)
+}
+
+#[cfg(test)]
+mod chipdb_tests {
+    use super::*;
+
+    #[test]
+    fn every_target_resolves_in_chipdb() {
+        for t in TARGETS {
+            let b = board_info(t.id)
+                .unwrap_or_else(|| panic!("forge target {} not in ofpga-chipdb", t.id));
+            assert!(!b.name.is_empty(), "{} has no chipdb name", t.id);
+        }
+    }
+}
+
 /// Locate the workspace root by walking up from `start` for the marker
 /// `crates/tei-forge` (so the forge finds its skeletons regardless of
 /// the server's CWD).

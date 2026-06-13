@@ -219,11 +219,20 @@ async fn get_forge_targets(State(state): State<AppState>) -> Json<serde_json::Va
     let targets: Vec<_> = tei_forge::TARGETS
         .iter()
         .map(|t| {
+            // Board identity comes from ofpga-chipdb (the single board
+            // registry); the forge owns only the build-specific fields.
+            let b = tei_forge::board_info(t.id);
             serde_json::json!({
                 "id": t.id,
                 "uf2_family": t.family,
                 "family": t.family,
                 "artifact_ext": t.packaging.ext(),
+                "name": b.map(|b| b.name),
+                "vendor": b.map(|b| b.vendor),
+                "chip": b.map(|b| b.fpga_device),
+                "chip_family": b.map(|b| b.fpga_family),
+                "price_usd": b.map(|b| b.price_usd),
+                "url": b.map(|b| b.url),
             })
         })
         .collect();

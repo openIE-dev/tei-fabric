@@ -10,6 +10,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 tempfile = "3"
+# Board identity is sourced from openie-fpga's chipdb — the single board
+# registry. The forge owns only build-specific fields (skeleton, triple,
+# packaging, features); name/vendor/chip/price/url come from chipdb.
+ofpga-chipdb = { path = "../../../openie-fpga/crates/ofpga-chipdb" }
 
 [dev-dependencies]
 # (e2e build test uses only std + the crate)
