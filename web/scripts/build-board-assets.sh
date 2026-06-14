@@ -40,12 +40,27 @@ for id in $ids; do
   else
     mv "$src" "$step"
   fi
+  dst="$boards_dir/$id.glb"
+
+  # Path 1 (fast): Zoo cloud conversion. Works instantly for light files and
+  # auto-async for very large ones, but its synchronous endpoint is Cloudflare
+  # gateway-capped (~100s) — mid-size-heavy board assemblies (e.g. the full
+  # Pico STEP) 504 here. So we try it, then fall back to local conversion.
   out="$tmp/$id-out"; mkdir -p "$out"
-  zoo file convert --output-format=gltf "$step" "$out/"
-  # zoo writes the glb/gltf into $out — move the binary glb into place
-  glb=$(find "$out" -maxdepth 1 -name '*.glb' -o -name '*.gltf' | head -1)
-  [ -n "$glb" ] || { echo "  conversion produced no glTF"; continue; }
-  cp "$glb" "$boards_dir/$id.glb"
-  echo "  ✓ wrote public/boards/$id.glb ($(wc -c < "$boards_dir/$id.glb") bytes)"
+  if zoo file convert --output-format=gltf "$step" "$out/" >/dev/null 2>&1 \
+     && glb=$(find "$out" -maxdepth 1 \( -name '*.glb' -o -name '*.gltf' \) | head -1) \
+     && [ -n "$glb" ]; then
+    cp "$glb" "$dst"
+    echo "  ✓ (zoo) public/boards/$id.glb ($(wc -c < "$dst") bytes)"
+    continue
+  fi
+
+  # Path 2 (robust, no gateway): local OpenCascade conversion via cadquery.
+  echo "  zoo path unavailable for $id (heavy STEP / gateway timeout) — converting locally…"
+  if python3 "$here/step2gltf.py" "$step" "$dst" >/dev/null 2>&1 && [ -s "$dst" ]; then
+    echo "  ✓ (local) public/boards/$id.glb ($(wc -c < "$dst") bytes)"
+  else
+    echo "  ✗ $id: both paths failed (for local, run: pip install cadquery)"
+  fi
 done
 echo "done. BOARD view loads /boards/<id>.glb automatically when present."
