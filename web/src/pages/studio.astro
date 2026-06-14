@@ -153,6 +153,15 @@ publish(report)    -> fabric</pre>
             </div>
           </div>
         </div>
+
+        <div class="glass-card p-5 mt-5">
+          <div class="flex items-center justify-between mb-3">
+            <p class="section-label">placement map</p>
+            <button id="placement-reset" class="font-mono text-[10px] text-brand-gray hover:text-brand-light underline decoration-dotted">reset layout</button>
+          </div>
+          <p class="text-brand-gray text-[11px] mb-3">Drag the board and each attached peripheral to where it physically goes. Wiring is drawn from the board to each part (signals from the pinout). Layout is saved per board.</p>
+          <div id="placement-canvas" class="relative w-full rounded-lg border border-white/10 bg-[#080b12] overflow-hidden" style="height:380px;touch-action:none"></div>
+        </div>
       </div>
 
       <div id="ws-build" class="ws hidden">
@@ -764,8 +773,8 @@ async function boardLoad(id) {
   if (!id) { const s = $('board-select'); id = s && s.value; }
   if (!id || id === boardLoaded) return;
   boardLoaded = id;
-  // new board → reset peripheral mapping
-  periphAttached.length = 0; periphBoardKinds = new Set(); periphSearchInit(); periphRender();
+  // new board → reset peripheral mapping + load its saved placement layout
+  periphAttached.length = 0; periphBoardKinds = new Set(); placementLoad(); periphSearchInit(); periphRender();
   let b;
   try { b = await fetch(`${API_BASE}/api/forge/board?id=${encodeURIComponent(id)}`).then(x => x.json()); }
   catch { $('board-ident').innerHTML = '<span class="text-brand-gray">board service unreachable.</span>'; return; }
@@ -917,7 +926,72 @@ function periphRender() {
   });
   tc.innerHTML = `<p class="text-brand-gray uppercase text-[10px] tracking-wider mb-1.5">what needs coding</p>
     <ul class="space-y-1 list-disc list-inside text-brand-gray">${tasks.join('')}</ul>`;
+  placementRender();
 }
+
+// ── placement map: spatial canvas — drag board + peripherals, draw wiring ─
+const IFACE_COLOR = { 'I²C': '#3b82f6', I2C: '#3b82f6', SPI: '#f0883e', UART: '#a371f7', ADC: '#2dd4bf', GPIO: '#3fb950' };
+let placementPos = {};   // key -> {x,y} (board key = '_board', peripherals = mpn)
+function placementKey() { return 'tei-placement-' + (boardLoaded || 'none'); }
+function placementLoad() { try { placementPos = JSON.parse(localStorage.getItem(placementKey()) || '{}'); } catch { placementPos = {}; } }
+function placementSave() { try { localStorage.setItem(placementKey(), JSON.stringify(placementPos)); } catch {} }
+function placementRender() {
+  const cv = $('placement-canvas'); if (!cv) return;
+  const W = cv.clientWidth || 600, H = cv.clientHeight || 380;
+  const nodes = [{ key: '_board', label: boardLoaded || 'board', kind: 'board' }]
+    .concat(periphAttached.map(p => ({ key: p.mpn, label: p.mpn, kind: 'periph', iface: p.iface })));
+  // default positions: board left-center, peripherals fanned on the right
+  nodes.forEach((n, i) => {
+    if (!placementPos[n.key]) {
+      placementPos[n.key] = n.kind === 'board'
+        ? { x: 40, y: H / 2 - 26 }
+        : { x: W - 200, y: 30 + (i - 1) * 64 };
+    }
+  });
+  // SVG wiring under the nodes
+  const lines = periphAttached.map(p => {
+    const a = placementPos['_board'], b = placementPos[p.mpn]; if (!a || !b) return '';
+    const x1 = a.x + 70, y1 = a.y + 26, x2 = b.x + 6, y2 = b.y + 18;
+    const mx = (x1 + x2) / 2, col = IFACE_COLOR[p.iface] || '#64748b';
+    return `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${col}" stroke-width="1.5" opacity="0.8"/>
+      <text x="${mx}" y="${(y1 + y2) / 2 - 4}" fill="${col}" font-size="9" text-anchor="middle" font-family="monospace">${p.iface}</text>`;
+  }).join('');
+  const nodeHtml = nodes.map(n => {
+    const pos = placementPos[n.key];
+    const isBoard = n.kind === 'board';
+    const col = isBoard ? '#F59E0B' : (IFACE_COLOR[n.iface] || '#64748b');
+    return `<div class="placement-node absolute select-none cursor-grab active:cursor-grabbing" data-key="${n.key}"
+        style="left:${pos.x}px;top:${pos.y}px;${isBoard ? 'width:140px;height:52px' : 'min-width:84px;height:36px'}">
+        <div class="rounded-lg border px-2 py-1 font-mono text-[10px] flex items-center justify-center text-center h-full"
+          style="border-color:${col};background:${col}1a;color:${col}">${n.label}</div>
+      </div>`;
+  }).join('');
+  cv.innerHTML = `<svg class="absolute inset-0 w-full h-full pointer-events-none">${lines}</svg>${nodeHtml}`;
+  cv.querySelectorAll('.placement-node').forEach(el => placementDrag(el, cv));
+}
+function placementDrag(el, cv) {
+  el.addEventListener('pointerdown', e => {
+    e.preventDefault(); el.setPointerCapture(e.pointerId);
+    const k = el.dataset.key, start = placementPos[k], sx = e.clientX, sy = e.clientY;
+    const move = ev => {
+      placementPos[k] = { x: Math.max(0, start.x + ev.clientX - sx), y: Math.max(0, start.y + ev.clientY - sy) };
+      el.style.left = placementPos[k].x + 'px'; el.style.top = placementPos[k].y + 'px';
+      // redraw only the wiring (cheap) — re-render lines from current positions
+      const svg = cv.querySelector('svg'); if (svg) placementRedrawLines(svg);
+    };
+    const up = ev => { el.releasePointerCapture(e.pointerId); el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); placementSave(); };
+    el.addEventListener('pointermove', move); el.addEventListener('pointerup', up);
+  });
+}
+function placementRedrawLines(svg) {
+  svg.innerHTML = periphAttached.map(p => {
+    const a = placementPos['_board'], b = placementPos[p.mpn]; if (!a || !b) return '';
+    const x1 = a.x + 70, y1 = a.y + 26, x2 = b.x + 6, y2 = b.y + 18, mx = (x1 + x2) / 2, col = IFACE_COLOR[p.iface] || '#64748b';
+    return `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${col}" stroke-width="1.5" opacity="0.8"/>
+      <text x="${mx}" y="${(y1 + y2) / 2 - 4}" fill="${col}" font-size="9" text-anchor="middle" font-family="monospace">${p.iface}</text>`;
+  }).join('');
+}
+document.getElementById('placement-reset')?.addEventListener('click', () => { placementPos = {}; placementSave(); placementRender(); });
 
 // ── board 3D model + datasheet (vendor CAD → glTF, built offline) ─────
 let boardManifest = null;
