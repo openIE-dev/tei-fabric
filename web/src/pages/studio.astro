@@ -117,10 +117,22 @@ publish(report)    -> fabric</pre>
           <span id="board-twin" class="font-mono text-[10px] tracking-wider px-2.5 py-1 rounded-full border border-white/10 text-brand-gray">○ not connected</span>
         </div>
         <div class="grid lg:grid-cols-[1fr_320px] gap-5">
-          <div class="glass-card p-5 overflow-auto">
-            <p class="section-label mb-3">pinout</p>
-            <div id="board-pinout" class="font-mono text-[11px]"></div>
-            <div id="board-legend" class="flex flex-wrap gap-x-4 gap-y-1.5 mt-4 pt-4 border-t border-white/10"></div>
+          <div class="flex flex-col gap-5 min-w-0">
+            <div class="glass-card p-5 overflow-auto">
+              <p class="section-label mb-3">pinout</p>
+              <div id="board-pinout" class="font-mono text-[11px]"></div>
+              <div id="board-legend" class="flex flex-wrap gap-x-4 gap-y-1.5 mt-4 pt-4 border-t border-white/10"></div>
+            </div>
+            <div class="glass-card p-5">
+              <p class="section-label mb-3">peripherals</p>
+              <div class="flex gap-2 mb-3">
+                <input id="periph-search" type="text" placeholder="search the open parts library (e.g. BME280, OLED, GPS)…"
+                  class="flex-1 bg-black/40 rounded-lg px-3 py-2 font-mono text-[11px] text-brand-white border border-white/10" />
+              </div>
+              <div id="periph-results" class="font-mono text-[11px] space-y-1 mb-3"></div>
+              <div id="periph-attached" class="space-y-2"></div>
+              <div id="periph-tocode" class="mt-3 pt-3 border-t border-white/10 text-[11px] text-brand-gray"></div>
+            </div>
           </div>
           <div class="flex flex-col gap-4">
             <div class="glass-card p-5">
@@ -752,6 +764,8 @@ async function boardLoad(id) {
   if (!id) { const s = $('board-select'); id = s && s.value; }
   if (!id || id === boardLoaded) return;
   boardLoaded = id;
+  // new board → reset peripheral mapping
+  periphAttached.length = 0; periphBoardKinds = new Set(); periphSearchInit(); periphRender();
   let b;
   try { b = await fetch(`${API_BASE}/api/forge/board?id=${encodeURIComponent(id)}`).then(x => x.json()); }
   catch { $('board-ident').innerHTML = '<span class="text-brand-gray">board service unreachable.</span>'; return; }
@@ -792,6 +806,91 @@ async function boardLoad(id) {
   for (const p of pins) if (!seen.has(p.kind)) seen.set(p.kind, p.color);
   lg.innerHTML = [...seen].map(([k, c]) =>
     `<span class="flex items-center gap-1.5 text-[10px] text-brand-gray"><span class="inline-block w-2.5 h-2.5 rounded-full" style="background:${c}"></span>${k}</span>`).join('');
+
+  // the buses this board exposes (drives peripheral compatibility checks)
+  periphBoardKinds = new Set([...seen.keys()]);
+  periphRender();
+}
+
+// ── peripheral mapping (open ECAD parts library — ecad.openie.dev) ────
+const ECAD_API = 'https://ecad.openie.dev/api/v1';
+const periphAttached = [];          // [{mpn, name, iface, pins, datasheet}]
+let periphBoardKinds = new Set();   // bus kinds the current board exposes
+
+// infer the coding interface from a part's category/description/pins
+function inferIface(c) {
+  const s = `${c.category || ''} ${c.description || ''} ${(c.pin_names || []).join(' ')}`.toLowerCase();
+  if (/\bi2c\b|\bsda\b|\bscl\b/.test(s)) return 'I2C';
+  if (/\bspi\b|\bmosi\b|\bmiso\b|\bsck\b|\bcs\b/.test(s)) return 'SPI';
+  if (/\buart\b|\btx\b|\brx\b|serial/.test(s)) return 'UART';
+  if (/\badc\b|analog/.test(s)) return 'ADC';
+  if (/1-?wire|onewire/.test(s)) return 'GPIO';
+  return 'GPIO';
+}
+const IFACE_TO_KIND = { I2C: 'I²C', SPI: 'SPI', UART: 'UART', ADC: 'ADC', GPIO: 'GPIO' };
+
+let periphTimer = null;
+function periphSearchInit() {
+  const inp = $('periph-search'); if (!inp || inp._wired) return; inp._wired = true;
+  inp.addEventListener('input', () => {
+    clearTimeout(periphTimer);
+    periphTimer = setTimeout(() => periphSearch(inp.value.trim()), 300);
+  });
+}
+async function periphSearch(q) {
+  const el = $('periph-results'); if (!el) return;
+  if (q.length < 2) { el.innerHTML = ''; return; }
+  el.innerHTML = '<span class="text-brand-gray">searching…</span>';
+  try {
+    const hits = await fetch(`${ECAD_API}/search?q=${encodeURIComponent(q)}&limit=8`).then(r => r.json());
+    const comps = (hits || []).filter(h => h.item_type === 'component').slice(0, 8);
+    if (!comps.length) { el.innerHTML = '<span class="text-brand-gray">no parts found.</span>'; return; }
+    el.innerHTML = comps.map(h =>
+      `<button data-id="${h.item_id}" data-mpn="${h.mpn || ''}" class="periph-add block w-full text-left px-2 py-1 rounded hover:bg-white/5">
+         <span class="text-brand-amber">+ ${h.mpn || h.name}</span>
+         <span class="text-brand-gray"> · ${(h.description || h.name || '').slice(0, 60)}</span></button>`).join('');
+    el.querySelectorAll('.periph-add').forEach(b => b.addEventListener('click', () => periphAttach(b.dataset.id)));
+  } catch { el.innerHTML = '<span class="text-brand-gray">parts library unreachable.</span>'; }
+}
+async function periphAttach(id) {
+  try {
+    const c = await fetch(`${ECAD_API}/components/${encodeURIComponent(id)}`).then(r => r.json());
+    if (!c || !c.mpn) return;
+    if (periphAttached.some(p => p.mpn === c.mpn)) return;
+    periphAttached.push({
+      mpn: c.mpn, name: c.description || c.mpn, iface: inferIface(c),
+      pins: c.pin_names || [], datasheet: c.datasheet_url || null,
+      model_3d: c.model_3d && !`${JSON.stringify(c.model_3d)}`.match(/null|"None"/) ? c.model_3d : null,
+    });
+    $('periph-results').innerHTML = ''; $('periph-search').value = '';
+    periphRender();
+  } catch {}
+}
+function periphRender() {
+  const att = $('periph-attached'), tc = $('periph-tocode');
+  if (!att) return;
+  att.innerHTML = periphAttached.map((p, i) => {
+    const onBoard = periphBoardKinds.has(IFACE_TO_KIND[p.iface]);
+    return `<div class="flex items-center gap-2 bg-black/30 rounded-lg px-2.5 py-1.5 text-[11px]">
+      <span class="font-mono px-1.5 py-0.5 rounded text-[10px] ${onBoard ? 'bg-brand-cyan/15 text-brand-cyan' : 'bg-brand-amber/15 text-brand-amber'}">${p.iface}</span>
+      <span class="text-brand-white">${p.mpn}</span>
+      <span class="text-brand-gray truncate flex-1">${p.name}</span>
+      ${p.datasheet ? `<a href="${p.datasheet}" target="_blank" rel="noopener" class="text-brand-gray hover:text-brand-amber">ds↗</a>` : ''}
+      <button data-i="${i}" class="periph-del text-brand-gray hover:text-red-400">✕</button>
+    </div>`;
+  }).join('');
+  att.querySelectorAll('.periph-del').forEach(b => b.addEventListener('click', () => { periphAttached.splice(+b.dataset.i, 1); periphRender(); }));
+
+  if (!periphAttached.length) { tc.innerHTML = ''; return; }
+  // "what needs coding": one bus init per distinct interface + a driver per part
+  const buses = [...new Set(periphAttached.map(p => p.iface))];
+  const tasks = buses.map(bus => {
+    const parts = periphAttached.filter(p => p.iface === bus).map(p => p.mpn);
+    const have = periphBoardKinds.has(IFACE_TO_KIND[bus]);
+    return `<li>${have ? '' : '⚠ '}init <span class="text-brand-light">${bus}</span>${have ? '' : ' (no ' + bus + ' pin on this board?)'} → driver${parts.length > 1 ? 's' : ''}: <span class="text-brand-amber">${parts.join(', ')}</span></li>`;
+  });
+  tc.innerHTML = `<p class="text-brand-gray uppercase text-[10px] tracking-wider mb-1.5">what needs coding</p>
+    <ul class="space-y-1 list-disc list-inside text-brand-gray">${tasks.join('')}</ul>`;
 }
 
 // ── board 3D model + datasheet (vendor CAD → glTF, built offline) ─────
