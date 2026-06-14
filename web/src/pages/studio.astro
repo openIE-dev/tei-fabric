@@ -807,8 +807,9 @@ async function boardLoad(id) {
   lg.innerHTML = [...seen].map(([k, c]) =>
     `<span class="flex items-center gap-1.5 text-[10px] text-brand-gray"><span class="inline-block w-2.5 h-2.5 rounded-full" style="background:${c}"></span>${k}</span>`).join('');
 
-  // the buses this board exposes (drives peripheral compatibility checks)
+  // the buses this board exposes (drives peripheral compatibility + wiring)
   periphBoardKinds = new Set([...seen.keys()]);
+  boardPins = pins;
   periphRender();
 }
 
@@ -816,6 +817,24 @@ async function boardLoad(id) {
 const ECAD_API = 'https://ecad.openie.dev/api/v1';
 const periphAttached = [];          // [{mpn, name, iface, pins, datasheet}]
 let periphBoardKinds = new Set();   // bus kinds the current board exposes
+let boardPins = [];                 // the current board's pins (for wiring)
+
+// pick concrete board pins for an interface, by matching pin functions/names.
+function wiringFor(iface) {
+  const find = re => { const p = boardPins.find(x => re.test(`${x.name} ${(x.functions||[]).join(' ')}`)); return p ? p.name : null; };
+  const pwr = (boardPins.find(x => /3V?3|3\.3/.test(x.name)) || boardPins.find(x => x.kind === 'Power')) || null;
+  const gnd = boardPins.find(x => x.kind === 'Ground') || null;
+  const w = [];
+  if (pwr) w.push(['VCC', pwr.name]);
+  if (gnd) w.push(['GND', gnd.name]);
+  if (iface === 'I2C') { const a = find(/SDA/i), b = find(/SCL/i); if (a) w.push(['SDA', a]); if (b) w.push(['SCL', b]); }
+  else if (iface === 'SPI') { const sck = find(/SCK/i), mo = find(/MOSI|\bMO\b|SPI\d? TX/i), mi = find(/MISO|\bMI\b|SPI\d? RX/i), cs = find(/\bCSn?\b/i);
+    if (sck) w.push(['SCK', sck]); if (mo) w.push(['MOSI', mo]); if (mi) w.push(['MISO', mi]); if (cs) w.push(['CS', cs]); }
+  else if (iface === 'UART') { const tx = find(/UART\d? TX|\bTX\b/i), rx = find(/UART\d? RX|\bRX\b/i); if (tx) w.push(['→RX', tx]); if (rx) w.push(['←TX', rx]); }
+  else if (iface === 'ADC') { const a = (boardPins.find(x => x.kind === 'ADC')); if (a) w.push(['AOUT', a.name]); }
+  else { const g = (boardPins.find(x => x.kind === 'GPIO')); if (g) w.push(['IO', g.name]); }
+  return w;
+}
 
 // infer the coding interface from a part's category/description/pins
 function inferIface(c) {
@@ -871,12 +890,19 @@ function periphRender() {
   if (!att) return;
   att.innerHTML = periphAttached.map((p, i) => {
     const onBoard = periphBoardKinds.has(IFACE_TO_KIND[p.iface]);
-    return `<div class="flex items-center gap-2 bg-black/30 rounded-lg px-2.5 py-1.5 text-[11px]">
-      <span class="font-mono px-1.5 py-0.5 rounded text-[10px] ${onBoard ? 'bg-brand-cyan/15 text-brand-cyan' : 'bg-brand-amber/15 text-brand-amber'}">${p.iface}</span>
-      <span class="text-brand-white">${p.mpn}</span>
-      <span class="text-brand-gray truncate flex-1">${p.name}</span>
-      ${p.datasheet ? `<a href="${p.datasheet}" target="_blank" rel="noopener" class="text-brand-gray hover:text-brand-amber">ds↗</a>` : ''}
-      <button data-i="${i}" class="periph-del text-brand-gray hover:text-red-400">✕</button>
+    const wires = wiringFor(p.iface);
+    const wiring = wires.length
+      ? `<div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 pl-1 text-[10px] text-brand-gray">
+          ${wires.map(([sig, pin]) => `<span><span class="text-brand-cyan">${sig}</span>→<span class="text-brand-light">${pin}</span></span>`).join('')}
+        </div>` : '';
+    return `<div class="bg-black/30 rounded-lg px-2.5 py-1.5">
+      <div class="flex items-center gap-2 text-[11px]">
+        <span class="font-mono px-1.5 py-0.5 rounded text-[10px] ${onBoard ? 'bg-brand-cyan/15 text-brand-cyan' : 'bg-brand-amber/15 text-brand-amber'}">${p.iface}</span>
+        <span class="text-brand-white">${p.mpn}</span>
+        <span class="text-brand-gray truncate flex-1">${p.name}</span>
+        ${p.datasheet ? `<a href="${p.datasheet}" target="_blank" rel="noopener" class="text-brand-gray hover:text-brand-amber">ds↗</a>` : ''}
+        <button data-i="${i}" class="periph-del text-brand-gray hover:text-red-400">✕</button>
+      </div>${wiring}
     </div>`;
   }).join('');
   att.querySelectorAll('.periph-del').forEach(b => b.addEventListener('click', () => { periphAttached.splice(+b.dataset.i, 1); periphRender(); }));
