@@ -1,5 +1,5 @@
 {
-  "_comment": "Board visual assets for Studio's BOARD view. cad_step = the vendor's published 3D CAD (STEP); build-board-assets.sh converts it to <id>.glb via the authenticated `zoo` CLI. datasheet = vendor PDF. Only VERIFIED vendor URLs go here — unverified entries leave cad_step null and the UI shows the product page only.",
+  "_comment": "Board visual assets for Studio's BOARD view. cad_step = the vendor's published 3D CAD (STEP); build-board-assets.sh converts it to a web-optimized <id>.glb (coarse tessellation via cadquery + gltf-transform optimize). datasheet = vendor PDF. Only VERIFIED vendor URLs go here.",
   "boards": {
     "pico": {
       "datasheet": "https://datasheets.raspberrypi.com/pico/pico-datasheet.pdf",
@@ -7,11 +7,35 @@
       "cad_step_member": "Pico-R3.step",
       "license": "Raspberry Pi — permissive hardware docs"
     },
-    "feather-rp2040": { "datasheet": null, "cad_step": null, "note": "Adafruit publishes STEP on the product/learn page — confirm exact URL before adding." },
-    "portenta-h7": { "datasheet": null, "cad_step": null, "note": "Arduino publishes STEP in the Portenta H7 resources — confirm exact URL." },
-    "portenta-h7-lite": { "datasheet": null, "cad_step": null },
-    "portenta-c33": { "datasheet": null, "cad_step": null },
-    "nicla-voice": { "datasheet": null, "cad_step": null },
-    "nicla-sense": { "datasheet": null, "cad_step": null }
+    "feather-rp2040": {
+      "datasheet": "https://learn.adafruit.com/adafruit-feather-rp2040-pico",
+      "cad_step": "https://raw.githubusercontent.com/adafruit/Adafruit_CAD_Parts/main/4884%20Feather%20RP2040/4884%20Feather%20RP2040.step",
+      "license": "Adafruit_CAD_Parts (MIT)"
+    },
+    "portenta-h7": {
+      "cad_step": "https://docs.arduino.cc/resources/models/ABX00042-step.zip",
+      "cad_step_member": "PortentaH7.step",
+      "license": "Arduino"
+    },
+    "portenta-h7-lite": {
+      "cad_step": "https://docs.arduino.cc/resources/models/ABX00045-step.zip",
+      "cad_step_member": "PortentaH7lite.step",
+      "license": "Arduino"
+    },
+    "portenta-c33": {
+      "cad_step": "https://docs.arduino.cc/resources/models/ABX00074-step.zip",
+      "cad_step_member": "ABX00074-step.step",
+      "license": "Arduino"
+    },
+    "nicla-voice": {
+      "cad_step": "https://docs.arduino.cc/resources/models/ABX00061-step.zip",
+      "cad_step_member": "ABX00061-step.step",
+      "license": "Arduino"
+    },
+    "nicla-sense": {
+      "cad_step": "https://docs.arduino.cc/resources/models/ABX00050-step.zip",
+      "cad_step_member": "NiclaSense.step",
+      "license": "Arduino"
+    }
   }
 }

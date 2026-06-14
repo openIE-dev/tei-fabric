@@ -40,27 +40,23 @@ for id in $ids; do
   else
     mv "$src" "$step"
   fi
-  dst="$boards_dir/$id.glb"
+  dst="$boards_dir/$id.glb"; raw="$tmp/$id-raw.glb"
 
-  # Path 1 (fast): Zoo cloud conversion. Works instantly for light files and
-  # auto-async for very large ones, but its synchronous endpoint is Cloudflare
-  # gateway-capped (~100s) — mid-size-heavy board assemblies (e.g. the full
-  # Pico STEP) 504 here. So we try it, then fall back to local conversion.
-  out="$tmp/$id-out"; mkdir -p "$out"
-  if zoo file convert --output-format=gltf "$step" "$out/" >/dev/null 2>&1 \
-     && glb=$(find "$out" -maxdepth 1 \( -name '*.glb' -o -name '*.gltf' \) | head -1) \
-     && [ -n "$glb" ]; then
-    cp "$glb" "$dst"
-    echo "  ✓ (zoo) public/boards/$id.glb ($(wc -c < "$dst") bytes)"
-    continue
+  # Convert STEP → raw glTF. Local OpenCascade (cadquery) is the robust path
+  # with no gateway cap (Zoo's sync conversion 504s on heavy board assemblies
+  # — confirmed; it's synchronous-only with no pollable async for these).
+  # Coarse tessellation keeps the mesh web-sized.
+  if ! python3 "$here/step2gltf.py" "$step" "$raw" >/dev/null 2>&1 || [ ! -s "$raw" ]; then
+    echo "  ✗ $id: STEP→glTF failed (need: pip install cadquery)"; continue
   fi
 
-  # Path 2 (robust, no gateway): local OpenCascade conversion via cadquery.
-  echo "  zoo path unavailable for $id (heavy STEP / gateway timeout) — converting locally…"
-  if python3 "$here/step2gltf.py" "$step" "$dst" >/dev/null 2>&1 && [ -s "$dst" ]; then
-    echo "  ✓ (local) public/boards/$id.glb ($(wc -c < "$dst") bytes)"
+  # Web-optimize: weld + simplify + dedup + prune, NO compression (so no
+  # runtime Draco/meshopt decoder is needed). Turns 20–70 MB raw meshes into
+  # ~1–3 MB web glb. Falls back to the raw mesh if gltf-transform is absent.
+  if npx --yes @gltf-transform/cli@4.4.0 optimize "$raw" "$dst" --compress false --simplify-error 0.001 >/dev/null 2>&1 && [ -s "$dst" ]; then
+    echo "  ✓ $id.glb ($(wc -c < "$dst") bytes, optimized)"
   else
-    echo "  ✗ $id: both paths failed (for local, run: pip install cadquery)"
+    cp "$raw" "$dst"; echo "  ✓ $id.glb ($(wc -c < "$dst") bytes, raw — install gltf-transform to shrink)"
   fi
 done
 echo "done. BOARD view loads /boards/<id>.glb automatically when present."
