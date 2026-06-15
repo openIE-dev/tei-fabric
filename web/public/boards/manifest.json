@@ -41,6 +41,18 @@
       "cad_step": "https://docs.arduino.cc/resources/models/ABX00112-step.zip",
       "cad_step_member": "ABX00112-step.step",
       "license": "Arduino"
+    },
+    "tachyon": {
+      "cad_step": "https://raw.githubusercontent.com/particle-iot/hardware-libraries/main/CAD/Tachyon/tachyon.stp",
+      "datasheet": "https://docs.particle.io/assets/pdfs/datasheets/tachyon-datasheet.pdf",
+      "license": "Particle (particle-iot/hardware-libraries)"
+    },
+    "openmv-ae3": {
+      "image": "openmv-ae3.jpg",
+      "pinout_image": "openmv-ae3-pinout.png",
+      "datasheet": "https://cdn.shopify.com/s/files/1/0803/9211/files/openmv-ae3-v6.PDF?v=1773503438",
+      "note": "3D STEP is on GrabCAD (login-gated); board photo + pinout diagram from openmv/openmv-media.",
+      "license": "OpenMV (openmv-media)"
     }
   }
 }

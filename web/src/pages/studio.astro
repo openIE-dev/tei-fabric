@@ -782,6 +782,11 @@ async function boardLoad(id) {
   let b;
   try { b = await fetch(`${API_BASE}/api/forge/board?id=${encodeURIComponent(id)}`).then(x => x.json()); }
   catch { $('board-ident').innerHTML = '<span class="text-brand-gray">board service unreachable.</span>'; return; }
+  // shared manifest (board image / pinout-diagram fallbacks)
+  if (boardManifest === null) {
+    try { boardManifest = await fetch('/boards/manifest.json').then(x => x.json()); } catch { boardManifest = {}; }
+  }
+  const mentry = (boardManifest.boards && boardManifest.boards[id]) || {};
 
   $('board-ident').innerHTML = [
     ['name', b.name], ['vendor', b.vendor], ['chip', b.chip],
@@ -795,8 +800,14 @@ async function boardLoad(id) {
 
   const po = $('board-pinout'), lg = $('board-legend');
   if (!b.pinout) {
-    po.innerHTML = '<span class="text-brand-gray">Identity only — no datasheet-verified pin map for this board yet. (We don\'t guess pinouts.)</span>';
-    lg.innerHTML = ''; return;
+    if (mentry.pinout_image) {
+      // no structured pin map, but the vendor publishes a pinout diagram
+      po.innerHTML = `<img src="/boards/${mentry.pinout_image}" alt="${id} pinout" loading="lazy" style="width:100%;border-radius:8px;background:#fff" />
+        <p class="text-brand-gray text-[10px] mt-2">vendor pinout diagram — structured (color-coded) map not transcribed yet</p>`;
+    } else {
+      po.innerHTML = '<span class="text-brand-gray">Identity only — no datasheet-verified pin map for this board yet. (We don\'t guess pinouts.)</span>';
+    }
+    lg.innerHTML = ''; periphBoardKinds = new Set(); boardPins = []; periphRender(); return;
   }
   // dual-column physical layout: first half down the left, second half down the right.
   const pins = b.pinout.pins, half = Math.ceil(pins.length / 2);
@@ -1028,9 +1039,13 @@ async function boardModel(id) {
     } else {
       view.innerHTML = `<a href="/boards/${id}.glb" target="_blank" rel="noopener" class="text-brand-cyan text-[11px] hover:underline">↗ view 3D model (.glb)</a>`;
     }
+  } else if (entry.image) {
+    // no glTF, but the vendor publishes a board photo — show it.
+    view.innerHTML = `<img src="/boards/${entry.image}" alt="${id} board photo" loading="lazy"
+      style="width:100%;border-radius:8px;background:#0a0d16" />`;
   } else {
     view.innerHTML = `<p class="text-brand-gray text-[11px]">3D model pending — convert the vendor STEP:
-      <span class="text-brand-light">zoo auth login</span> then <span class="text-brand-light">web/scripts/build-board-assets.sh</span></p>`;
+      <span class="text-brand-light">web/scripts/build-board-assets.sh</span></p>`;
   }
 }
 
