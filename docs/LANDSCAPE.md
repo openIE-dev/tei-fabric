@@ -7,11 +7,19 @@
 
 ## Thesis
 
+**Why this exists (read first):** ThermoEdge is building a new class of chip that
+doesn't exist yet — energy/thermodynamic compute silicon (tesilicon.thermoedge.ai).
+New silicon dies on *adoption*, not physics. **teiOS is the adoption strategy:**
+the runtime for that future chip, shipped today on boards people already own, so a
+developer base fluent in the energy-first model exists before tape-out. TEI Studio
+is the face of that runtime. See `SOTA-INGEST.md` for the on-ramp thesis.
+
 **TEI Studio is an AI-first design suite for energy-optimized compute on real
 hardware.** You connect (or simulate) a board, author for it in natural language,
 build and flash from the browser with nothing installed, and watch what it does
 **measured in joules** — then the fabric dispatches each operation to the
-lowest-energy substrate the board actually has.
+lowest-energy substrate the board actually has. On a $4 MCU today; on the TEI chip
+tomorrow — same model, same code.
 
 Four pillars set it apart from everything else in the field:
 
@@ -184,6 +192,7 @@ why anyone switches.
 
 ## So what (one line)
 
-> The first hardware design suite where you author in natural language, run on
-> anything from a $4 MCU to a photonic mesh, and the unit of truth is **joules** —
-> measured, not assumed.
+> The software runtime + energy model + installed base for a new class of chip —
+> proven today on the boards people already own, where teiOS makes them do their
+> best joules-measured work. The on-ramp to silicon that the bankrupt new-chip
+> companies never built.

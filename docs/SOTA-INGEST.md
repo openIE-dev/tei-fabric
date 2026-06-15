@@ -1,146 +1,119 @@
-# TEI Studio — Becoming SOTA by Ingestion (internal)
+# teiOS — the adoption on-ramp for a new class of chip (internal)
 
-> Internal design doc (companion to `LANDSCAPE.md`). How Studio reaches and
-> passes the state of the art by **ingesting the best of every ecosystem** and
-> **erasing the per-ecosystem maintenance noise** — instead of reimplementing one
-> tool. Competitor/ecosystem names are for design only; never ship them to a
-> public page.
+> Internal strategy doc (companion to `LANDSCAPE.md`). Why teiOS runs on existing
+> boards, and what "SOTA" actually means for us. Ecosystem names are for design
+> reference only — never ship them to a public page.
 
-## The problem: N ecosystems × M boards = N×M maintained definitions
+## What we're actually doing
 
-Every embedded ecosystem makes you maintain *its own* copy of the same board:
+**ThermoEdge is building a new class of chip that doesn't exist yet** — energy /
+thermodynamic compute silicon (tesilicon.thermoedge.ai · thermoedge.ai). Same
+frontier as Extropic, Unconventional AI: a part whose unit of work is *joules*,
+not instructions.
 
-- **Arduino** — a core/BSP: `boards.txt` + `platform.txt` + per-board `variant/`
-  pin files + a bootloader.
-- **PlatformIO** — a `board.json` manifest (mcu, f_cpu, upload protocol,
-  frameworks) inside a platform package. (Community literally asks for a
-  `boards.txt → board.json` sync script — the duplication is a known pain.)
-- **Zephyr** — a board directory: `board.yml`, devicetree `.dts`, `defconfig`,
-  `Kconfig`, `pinctrl`.
-- **CircuitPython / MicroPython** — a per-board port (`pins.c`,
-  `mpconfigboard.{h,mk}`, `board.c`) compiled into per-board firmware.
-- **Wokwi** — a board/chip model + `diagram.json`.
-- **ESP Web Tools** — a per-board flash `manifest.json`.
+**New-silicon companies die on adoption, not physics.** History is full of
+brilliant chips that went bankrupt because nobody adopted them — no software, no
+ecosystem, no installed base, no developers who think in the new model. Taping
+out the part is the easy half.
 
-Same board. Six+ definitions, six+ toolchains, six+ flash tools, six+ library
-managers. **That is the noise.** None of it is the thing the user wants to do —
-which is get a board doing something useful, measured, fast.
+**teiOS is our adoption strategy.** It is the runtime for our future silicon —
+and we ship it *today* on the boards people already own and deploy. On those
+boards teiOS delivers the **best possible use of the hardware**: every operation
+is a priced primitive, every run emits an energy ledger, every dispatch picks the
+lowest-joule substrate the board actually has. By the time our chip tapes out,
+there is already a population of developers fluent in the teiOS model, with teiOS
+code and an energy-first mental model — and the chip is just the best substrate
+the same code can dispatch to.
 
-## The principle
+> **Existing-board teiOS is the on-ramp, the proving ground, and the installed
+> base — not a destination, and never an interop layer for other people's tools.**
 
-> **Studio is the single source of truth that ingests the best of each ecosystem
-> and emits what each one needs — so the developer never maintains a board
-> definition, installs a core, or picks a flasher again.**
+## What "SOTA" means here (and what it does NOT)
 
-`ofpga-chipdb` already holds the canonical board record (identity, pins,
-substrates, flash path). Make it the **board-definition compiler**: ingest
-existing defs to bootstrap, emit every ecosystem's artifact on demand.
+It does **not** mean speaking six ecosystems' board-definition formats. Emitting
+Arduino `variant/` files or PlatformIO `board.json` would make us a maintenance
+tool serving *rival* ecosystems — busy-work that dilutes the thesis. **People use
+teiOS.** We don't generate other people's files. (The earlier "board-definition
+compiler" idea is retracted.)
+
+It **does** mean: **teiOS on an existing board is the easiest, best way to use
+that board** — so adoption is frictionless and the energy-first model spreads
+before the silicon ships. We benchmark against the *ease* of the best ecosystems
+and deliver that ease through the teiOS model — we ingest the **UX, not the file
+formats**.
+
+## The constant that carries to silicon
+
+The teiOS model is identical on a $4 MCU and on the future TEI chip:
 
 ```mermaid
 flowchart LR
-    subgraph IN["INGEST (bootstrap the registry)"]
-        A1["Arduino boards.txt + variant/"]
-        A2["PlatformIO board.json"]
-        A3["Zephyr board dir (dts/yml)"]
-        A4["KiCad / vendor STEP + datasheet"]
-        A5["antmicro hardware-components"]
-    end
-    CHIP["ofpga-chipdb\nCANONICAL board record\nidentity · pins · substrates · flash recipe · 3D"]
-    subgraph OUT["EMIT (on demand, generated)"]
-        E1["Arduino variant + boards.txt entry"]
-        E2["PlatformIO board.json"]
-        E3["Zephyr board.yml + pinctrl"]
-        E4["CircuitPython/MicroPython board def"]
-        E5["Wokwi diagram.json"]
-        E6["ESP-Web-Tools / tei install manifest"]
-        E7["forge build recipe (the one we already run)"]
-    end
-    A1 --> CHIP
-    A2 --> CHIP
-    A3 --> CHIP
-    A4 --> CHIP
-    A5 --> CHIP
-    CHIP --> E1
-    CHIP --> E2
-    CHIP --> E3
-    CHIP --> E4
-    CHIP --> E5
-    CHIP --> E6
-    CHIP --> E7
+    P["priced primitive\n(matmul · FFT · hash · sample …)"]
+    L["event ledger\n(cycles · joules · provenance)"]
+    D["lowest-joule dispatch\nover the substrates this board HAS"]
+    P --> L --> D
+    D -. "RP2040 today" .-> S1["CPU · DMA-sniffer · PIO"]
+    D -. "STM32H7 today" .-> S2["M7 · M4 · hw-CRC"]
+    D -. "TEI chip at tape-out" .-> S3["thermodynamic substrate\n(joules-native)"]
 ```
 
-Add a board **once**; every ecosystem is supported. That single feature subsumes
-the board-maintenance noise of the entire field, and it's the most leveraged SOTA
-move we can make.
+Same primitives, same code shape, same energy unit. The substrate set grows; the
+program and the developer's fluency don't change. That is *why* MCU adoption
+transfers to the chip — and why every existing-board feature must reinforce the
+energy model, not wander off into ecosystem interop.
 
-## Best-of-breed ingestion map
+## Ingestion map — match the EASE, deliver it as teiOS
 
-For each ecosystem: the loved feature to match/ingest · the noise it imposes ·
-how Studio absorbs it (✓ have · ◐ partial · ○ to build).
+For each ecosystem: the *ease* that makes it loved (the bar to clear so teiOS
+adoption is frictionless) → how teiOS Studio delivers that ease on existing
+boards. ✓ have · ◐ partial · ○ to build. **No "emit their format" rows.**
 
-| Ecosystem | Loved feature (ingest this) | Noise it imposes | Studio absorbs via |
-|---|---|---|---|
-| **Adafruit / CircuitPython** | drag-drop UF2 · live REPL · world-class Learn guides · "it just works" | per-board CP firmware + board def; guides are manual | ✓ UF2 flash ladder · ◐ BOARD view as the living guide · ○ WebSerial REPL · ○ emit CP board def |
-| **Arduino** | Library Manager · boards manager · dead-simple · huge reach | cores/BSP/`boards.txt`/variant per board | ✓ chipdb = board def · ✓ forge = build · ◐ parts library = libs · ○ emit Arduino variant |
-| **PlatformIO** | 1500+ boards · one `platformio.ini` · pro tooling | a `board.json` per board, per platform | ✓ forge = unified build · ○ ingest+emit `board.json` (the sync everyone wants) |
-| **Wokwi** | instant simulation · `diagram.json` · share-a-link · chip API | per-board/chip sim models | ◐ 9 substrate sims (wasm) · ○ visual diagram from chipdb · ○ shareable sim links |
-| **ESP Web Tools / Improv** | web flash · Wi-Fi provisioning in-browser · embeddable install button | per-board flash manifest | ✓ FLASH ladder + `<tei-install-button>` · ○ Improv provisioning · ✓ emit manifest from chipdb |
-| **Edge Impulse** | data → DSP → model → deploy · EON compiler · device data | per-board deployment lib | ◐ ONNX import + dispatch · ○ DATA capture loop · ○ on-device train/deploy |
-| **Antmicro** | Renode sim · System Designer · Kenning AutoML · RDFM OTA · open parts DB | open but desktop, separate tools | ✓ federate hardware-components · ◐ BOARD+placement ≈ System Designer · ○ Renode as a sim backend |
-| **Particle / Golioth / Memfault** | fleet · OTA · crash/coredump observability | SDK/agent per board | ◐ HUB + calibration reports · ○ FLEET (OTA + fleet ledgers) |
+| Ecosystem | The ease to match | teiOS delivers it via |
+|---|---|---|
+| **Adafruit / CircuitPython** | drag-drop UF2 · live REPL · world-class guides · "it just works" | ✓ UF2/WebDFU flash ladder · ○ WebSerial REPL · ◐ BOARD view as the living guide |
+| **Arduino** | one-click simplicity · huge reach | ✓ cloud forge build · ✓ one-button flash · ○ teiOS apps in C, not just Rust |
+| **PlatformIO** | same flow across many boards | ✓ chipdb + forge across boards (7 families, growing) |
+| **Wokwi** | instant simulation · share-a-link | ◐ substrate sims (wasm) · ✓ board+peripheral diagram **+ share links (shipped)** |
+| **ESP Web Tools / Improv** | web flash · in-browser Wi-Fi provisioning | ✓ flash ladder + `<tei-install-button>` · ○ Improv provisioning |
+| **Edge Impulse** | data → model → deploy is effortless | ◐ ONNX import + dispatch · ○ capture→deploy, **measured in joules** |
+| **Antmicro** | open, full-lifecycle | ✓ federate their open parts index · ○ Renode as an optional sim backend |
 
-**The pattern:** every ecosystem's *best* feature is a thin layer over a board
-definition + a transport + a workflow. We own the canonical board definition
-(chipdb) and the transports (forge build, WebSerial/UF2/DFU flash, the ledger).
-So we can ingest each best-feature without inheriting its noise.
+The point of the table is a **friction bar**, not a feature-parity checklist:
+where any of these is easier than teiOS, that's an adoption leak to close.
 
-## The streamlined workflow (the payoff)
+## On-ramp roadmap (lower friction · deepen the energy model)
 
-One flow, no per-ecosystem ceremony:
+Every item makes teiOS the best use of an existing board *and* strengthens the
+model that the new chip will run. Ordered by adoption leverage.
 
-1. **Connect / simulate** — one button; chipdb identifies the board.
-2. **Author** — AI→grammar, in *any* language the board supports (Rust today;
-   C/Arduino, MicroPython, CircuitPython as emitters land) — you never install a
-   core or a toolchain.
-3. **Build** — the forge, any framework, in the cloud — no local SDK.
-4. **Flash** — the capability ladder (UF2 → WebUSB → WebDFU → probe), one button.
-5. **Measure** — the ledger console, **in joules**.
-6. **Dispatch** — lowest-energy substrate the board actually has.
+1. **Multi-language teiOS authoring** — let Arduino-C and MicroPython/
+   CircuitPython developers write *teiOS apps in their language* (the priced-
+   primitive / ledger / dispatch API, not a transpiler to their ecosystem). Meets
+   the largest installed base where they are.
+2. **WebSerial REPL** — the CircuitPython/MicroPython live-coding feel, talking to
+   a teiOS board interactively. Lowest-friction "it's alive" moment.
+3. **Measured joules** — close the calibration loop on real boards (INA228 / PMIC
+   ADC / board AEM) so the ledger is *measured*, not Table-tier. This is the proof
+   the whole thesis rests on; it must be real before the chip's numbers are
+   credible.
+4. **Visual diagram + share** — ✓ shipped. Keep deepening (sim-from-diagram).
+5. **Frictionless first-run** — connect → auto-identify → flash known-good →
+   proof-of-life ledger, no account. The five-beat grammar from STUDIO-DESIGN.
+6. **Edge-AI deploy, energy-measured** — ONNX → dispatch with a real joules
+   readout per inference. The differentiator vs every edge-AI tool: we show the
+   energy, they don't.
 
-The developer never touches a `boards.txt`, a `board.json`, a Zephyr dts, a
-`platformio.ini`, `bossac`/`esptool`/`dfu-util`, or a per-ecosystem library
-manager. That maintenance is the product's job, done once in chipdb.
+## The bridge to silicon
 
-## SOTA gap roadmap (prioritized)
-
-Ordered by leverage — each closes a "where SOTA leads us" item from `LANDSCAPE.md`.
-
-1. **Board-definition compiler** (chipdb emitters + ingesters) — *the keystone.*
-   Ingest `boards.txt`/`board.json`/Zephyr to bootstrap; emit
-   Arduino-variant / PlatformIO-JSON / CircuitPython-def / Wokwi-diagram /
-   install-manifest. One board → every ecosystem. Subsumes the most noise.
-2. **Multi-language authoring** — forge skeletons + emitters for Arduino-C and
-   MicroPython/CircuitPython, not just Rust. Matches Arduino/Adafruit reach.
-3. **WebSerial REPL** — the CircuitPython/MicroPython live-coding loop, in CONSOLE.
-4. **Visual diagram + share** — generate a Wokwi-style `diagram.json` from chipdb
-   + the placement map; shareable sim links. Closes the Wokwi UX gap.
-5. **DATA + on-device train/deploy** — the Edge Impulse loop (capture → model →
-   deploy), on top of ONNX import + the ledger.
-6. **Renode as a sim backend** — wrap Antmicro Renode behind the cost surface for
-   instruction-accurate runs where our physics sims don't reach.
-7. **FLEET (OTA + fleet ledgers)** — Improv provisioning, OTA, fleet-wide joule
-   dashboards. Closes the Particle/Golioth/Memfault gap.
-
-## Why this is SOTA, not catch-up
-
-Matching features one-by-one would make us a worse copy of six tools. **Ingesting
-them through one canonical board record makes us the layer they all should have
-had** — and we add the two things none of them have: **joules as the unit** and
-**AI-first authoring**. The board-definition compiler is the move that turns "all
-that noise" into "added once, works everywhere, measured in energy."
+When the TEI chip tapes out, nothing about the developer's world changes: the
+cost table gains a thermodynamic substrate, the same primitives dispatch to it,
+the same ledger measures it in joules. Adoption built on commodity MCUs *is* the
+adoption of the chip. That bridge — a real software runtime + an energy model +
+an installed base, in hand before the silicon — is the thing the bankrupt
+new-chip companies never had.
 
 ## So what (one line)
 
-> Add a board once; author in any language by talking to it; build, flash, and
-> measure it in joules from the browser — Studio maintains the six ecosystem
-> definitions so you never see them.
+> teiOS makes the boards you already own do their best energy-work today — and
+> teaches the joules-first model our new chip runs tomorrow. The existing-board
+> suite is the on-ramp to silicon that no other new-chip company has built.
