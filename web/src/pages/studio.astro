@@ -187,6 +187,14 @@ publish(report)    -> fabric</pre>
             </div>
             <div class="flex items-end"><button id="btn-build" class="primary w-full">BUILD →</button></div>
           </div>
+          <label id="build-measured-row" class="flex items-start gap-2 mb-4 cursor-pointer select-none">
+            <input id="build-measured" type="checkbox" class="mt-0.5 accent-brand-amber" />
+            <span class="font-mono text-[11px] text-brand-light leading-snug">
+              <span class="text-brand-amber">Measured joules</span> — wire in the INA228 EnergyMeter (I²C) so the ledger reports
+              <span class="text-brand-green">JoulesSource::Measured</span> instead of Table-tier constants. Needs the part wired in-line on the supply rail.
+              <span id="build-measured-na" class="hidden text-brand-gray">· not available on this target (bare-metal, no embedded-hal I²C yet)</span>
+            </span>
+          </label>
           <div id="build-out" class="font-mono text-[11px] text-brand-gray bg-black/30 rounded-lg p-3 min-h-[80px] whitespace-pre-wrap">the forge resolves your CODE tab source against the target.
 unmodified template -> the shipped, tested image (instant).
 modified source -> the forge build service (sandboxed builders; the
@@ -1169,27 +1177,48 @@ async function forgeProbe() {
     for (const t of (r.targets || [])) {
       const opt = sel && [...sel.options].find(o => o.value === t.id);
       if (opt && t.name) opt.textContent = t.chip ? `${t.name} · ${t.chip}` : t.name;
+      // Record measured-joules capability so the checkbox can disable
+      // itself on targets without an embedded-hal I²C path (e.g. RA6M5).
+      measuredByTarget[t.id] = !!t.measured;
     }
+    syncMeasured();
   } catch { forgeHost = false; }
 }
+// Which targets can build the Measured variant (from /api/forge/targets).
+const measuredByTarget = {};
+function syncMeasured() {
+  const t = $('build-target')?.value;
+  const cb = $('build-measured');
+  const na = $('build-measured-na');
+  if (!cb) return;
+  // Default unknown targets to capable (the server is the source of truth
+  // at build time; this only governs the checkbox UX).
+  const ok = measuredByTarget[t] !== false;
+  cb.disabled = !ok;
+  if (!ok) cb.checked = false;
+  na?.classList.toggle('hidden', ok);
+  $('build-measured-row')?.classList.toggle('opacity-50', !ok);
+}
+$('build-target')?.addEventListener('change', syncMeasured);
 forgeProbe();
 
 $('btn-build')?.addEventListener('click', async () => {
   const t = $('build-target').value;
   const out = $('build-out');
+  const measured = !!$('build-measured')?.checked && measuredByTarget[t] !== false;
   const src = (window.__teiAppSource && window.__teiAppSource()) || '';
   const modified = window.__teiCodeModified === true;
   if (forgeHost === null) await forgeProbe();
 
   if (forgeHost) {
     // real compile through the forge
-    out.textContent = `forge: compiling ${t} on the build host…
+    out.textContent = `forge: compiling ${t}${measured ? ' (measured · INA228)' : ''} on the build host…
 (cold ~40s, warm ~2s; sandboxed, network-denied)`;
     const btn = $('btn-build'); btn.disabled = true; btn.textContent = 'BUILDING…';
     try {
       const r = await fetch(`${API_BASE}/api/forge/build`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target: t, app_source: src }),
+        body: JSON.stringify({ target: t, app_source: src, measured }),
       });
       if (r.status === 503) { out.textContent = 'forge: this server is not a build host.'; forgeHost = false; }
       else {
@@ -1206,8 +1235,11 @@ $('btn-build')?.addEventListener('click', async () => {
           } else {
             flashHint = `→ downloading .bin; flash via DFU (double-tap reset):\n  dfu-util -d 2341:035b -a 0 -s 0x08040000:leave -D teios-${t}.bin`;
           }
-          out.textContent = `forge: BUILT ${t} · ${res.uf2_family} · ${res.bytes} bytes
-sha256 ${res.sha256}
+          const measuredNote = measured
+            ? `\nmeasured: INA228 EnergyMeter compiled in → ledger reports JoulesSource::Measured.\n  wire the part in-line on the supply rail (default 0x40, 0.015 Ω shunt).`
+            : '';
+          out.textContent = `forge: BUILT ${t}${measured ? ' (measured)' : ''} · ${res.uf2_family} · ${res.bytes} bytes
+sha256 ${res.sha256}${measuredNote}
 ${flashHint}`;
           const a = document.createElement('a');
           a.href = `${API_BASE}/api/forge/artifact?h=${res.sha256}`; a.download = `teios-${t}.${ext}`; a.click();

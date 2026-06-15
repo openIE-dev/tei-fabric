@@ -856,6 +856,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tei-ina228"
+version = "0.1.0"
+dependencies = [
+ "embedded-hal 1.0.0",
+ "tei-ledger",
+]
+
+[[package]]
 name = "tei-ledger"
 version = "0.1.0"
 dependencies = [
@@ -882,6 +890,7 @@ dependencies = [
  "panic-halt",
  "serde_json",
  "static_cell",
+ "tei-ina228",
  "tei-ledger",
  "teios-core",
 ]

@@ -44,7 +44,7 @@ use embassy_usb::driver::EndpointError;
 use heapless::String;
 use panic_halt as _;
 use static_cell::StaticCell;
-use tei_ledger::{CostTable, EventLedger, JoulesSource};
+use tei_ledger::{CostTable, EnergyMeter, EventLedger, JoulesSource};
 use teios_h747::{
     BOARD_ID, BUF_LEN, COST_CAPACITY, PRIMITIVE_HASH, SUBSTRATE_CRC_HW, crc32_software,
     fill_pattern, shipped_cost_table, write_boot_line, write_check_line, write_dispatch_line,
@@ -107,6 +107,10 @@ pub mod tei {
         pub(super) buf: &'a [u8; BUF_LEN],
         pub(super) table: &'a CostTable<COST_CAPACITY>,
         pub(super) line: String<LINE_CAP>,
+        /// Optional INA228 on the supply rail (`--features measured-ina228`).
+        /// When present, ledgers carry Measured joules. `'static` dyn — the
+        /// meter lives for the program (embassy main never returns).
+        pub(super) meter: Option<&'a mut (dyn EnergyMeter + 'static)>,
     }
 
     impl<'a> Tei<'a> {
@@ -118,7 +122,10 @@ pub mod tei {
             substrate: &'static str,
             _primitive: u32,
         ) -> Result<Run, TeiError> {
-            let (result, ledger) = if substrate == SUBSTRATE_CRC_HW {
+            if let Some(m) = self.meter.as_deref_mut() {
+                m.reset();
+            }
+            let (result, mut ledger) = if substrate == SUBSTRATE_CRC_HW {
                 let t0 = Instant::now();
                 self.crc.reset();
                 // CRC unit, then software final-XOR for zlib CRC32.
@@ -138,6 +145,12 @@ pub mod tei {
                 l.active_us = t0.elapsed().as_micros();
                 (crc, l)
             };
+            if let Some(m) = self.meter.as_deref_mut() {
+                if let Some(j) = m.joules() {
+                    ledger.joules = Some(j);
+                    ledger.joules_source = JoulesSource::Measured;
+                }
+            }
             self.line.clear();
             write_ledger_line(&mut self.line, substrate, 1, &ledger).ok();
             send_line(self.class, &self.line).await?;
@@ -271,9 +284,23 @@ async fn main(spawner: Spawner) {
     fill_pattern(buf);
     let table = shipped_cost_table();
 
+    // Optional INA228 on I2C1 (PB6 SCL / PB7 SDA). BENCH-PENDING: the I2C pins
+    // + the shunt (0.015 Ω) / max-current (5 A) must match the part wired
+    // in-line on the supply rail. Without the feature the ledger stays Table.
+    #[cfg(feature = "measured-ina228")]
+    let mut ina = {
+        let i2c = embassy_stm32::i2c::I2c::new_blocking(p.I2C1, p.PB6, p.PB7, Default::default());
+        tei_ina228::Ina228::new(i2c, tei_ina228::DEFAULT_ADDR, 0.015, 5.0, true).ok()
+    };
+
     loop {
         class.wait_connection().await;
-        let _ = stream(&mut class, &cycles, &mut crc, buf, &table).await;
+        #[cfg(feature = "measured-ina228")]
+        let meter: Option<&mut (dyn EnergyMeter + 'static)> =
+            ina.as_mut().map(|m| m as &mut (dyn EnergyMeter + 'static));
+        #[cfg(not(feature = "measured-ina228"))]
+        let meter: Option<&mut (dyn EnergyMeter + 'static)> = None;
+        let _ = stream(&mut class, &cycles, &mut crc, buf, &table, meter).await;
     }
 }
 
@@ -283,6 +310,7 @@ async fn stream(
     crc: &mut Crc<'static>,
     buf: &[u8; BUF_LEN],
     table: &CostTable<COST_CAPACITY>,
+    mut meter: Option<&mut (dyn EnergyMeter + 'static)>,
 ) -> Result<(), EndpointError> {
     let mut boot: String<LINE_CAP> = String::new();
     write_boot_line(&mut boot, true).ok(); // M7 has DWT CYCCNT
@@ -297,6 +325,7 @@ async fn stream(
             buf,
             table,
             line: String::new(),
+            meter: meter.as_deref_mut(),
         };
         crate::app::app(&mut tei).await?;
         ticker.next().await;

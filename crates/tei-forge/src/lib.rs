@@ -60,6 +60,12 @@ pub struct ForgeRequest {
     pub target: String,
     /// The user-editable `app.rs` source.
     pub app_source: String,
+    /// Build the **Measured** variant — wire in the INA228 EnergyMeter so
+    /// the ledger reports `JoulesSource::Measured` instead of Table-tier
+    /// constants. Honored only when the target declares a
+    /// [`Target::measured_feature`]; ignored (no-op) otherwise.
+    #[serde(default)]
+    pub measured: bool,
 }
 
 /// The build outcome — serde-stable for the HTTP layer.
@@ -139,6 +145,11 @@ pub struct Target {
     pub features: &'static [&'static str],
     /// `--no-default-features` when selecting a non-default board.
     pub no_default_features: bool,
+    /// The cargo feature that wires in the INA228 EnergyMeter for the
+    /// **Measured** joules variant (e.g. `"measured-ina228"`). `None` for
+    /// targets with no `embedded-hal` I²C path yet (the bare-metal RA6M5).
+    /// Added to the build only when [`ForgeRequest::measured`] is set.
+    pub measured_feature: Option<&'static str>,
 }
 
 /// The targets the forge can build today. Bench-first: the RP2040
@@ -153,6 +164,7 @@ pub const TARGETS: &[Target] = &[
         family: "rp2040",
         features: &["board-feather-rp2040"],
         no_default_features: false,
+        measured_feature: Some("measured-ina228"),
     },
     Target {
         id: "pico",
@@ -162,6 +174,7 @@ pub const TARGETS: &[Target] = &[
         family: "rp2040",
         features: &["board-pico"],
         no_default_features: true,
+        measured_feature: Some("measured-ina228"),
     },
     // Portenta H7 / H7 Lite — Cortex-M7, DFU-flashed .bin (E1b). The
     // skeleton is the teios-h747 crate; its target/ default is gated so
@@ -176,6 +189,7 @@ pub const TARGETS: &[Target] = &[
         family: "stm32h7",
         features: &["board-portenta-h7"],
         no_default_features: false,
+        measured_feature: Some("measured-ina228"),
     },
     Target {
         id: "portenta-h7-lite",
@@ -185,6 +199,7 @@ pub const TARGETS: &[Target] = &[
         family: "stm32h7",
         features: &["board-portenta-h7-lite"],
         no_default_features: true,
+        measured_feature: Some("measured-ina228"),
     },
     // Nicla Voice / Nicla Sense ME — nRF52832 (Cortex-M4F), UART
     // transport (no USB on this part), DFU/probe-flashed .bin (E1c).
@@ -197,6 +212,7 @@ pub const TARGETS: &[Target] = &[
         family: "nrf52832",
         features: &["board-nicla-voice"],
         no_default_features: false,
+        measured_feature: Some("measured-ina228"),
     },
     Target {
         id: "nicla-sense",
@@ -206,6 +222,7 @@ pub const TARGETS: &[Target] = &[
         family: "nrf52832",
         features: &["board-nicla-sense"],
         no_default_features: true,
+        measured_feature: Some("measured-ina228"),
     },
     // Portenta C33 — Renesas RA6M5 (Cortex-M33), bare-metal (no embassy
     // HAL), CRCA hardware-CRC substrate, semihosting transport,
@@ -218,6 +235,9 @@ pub const TARGETS: &[Target] = &[
         family: "ra6m5",
         features: &["board-portenta-c33"],
         no_default_features: false,
+        // Bare-metal RA6M5 — no embedded-hal I²C path yet, so no INA228
+        // EnergyMeter. Stays Table-tier until an R_IIC driver lands.
+        measured_feature: None,
     },
 ];
 

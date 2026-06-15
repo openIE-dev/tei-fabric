@@ -92,7 +92,7 @@ pub fn build(req: &ForgeRequest, opts: &BuildOpts) -> ForgeResult {
     // 3. cargo build — offline, sandboxed, timed. Use the shared target
     // dir so deps cache across builds.
     let target_dir = opts.shared_target.clone();
-    let (status_ok, logs, mut sandboxed) = run_cargo(tgt, &proj, &target_dir, opts);
+    let (status_ok, logs, mut sandboxed) = run_cargo(req, tgt, &proj, &target_dir, opts);
     let logs = truncate_logs(logs);
     if !status_ok {
         let mut out = ForgeResult::failed("build failed", logs);
@@ -224,6 +224,7 @@ fn walk_for(root: &Path, name: &str, depth: usize) -> Vec<PathBuf> {
 /// Spawn cargo (optionally under seatbelt), enforce the wall-timeout by
 /// killing the process group, return (ok, combined logs, sandboxed?).
 fn run_cargo(
+    req: &ForgeRequest,
     tgt: &Target,
     proj: &Path,
     target_dir: &Path,
@@ -260,6 +261,15 @@ fn run_cargo(
     for f in tgt.features {
         cargo_args.push("--features".into());
         cargo_args.push((*f).into());
+    }
+    // Measured variant: wire in the INA228 EnergyMeter feature when the
+    // request asks for it AND the target supports it (no-op on bare-metal
+    // RA6M5, which declares no measured_feature).
+    if req.measured {
+        if let Some(mf) = tgt.measured_feature {
+            cargo_args.push("--features".into());
+            cargo_args.push(mf.into());
+        }
     }
 
     let program = if sandboxed {

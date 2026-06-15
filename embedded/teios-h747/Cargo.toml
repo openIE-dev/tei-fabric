@@ -31,6 +31,8 @@ cortex-m = { version = "0.7.6", features = ["inline-asm", "critical-section-sing
 cortex-m-rt = "0.7"
 static_cell = "2.1"
 heapless = { version = "0.9", default-features = false }
+# Measured-tier joules (optional): INA228 EnergyMeter over embedded-hal I2C.
+tei-ina228 = { path = "../../crates/embedded/tei-ina228", optional = true }
 panic-halt = "1.0"
 
 [dev-dependencies]
@@ -40,6 +42,9 @@ serde_json = "1"
 default = ["board-portenta-h7"]
 board-portenta-h7 = []
 board-portenta-h7-lite = []
+# Measured-tier joules: read an INA228 on the supply rail over I2C1 (PB6 SCL /
+# PB7 SDA). Ledger reports JoulesSource::Measured. See fw.rs for the bench wiring.
+measured-ina228 = ["dep:tei-ina228"]
 
 [profile.release]
 opt-level = "s"

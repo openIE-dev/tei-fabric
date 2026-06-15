@@ -42,6 +42,7 @@ fn default_app_builds_to_a_valid_uf2() {
     let req = ForgeRequest {
         target: "feather-rp2040".into(),
         app_source: DEFAULT_APP.into(),
+        measured: false,
     };
     let t0 = Instant::now();
     let res = build(&req, &opts);
@@ -64,6 +65,41 @@ fn default_app_builds_to_a_valid_uf2() {
         "uf2 block-aligned"
     );
     // UF2 magic start word 0x0A324655 ("UF2\n" little-endian)
+    assert_eq!(&data[0..4], &[0x55, 0x46, 0x32, 0x0A], "UF2 magic");
+}
+
+/// The **Measured** variant: `measured: true` must add the
+/// `measured-ina228` feature and still produce a valid UF2. This is the
+/// device-side half of the calibration loop — the image now carries the
+/// INA228 EnergyMeter so the ledger can report `JoulesSource::Measured`.
+#[test]
+#[ignore = "runs a full cargo cross-build"]
+fn measured_variant_builds_with_ina228() {
+    let Some(opts) = opts() else {
+        eprintln!("SKIP: workspace root not found");
+        return;
+    };
+    let req = ForgeRequest {
+        target: "feather-rp2040".into(),
+        app_source: DEFAULT_APP.into(),
+        measured: true,
+    };
+    let t0 = Instant::now();
+    let res = build(&req, &opts);
+    eprintln!(
+        "forge measured build: ok={} bytes={} sha={} in {:.1}s",
+        res.ok,
+        res.bytes,
+        res.sha256,
+        t0.elapsed().as_secs_f64()
+    );
+    if !res.ok {
+        eprintln!("logs:\n{}", res.logs);
+    }
+    assert!(res.ok, "measured variant must build");
+    assert_eq!(res.uf2_family, "rp2040");
+    let uf2 = res.artifact_path.expect("artifact path");
+    let data = std::fs::read(&uf2).expect("read uf2");
     assert_eq!(&data[0..4], &[0x55, 0x46, 0x32, 0x0A], "UF2 magic");
 }
 
@@ -94,6 +130,7 @@ fn portenta_h7_app_builds_to_a_valid_bin() {
     let req = ForgeRequest {
         target: "portenta-h7".into(),
         app_source: DEFAULT_APP_H747.into(),
+        measured: false,
     };
     let t0 = Instant::now();
     let res = build(&req, &opts);
@@ -145,6 +182,7 @@ fn nicla_voice_app_builds_to_a_valid_bin() {
     let req = ForgeRequest {
         target: "nicla-voice".into(),
         app_source: DEFAULT_APP_NRF.into(),
+        measured: false,
     };
     let t0 = Instant::now();
     let res = build(&req, &opts);
@@ -196,6 +234,7 @@ fn portenta_c33_app_builds_to_a_valid_bin() {
     let req = ForgeRequest {
         target: "portenta-c33".into(),
         app_source: DEFAULT_APP_RA.into(),
+        measured: false,
     };
     let t0 = Instant::now();
     let res = build(&req, &opts);
@@ -239,6 +278,7 @@ pub async fn app(tei: &mut Tei<'_>) -> Result<(), TeiError> {
 }
 "#
         .into(),
+        measured: false,
     };
     let res = build(&req, &opts);
     assert!(!res.ok, "type error must fail the build");
@@ -258,6 +298,7 @@ fn denied_app_never_reaches_cargo() {
     let req = ForgeRequest {
         target: "feather-rp2040".into(),
         app_source: "fn x() { unsafe { core::arch::asm!(\"nop\"); } }".into(),
+        measured: false,
     };
     let res = build(&req, &opts);
     assert!(!res.ok);

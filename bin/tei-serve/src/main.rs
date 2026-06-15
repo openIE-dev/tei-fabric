@@ -233,6 +233,9 @@ async fn get_forge_targets(State(state): State<AppState>) -> Json<serde_json::Va
                 "chip_family": b.map(|b| b.fpga_family),
                 "price_usd": b.map(|b| b.price_usd),
                 "url": b.map(|b| b.url),
+                // Whether the Measured-joules variant (INA228 EnergyMeter)
+                // can be built for this target — drives the BUILD checkbox.
+                "measured": t.measured_feature.is_some(),
             })
         })
         .collect();

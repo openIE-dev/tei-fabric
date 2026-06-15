@@ -35,7 +35,7 @@ use embassy_nrf::{bind_interrupts, peripherals};
 use embassy_time::{Duration, Instant, Ticker, Timer};
 use heapless::String;
 use panic_halt as _;
-use tei_ledger::{CostTable, EventLedger, JoulesSource};
+use tei_ledger::{CostTable, EnergyMeter, EventLedger, JoulesSource};
 use teios_nrf52832::{
     BUF_LEN, COST_CAPACITY, crc32_software, shipped_cost_table, write_boot_line, write_check_line,
     write_dispatch_line, write_ledger_line,
@@ -43,6 +43,12 @@ use teios_nrf52832::{
 
 bind_interrupts!(struct Irqs {
     UARTE0 => uarte::InterruptHandler<peripherals::UARTE0>;
+});
+
+// TWIM (I2C) interrupt — only when the INA228 meter is built in.
+#[cfg(feature = "measured-ina228")]
+bind_interrupts!(struct IrqsI2c {
+    TWISPI0 => embassy_nrf::twim::InterruptHandler<peripherals::TWISPI0>;
 });
 
 const LINE_CAP: usize = teios_core::LINE_CAP;
@@ -96,6 +102,9 @@ pub mod tei {
         pub(super) buf: &'a [u8; BUF_LEN],
         pub(super) table: &'a CostTable<COST_CAPACITY>,
         pub(super) line: String<LINE_CAP>,
+        /// Optional INA228 (`--features measured-ina228`). When present,
+        /// ledgers carry Measured joules. `'static` dyn — lives for the program.
+        pub(super) meter: Option<&'a mut (dyn EnergyMeter + 'static)>,
     }
 
     impl<'a> Tei<'a> {
@@ -108,12 +117,21 @@ pub mod tei {
             _primitive: u32,
         ) -> Result<Run, TeiError> {
             use tei_ledger::CycleSource;
+            if let Some(m) = self.meter.as_deref_mut() {
+                m.reset();
+            }
             let t0 = Instant::now();
             let c0 = self.cycles.now();
             let crc = crc32_software(self.buf);
             let mut l = EventLedger::new(JoulesSource::Table);
             l.cycles = self.cycles.delta(c0);
             l.active_us = t0.elapsed().as_micros();
+            if let Some(m) = self.meter.as_deref_mut() {
+                if let Some(j) = m.joules() {
+                    l.joules = Some(j);
+                    l.joules_source = JoulesSource::Measured;
+                }
+            }
             self.line.clear();
             write_ledger_line(&mut self.line, substrate, 1, &l).ok();
             send_line(self.uart, &self.line).await?;
@@ -166,18 +184,37 @@ async fn main(_spawner: Spawner) {
 
     let table = shipped_cost_table();
 
+    // Optional INA228 on TWIM0 (P0.14 SDA / P0.15 SCL). BENCH-PENDING: the
+    // pins + shunt (0.015 Ω) / max-current (5 A) must match the part wired
+    // in-line on the supply rail. Without the feature the ledger stays Table.
+    #[cfg(feature = "measured-ina228")]
+    let mut ina = {
+        use embassy_nrf::twim::{Config as TwimConfig, Twim};
+        // nRF EasyDMA needs the TX buffer in RAM; INA228 writes are ≤8 bytes.
+        static mut TWIM_BUF: [u8; 16] = [0; 16];
+        let tx = unsafe { &mut *core::ptr::addr_of_mut!(TWIM_BUF) };
+        let i2c = Twim::new(p.TWISPI0, IrqsI2c, p.P0_14, p.P0_15, TwimConfig::default(), tx);
+        tei_ina228::Ina228::new(i2c, tei_ina228::DEFAULT_ADDR, 0.015, 5.0, true).ok()
+    };
+
     let mut boot: String<LINE_CAP> = String::new();
     write_boot_line(&mut boot, true).ok(); // M4 has DWT CYCCNT
     let _ = send_line(&mut uart, &boot).await;
 
     let mut ticker = Ticker::every(Duration::from_secs(1));
     loop {
+        #[cfg(feature = "measured-ina228")]
+        let meter: Option<&mut (dyn EnergyMeter + 'static)> =
+            ina.as_mut().map(|m| m as &mut (dyn EnergyMeter + 'static));
+        #[cfg(not(feature = "measured-ina228"))]
+        let meter: Option<&mut (dyn EnergyMeter + 'static)> = None;
         let mut tei = Tei {
             uart: &mut uart,
             cycles: &cycles,
             buf: &WORKLOAD,
             table: &table,
             line: String::new(),
+            meter,
         };
         let _ = crate::app::app(&mut tei).await;
         ticker.next().await;
