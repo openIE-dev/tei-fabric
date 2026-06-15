@@ -157,9 +157,13 @@ publish(report)    -> fabric</pre>
         <div class="glass-card p-5 mt-5">
           <div class="flex items-center justify-between mb-3">
             <p class="section-label">placement map</p>
-            <button id="placement-reset" class="font-mono text-[10px] text-brand-gray hover:text-brand-light underline decoration-dotted">reset layout</button>
+            <div class="flex items-center gap-3">
+              <span id="diagram-share-msg" class="font-mono text-[10px] text-brand-cyan"></span>
+              <button id="diagram-share" class="font-mono text-[10px] tracking-wider px-2.5 py-1 rounded border border-brand-amber/50 text-brand-amber hover:bg-brand-amber/10 transition-colors">⧉ SHARE</button>
+              <button id="placement-reset" class="font-mono text-[10px] text-brand-gray hover:text-brand-light underline decoration-dotted">reset layout</button>
+            </div>
           </div>
-          <p class="text-brand-gray text-[11px] mb-3">Drag the board and each attached peripheral to where it physically goes. Wiring is drawn from the board to each part (signals from the pinout). Layout is saved per board.</p>
+          <p class="text-brand-gray text-[11px] mb-3">Drag the board and each attached peripheral to where it physically goes. Wiring is drawn from the board to each part (signals from the pinout). Layout is saved per board; <span class="text-brand-light">SHARE</span> copies a link that reconstructs this exact diagram.</p>
           <div id="placement-canvas" class="relative w-full rounded-lg border border-white/10 bg-[#080b12] overflow-hidden" style="height:380px;touch-action:none"></div>
         </div>
       </div>
@@ -723,7 +727,10 @@ function wsShow(name) {
   if (history.replaceState) history.replaceState(null, '', '#' + name);
   if (name === 'console') { resize(); }
   if (name === 'hub') hubLoad();
-  if (name === 'board') boardPopulate().then(() => boardLoad());
+  if (name === 'board') boardPopulate().then(() => {
+    const d = new URLSearchParams(location.search).get('d');
+    if (d && !diagramApplied) { diagramApplied = true; diagramApply(d); } else boardLoad();
+  });
   if (name === 'code') window.dispatchEvent(new Event('tei-code-shown'));
 }
 document.getElementById('rail').addEventListener('click', e => {
@@ -1007,6 +1014,44 @@ function placementRedrawLines(svg) {
   }).join('');
 }
 document.getElementById('placement-reset')?.addEventListener('click', () => { placementPos = {}; placementSave(); placementRender(); });
+
+// ── shareable diagram: encode board + peripherals + layout into a link ──
+// var (not let): a shared link loads with #board, so the initial wsShow may
+// read this flag before this line executes — var hoists undefined (falsy), so
+// the apply path still fires correctly and never hits a TDZ ReferenceError.
+var diagramApplied = false;
+function b64urlEnc(s) { return btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+function b64urlDec(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); return decodeURIComponent(escape(atob(s))); }
+function diagramState() {
+  const bp = placementPos['_board'] || {};
+  return {
+    b: boardLoaded,
+    bx: bp.x, by: bp.y,
+    p: periphAttached.map(p => { const pos = placementPos[p.mpn] || {}; return { m: p.mpn, n: p.name, i: p.iface, x: pos.x, y: pos.y }; }),
+  };
+}
+function diagramShare() {
+  if (!boardLoaded) return;
+  const enc = b64urlEnc(JSON.stringify(diagramState()));
+  const url = `${location.origin}${location.pathname}?d=${enc}#board`;
+  history.replaceState(null, '', `?d=${enc}#board`);
+  const done = () => { const m = $('diagram-share-msg'); if (m) { m.textContent = 'link copied'; setTimeout(() => { m.textContent = ''; }, 2500); } };
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(url).then(done, done); else done();
+}
+async function diagramApply(enc) {
+  let st; try { st = JSON.parse(b64urlDec(enc)); } catch { return false; }
+  if (!st || !st.b) return false;
+  const sel = $('board-select'); if (sel) sel.value = st.b;
+  await boardLoad(st.b);                 // identity/pinout/3D/boardPins (resets peripherals)
+  // peripherals straight from the link — self-contained, no parts-service fetch
+  periphAttached.length = 0;
+  for (const p of (st.p || [])) periphAttached.push({ mpn: p.m, name: p.n || p.m, iface: p.i || 'GPIO', pins: [], datasheet: null });
+  if (st.bx != null) placementPos['_board'] = { x: st.bx, y: st.by };
+  for (const p of (st.p || [])) if (p.x != null) placementPos[p.m] = { x: p.x, y: p.y };
+  periphRender();                        // peripherals + wiring + placementRender
+  return true;
+}
+$('diagram-share')?.addEventListener('click', diagramShare);
 
 // ── board 3D model + datasheet (vendor CAD → glTF, built offline) ─────
 let boardManifest = null;
