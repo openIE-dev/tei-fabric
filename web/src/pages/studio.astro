@@ -760,12 +760,16 @@ let boardLoaded = null;
 async function boardPopulate() {
   const sel = $('board-select'); if (!sel || sel.options.length) return;
   try {
-    const r = await fetch(`${API_BASE}/api/forge/targets`).then(x => x.json());
-    for (const t of (r.targets || [])) {
+    const r = await fetch(`${API_BASE}/api/forge/board-list`).then(x => x.json());
+    const mk = (label) => { const g = document.createElement('optgroup'); g.label = label; return g; };
+    const forge = mk('forge targets (buildable)'), bench = mk('bench boards (view-only)');
+    for (const b of (r.boards || [])) {
       const o = document.createElement('option');
-      o.value = t.id; o.textContent = t.name ? (t.chip ? `${t.name} · ${t.chip}` : t.name) : t.id;
-      sel.appendChild(o);
+      o.value = b.id; o.textContent = b.name ? (b.chip ? `${b.name} · ${b.chip}` : b.name) : b.id;
+      (b.kind === 'bench' ? bench : forge).appendChild(o);
     }
+    if (forge.children.length) sel.appendChild(forge);
+    if (bench.children.length) sel.appendChild(bench);
     sel.addEventListener('change', () => boardLoad(sel.value));
   } catch {}
 }

@@ -239,6 +239,24 @@ async fn get_forge_targets(State(state): State<AppState>) -> Json<serde_json::Va
     Json(serde_json::json!({ "build_host": available, "targets": targets }))
 }
 
+/// GET /api/forge/board-list — every board the BOARD view can show:
+/// forge build targets (kind "forge") + bench boards (kind "bench",
+/// view-only). Each enriched with chipdb identity.
+async fn get_forge_board_list() -> Json<serde_json::Value> {
+    let ident = |id: &str, kind: &str| {
+        let b = tei_forge::board_info(id);
+        serde_json::json!({
+            "id": id,
+            "kind": kind,
+            "name": b.map(|b| b.name),
+            "chip": b.map(|b| b.fpga_device),
+        })
+    };
+    let mut boards: Vec<_> = tei_forge::TARGETS.iter().map(|t| ident(t.id, "forge")).collect();
+    boards.extend(tei_forge::BENCH_BOARDS.iter().map(|id| ident(id, "bench")));
+    Json(serde_json::json!({ "boards": boards }))
+}
+
 /// GET /api/forge/board?id=<board> — full board view data for Studio's
 /// BOARD workspace: chipdb identity + the color-coded pinout (if a
 /// datasheet-verified one exists; otherwise `pinout: null`).
@@ -881,6 +899,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/forge/build", post(post_forge_build))
         .route("/api/forge/targets", get(get_forge_targets))
         .route("/api/forge/board", get(get_forge_board))
+        .route("/api/forge/board-list", get(get_forge_board_list))
         .route("/api/forge/artifact", get(get_forge_artifact))
         .route("/api/dispatch/stream", post(post_dispatch_stream))
         .route("/api/execute", post(post_execute))

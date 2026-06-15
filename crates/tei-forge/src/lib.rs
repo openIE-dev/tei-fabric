@@ -226,6 +226,12 @@ pub fn target(id: &str) -> Option<&'static Target> {
     TARGETS.iter().find(|t| t.id == id)
 }
 
+/// Bench boards that aren't forge build targets (Tier-0 / their own boot
+/// flow) but ARE in the chipdb registry, so Studio's BOARD view can show
+/// their identity / 3D / pinout. View-only — not buildable by the forge.
+/// Ids are chipdb aliases (resolve via [`board_info`]).
+pub const BENCH_BOARDS: &[&str] = &["nano-matter", "openmv-ae3", "tachyon", "coral-dev-mini"];
+
 /// The chipdb board backing a forge target — the canonical identity
 /// (name, vendor, chip, family, price, url). Board identity is owned by
 /// `ofpga-chipdb` (the single board registry); the forge `Target` carries

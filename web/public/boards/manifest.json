@@ -36,6 +36,11 @@
       "cad_step": "https://docs.arduino.cc/resources/models/ABX00050-step.zip",
       "cad_step_member": "NiclaSense.step",
       "license": "Arduino"
+    },
+    "nano-matter": {
+      "cad_step": "https://docs.arduino.cc/resources/models/ABX00112-step.zip",
+      "cad_step_member": "ABX00112-step.step",
+      "license": "Arduino"
     }
   }
 }
