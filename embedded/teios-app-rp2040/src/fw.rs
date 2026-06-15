@@ -21,7 +21,7 @@ use embassy_usb::driver::EndpointError;
 use heapless::String;
 use panic_halt as _;
 use static_cell::StaticCell;
-use tei_ledger::{CostTable, CycleSource, EventLedger, JoulesSource};
+use tei_ledger::{CostTable, CycleSource, EnergyMeter, EventLedger, JoulesSource};
 use teios_app_rp2040::{
     BOARD_ID, BUF_LEN, COST_CAPACITY, SUBSTRATE_DMA, crc32_software,
     fill_pattern, shipped_cost_table, write_boot_line, write_check_line, write_dispatch_line,
@@ -75,15 +75,23 @@ pub mod tei {
     /// The safe surface an app may touch. Holds the USB class, the
     /// cycle source, the workload buffer, and the cost table; every
     /// emitting method streams a JSON line Studio parses.
-    pub struct Tei<'a> {
+    pub struct Tei<'a, 'm> {
         pub(super) class: &'a mut CdcAcmClass<'static, Driver<'static, USB>>,
         pub(super) timer: &'a TimerCycleSource,
         pub(super) buf: &'a [u8; BUF_LEN],
         pub(super) table: &'a CostTable<COST_CAPACITY>,
         pub(super) line: String<LINE_CAP>,
+        /// Optional on-board energy meter (INA228 on the supply rail). When
+        /// present, each run's ledger carries Measured joules instead of
+        /// Table-tier. `None` unless built with `--features measured-ina228`
+        /// and the meter is reachable. Trait object → no generic on Tei; its
+        /// own lifetime `'m` so it reborrows independently of `class`. The
+        /// `dyn` is `'static` (the meter lives for the program — embassy main
+        /// never returns) so the `&mut` reborrows freely each pass.
+        pub(super) meter: Option<&'m mut (dyn EnergyMeter + 'static)>,
     }
 
-    impl<'a> Tei<'a> {
+    impl<'a, 'm> Tei<'a, 'm> {
         /// Run `primitive` on the named substrate. Prices the run into a
         /// ledger, streams the ledger line, returns the result+ledger.
         /// Unknown substrate names run on the CPU (safe default).
@@ -92,7 +100,12 @@ pub mod tei {
             substrate: &'static str,
             _primitive: u32,
         ) -> Result<Run, TeiError> {
-            let (result, ledger) = if substrate == SUBSTRATE_DMA {
+            // Zero the energy accumulator right before the primitive so the
+            // reading brackets exactly this run's window.
+            if let Some(m) = self.meter.as_deref_mut() {
+                m.reset();
+            }
+            let (result, mut ledger) = if substrate == SUBSTRATE_DMA {
                 let t0 = Instant::now();
                 let crc = dma_sniffer_crc32(self.buf);
                 let mut l = EventLedger::new(JoulesSource::Table);
@@ -109,6 +122,13 @@ pub mod tei {
                 l.active_us = t0.elapsed().as_micros();
                 (crc, l)
             };
+            // Read measured joules for the window; upgrades provenance Table→Measured.
+            if let Some(m) = self.meter.as_deref_mut() {
+                if let Some(j) = m.joules() {
+                    ledger.joules = Some(j);
+                    ledger.joules_source = JoulesSource::Measured;
+                }
+            }
             self.line.clear();
             write_ledger_line(&mut self.line, substrate, 1, &ledger).ok();
             send_line(self.class, &self.line).await?;
@@ -185,19 +205,36 @@ async fn main(spawner: Spawner) {
     fill_pattern(buf);
     let table = shipped_cost_table();
 
+    // Optional INA228 on I2C1 (Feather STEMMA QT: GP2 SDA / GP3 SCL).
+    // BENCH-PENDING: the shunt (0.015 Ω) + max-current (5 A, low range) must
+    // match the part you wire in-line on the supply rail. Without the feature
+    // (or if the meter is unreachable) the ledger stays Table-tier.
+    #[cfg(feature = "measured-ina228")]
+    let mut ina = {
+        use embassy_rp::i2c::{Config as I2cConfig, I2c};
+        let i2c = I2c::new_blocking(p.I2C1, p.PIN_3, p.PIN_2, I2cConfig::default());
+        tei_ina228::Ina228::new(i2c, tei_ina228::DEFAULT_ADDR, 0.015, 5.0, true).ok()
+    };
+
     loop {
         class.wait_connection().await;
-        let _ = stream(&mut class, &timer, cyccnt, buf, &table).await;
+        #[cfg(feature = "measured-ina228")]
+        let meter: Option<&mut (dyn EnergyMeter + 'static)> =
+            ina.as_mut().map(|m| m as &mut (dyn EnergyMeter + 'static));
+        #[cfg(not(feature = "measured-ina228"))]
+        let meter: Option<&mut (dyn EnergyMeter + 'static)> = None;
+        let _ = stream(&mut class, &timer, cyccnt, buf, &table, meter).await;
     }
 }
 
 /// Build the [`Tei`] harness and run the user app once per second.
-async fn stream(
-    class: &mut CdcAcmClass<'static, Driver<'static, USB>>,
-    timer: &TimerCycleSource,
+async fn stream<'d>(
+    class: &'d mut CdcAcmClass<'static, Driver<'static, USB>>,
+    timer: &'d TimerCycleSource,
     cyccnt: bool,
-    buf: &[u8; BUF_LEN],
-    table: &CostTable<COST_CAPACITY>,
+    buf: &'d [u8; BUF_LEN],
+    table: &'d CostTable<COST_CAPACITY>,
+    mut meter: Option<&'d mut (dyn EnergyMeter + 'static)>,
 ) -> Result<(), EndpointError> {
     let mut boot: String<LINE_CAP> = String::new();
     write_boot_line(&mut boot, cyccnt).ok();
@@ -211,6 +248,7 @@ async fn stream(
             buf,
             table,
             line: String::new(),
+            meter: meter.as_deref_mut(),
         };
         crate::app::app(&mut tei).await?;
         ticker.next().await;

@@ -29,6 +29,10 @@ default = ["board-feather-rp2040"]
 board-feather-rp2040 = ["embassy-rp/boot2-gd25q64cs"]
 # Raspberry Pi Pico (1) — W25Q16JV 2 MiB QSPI flash (W25Q080-class boot2).
 board-pico = ["embassy-rp/boot2-w25q080"]
+# Measured-tier joules: read an INA228 on the board's supply rail over I2C1
+# (Feather STEMMA QT = GP2 SDA / GP3 SCL). The ledger then reports
+# JoulesSource::Measured. Needs the INA228 shunt in-line on the rail — see fw.rs.
+measured-ina228 = ["dep:tei-ina228"]
 
 [dependencies]
 # The TEI Embedded device contract (E0). Core only — no serde on target;
@@ -55,6 +59,8 @@ static_cell = "2.1"
 # embassy-rp's critical-section-impl provides.
 portable-atomic = { version = "1", features = ["critical-section"] }
 panic-halt = "1.0"
+# Measured-tier joules (optional): INA228 EnergyMeter over embedded-hal I2C.
+tei-ina228 = { path = "../../crates/embedded/tei-ina228", optional = true }
 
 [dev-dependencies]
 # Host tests pin the hand-rolled JSON writer to the canonical serde shape.

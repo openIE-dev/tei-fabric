@@ -19,7 +19,7 @@ const DEFAULT_APP: &str = r#"
 use crate::fw::tei::{Tei, TeiError};
 use teios_app_rp2040::{PRIMITIVE_HASH, SUBSTRATE_CPU, SUBSTRATE_DMA};
 
-pub async fn app(tei: &mut Tei<'_>) -> Result<(), TeiError> {
+pub async fn app(tei: &mut Tei<'_, '_>) -> Result<(), TeiError> {
     let cpu = tei.run_on(SUBSTRATE_CPU, PRIMITIVE_HASH).await?;
     let dma = tei.run_on(SUBSTRATE_DMA, PRIMITIVE_HASH).await?;
     tei.check(cpu.result, dma.result).await?;

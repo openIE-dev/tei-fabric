@@ -17,7 +17,7 @@ use teios_app_rp2040::{PRIMITIVE_HASH, SUBSTRATE_CPU, SUBSTRATE_DMA};
 
 /// One scheduler pass. Returns `Err` only on USB disconnect (teiOS
 /// re-waits for the host and calls you again).
-pub async fn app(tei: &mut Tei<'_>) -> Result<(), TeiError> {
+pub async fn app(tei: &mut Tei<'_, '_>) -> Result<(), TeiError> {
     // run the Hash primitive on each on-die substrate; each call prices
     // the run into a ledger and streams its JSON line to Studio.
     let cpu = tei.run_on(SUBSTRATE_CPU, PRIMITIVE_HASH).await?;

@@ -1,0 +1,14 @@
+[package]
+name = "tei-ina228"
+version = "0.1.0"
+edition = "2021"
+description = "TI INA228 high-precision I2C power/energy monitor driver implementing tei-ledger's EnergyMeter — Measured-tier joules for teiOS boards. Board-agnostic over embedded-hal 1.0."
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "tei_ina228"
+path = "src/lib.rs"
+
+[dependencies]
+embedded-hal = "1.0"
+tei-ledger = { path = "../tei-ledger" }

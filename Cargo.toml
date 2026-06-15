@@ -15,6 +15,7 @@ exclude = [
 members = [
     "crates/tei-forge",
     "crates/embedded/tei-ledger",
+    "crates/embedded/tei-ina228",
     "crates/tei-stack",
     "crates/tei-ir",
     "crates/tei-substrate-traits",
