@@ -151,6 +151,40 @@ impl<const N: usize> TaskLedgers<N> {
     pub fn overflow(&self) -> u32 {
         self.overflow
     }
+
+    /// Total CPU-active microseconds across every tracked task.
+    pub fn total_active_us(&self) -> u64 {
+        self.slots
+            .iter()
+            .filter(|s| s.used)
+            .fold(0u64, |a, s| a.wrapping_add(s.active_us))
+    }
+
+    /// **Task-level energy by attribution.** Split a *measured* window's
+    /// joules (e.g. the INA228's reading over a scheduler pass) across tasks
+    /// in proportion to the active time each consumed. Visits
+    /// `(task_id, active_us, joules)`. This is the honest fold: the energy is
+    /// real (measured), the per-task division is by where the CPU actually
+    /// spent its time. No-op if nothing ran (no division by zero).
+    pub fn attribute_joules(&self, window_joules: f64, mut f: impl FnMut(u32, u64, f64)) {
+        let total = self.total_active_us();
+        if total == 0 {
+            return;
+        }
+        let per_us = window_joules / total as f64;
+        for s in self.slots.iter().filter(|s| s.used) {
+            f(s.task_id, s.active_us, s.active_us as f64 * per_us);
+        }
+    }
+
+    /// **Task-level energy from a power figure.** Joules for one task given a
+    /// calibrated active power (watts) for the substrate it runs on:
+    /// `active_us · 1e-6 · active_w`. Use when a per-state power table exists
+    /// rather than a measured window. `None` if the task isn't tracked.
+    pub fn task_joules(&self, task: u32, active_w: f64) -> Option<f64> {
+        self.active_us(task)
+            .map(|us| us as f64 * 1e-6 * active_w)
+    }
 }
 
 // ── The Embassy trace hooks (embedded target only) ───────────────────────
@@ -250,6 +284,46 @@ mod tests {
         assert_eq!(t.tracked(), 2);
         assert_eq!(t.overflow(), 1);
         assert_eq!(t.active_us(3), None);
+    }
+
+    #[test]
+    fn attribute_joules_splits_by_active_share() {
+        let mut t: TaskLedgers<4> = TaskLedgers::new();
+        t.exec_begin(1, 0);
+        t.exec_end(1, 75); // 75µs
+        t.exec_begin(2, 0);
+        t.exec_end(2, 25); // 25µs  → total 100µs
+        assert_eq!(t.total_active_us(), 100);
+        // A measured 1 mJ window splits 75% / 25%.
+        let mut got = [(0u32, 0.0f64); 2];
+        let mut i = 0;
+        t.attribute_joules(1.0e-3, |task, _us, j| {
+            got[i] = (task, j);
+            i += 1;
+        });
+        let j1 = got.iter().find(|(t, _)| *t == 1).unwrap().1;
+        let j2 = got.iter().find(|(t, _)| *t == 2).unwrap().1;
+        assert!((j1 - 0.75e-3).abs() < 1e-12);
+        assert!((j2 - 0.25e-3).abs() < 1e-12);
+        assert!((j1 + j2 - 1.0e-3).abs() < 1e-12); // conserves the window
+    }
+
+    #[test]
+    fn attribute_joules_no_activity_is_noop() {
+        let t: TaskLedgers<4> = TaskLedgers::new();
+        let mut called = false;
+        t.attribute_joules(1.0, |_, _, _| called = true);
+        assert!(!called); // no division by zero, no spurious attribution
+    }
+
+    #[test]
+    fn task_joules_from_power_figure() {
+        let mut t: TaskLedgers<4> = TaskLedgers::new();
+        t.exec_begin(1, 0);
+        t.exec_end(1, 1_000); // 1000µs = 1ms active
+        // at 30 mW → 1ms · 0.03W = 30µJ.
+        assert_eq!(t.task_joules(1, 0.03), Some(30.0e-6));
+        assert_eq!(t.task_joules(9, 0.03), None);
     }
 
     #[test]
