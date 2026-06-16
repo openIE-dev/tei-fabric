@@ -230,6 +230,30 @@ pub fn write_dispatch_line<W: Write, const N: usize>(
     Ok(Some(chosen.substrate))
 }
 
+/// `{"type":"report",...}` — a device-driven **calibration report**: one
+/// priced (board, substrate, primitive) row, in the `/api/calibration/reports`
+/// shape (`board_id, substrate, primitive_id, n_ops, j_per_op, ledger`). This
+/// is what closes the loop: after the runtime calibrates, the board emits a
+/// report per substrate; Studio relays it to the fabric, where it surfaces in
+/// the HUB cost surface and the FLEET roster. The `joules_source` carries
+/// honest provenance (Measured only when a meter actually read the rail).
+pub fn write_report_line<W: Write>(
+    w: &mut W,
+    board: &BoardConfig,
+    entry: &tei_ledger::CostEntry,
+    n_ops: u64,
+) -> fmt::Result {
+    write!(
+        w,
+        "{{\"type\":\"report\",\"board_id\":\"{}\",\"substrate\":\"{}\",\"primitive_id\":{},\"n_ops\":{n_ops},\"j_per_op\":{:e},\"ledger\":{{\"joules_source\":\"{}\"}}}}",
+        board.board_id,
+        entry.substrate,
+        entry.primitive_id,
+        entry.j_per_op,
+        joules_source_str(entry.source)
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -491,6 +491,24 @@ function logLine(s, cls) {
   while (el.childElementCount > 200) el.removeChild(el.firstChild);
   el.scrollTop = el.scrollHeight;
 }
+// Relay a device calibration report to the fabric store (→ HUB/FLEET).
+// Session-deduped by (board, substrate, primitive, rounded J/op) so a board
+// publishing every pass doesn't flood; sim boards stay local (logged only).
+const relayedReports = new Set();
+async function relayReport(m) {
+  if (!m.board_id || String(m.board_id).endsWith('-sim')) return;
+  const key = `${m.board_id}|${m.substrate}|${m.primitive_id}|${Number(m.j_per_op).toExponential(2)}`;
+  if (relayedReports.has(key)) return;
+  relayedReports.add(key);
+  try {
+    const { type, ...body } = m;
+    await fetch(`${API_BASE}/api/calibration/reports`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    logLine(`  ↳ published to fabric (HUB/FLEET)`, '#3fb950');
+  } catch { logLine('  ↳ relay failed (no fabric?)', '#8b949e'); }
+}
+
 function handleLine(line) {
   line = line.trim(); if (!line) return;
   let m; try { m = JSON.parse(line); } catch { logLine(line); return; }
@@ -528,6 +546,11 @@ function handleLine(line) {
       events.push({ t: (Date.now() - (t0 ??= Date.now())) / 1000, kind: 'check', ok: false });
       drawLane();
     }
+  } else if (m.type === 'report') {
+    // Device-driven calibration report → relay it home (closes the loop into
+    // HUB/FLEET). Logged either way; sim boards stay local.
+    logLine(`report ${m.substrate} · ${Number(m.j_per_op).toExponential(2)} J/op (${m.ledger?.joules_source || '?'})`, '#3fb950');
+    relayReport(m);
   } else { logLine(line); }
   renderStats();
 }
@@ -609,6 +632,10 @@ $('btn-demo').addEventListener('click', () => {
       j_per_op: flip ? cpuJ : dmaJ,
       alternatives: [{ substrate: flip ? 'dma-sniffer' : 'cpu@150mhz', j_per_op: flip ? dmaJ : cpuJ }] }));
     handleLine(JSON.stringify({ type: 'check', ok: true }));
+    // Device-driven calibration reports (one per substrate) — the loop close.
+    // Sim board id stays local (not relayed); shows the report line + flow.
+    handleLine(JSON.stringify({ type: 'report', board_id: 'pico2-sim', substrate: 'cpu@150mhz', primitive_id: 36, n_ops: 1, j_per_op: cpuJ, ledger: { joules_source: 'measured' } }));
+    handleLine(JSON.stringify({ type: 'report', board_id: 'pico2-sim', substrate: 'dma-sniffer', primitive_id: 36, n_ops: 1, j_per_op: dmaJ, ledger: { joules_source: 'measured' } }));
   }, 1000);
 });
 

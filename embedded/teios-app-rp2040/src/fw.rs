@@ -26,7 +26,7 @@ use tei_rt::{Runtime, Substrate};
 use teios_app_rp2040::{
     BOARD_ID, BUF_LEN, COST_CAPACITY, PRIMITIVE_HASH, SUBSTRATE_CPU, SUBSTRATE_DMA, crc32_software,
     fill_pattern, shipped_cost_table, write_boot_line, write_check_line, write_dispatch_line,
-    write_ledger_line,
+    write_ledger_line, write_report_line,
 };
 
 /// The board's substrates for the hash primitive: software CRC32 on the M0+
@@ -175,6 +175,27 @@ pub mod tei {
             // Straight from the runtime's live (re-priced) cost table.
             write_dispatch_line(&mut self.line, self.rt.costs(), primitive).ok();
             send_line(self.class, &self.line).await
+        }
+
+        /// Publish the runtime's calibrated prices home: one `report` line per
+        /// priced substrate, in the `/api/calibration/reports` shape. This is
+        /// the device end of the calibration loop — Studio relays each line to
+        /// the fabric, where it appears in the HUB cost surface + FLEET roster.
+        /// Provenance is honest (Measured only if a meter read the rail).
+        pub async fn publish(&mut self, primitive: u32) -> Result<(), TeiError> {
+            // Snapshot the priced entries before the (mutable, awaiting) sends.
+            let mut snap: [Option<tei_ledger::CostEntry>; COST_CAPACITY] = [None; COST_CAPACITY];
+            let mut k = 0;
+            for e in self.rt.costs().for_primitive(primitive) {
+                snap[k] = Some(*e);
+                k += 1;
+            }
+            for e in snap.iter().take(k).flatten() {
+                self.line.clear();
+                write_report_line(&mut self.line, e, 1).ok();
+                send_line(self.class, &self.line).await?;
+            }
+            Ok(())
         }
 
         /// The deterministic workload buffer (identical bytes everywhere).

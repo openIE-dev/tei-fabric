@@ -37,6 +37,10 @@ pub async fn app(tei: &mut Tei<'_, '_>) -> Result<(), TeiError> {
     // measured above — we no longer name one.
     tei.run(PRIMITIVE_HASH).await?;
 
+    // Publish the calibrated prices home — Studio relays them to the fabric,
+    // where they land in the HUB cost surface + FLEET roster.
+    tei.publish(PRIMITIVE_HASH).await?;
+
     tei.sleep_ms(1000).await;
     Ok(())
 }

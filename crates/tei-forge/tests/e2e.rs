@@ -25,6 +25,7 @@ pub async fn app(tei: &mut Tei<'_, '_>) -> Result<(), TeiError> {
     tei.check(cpu.result, dma.result).await?;
     tei.dispatch(PRIMITIVE_HASH).await?;
     tei.run(PRIMITIVE_HASH).await?;
+    tei.publish(PRIMITIVE_HASH).await?;
     tei.sleep_ms(1000).await;
     Ok(())
 }
