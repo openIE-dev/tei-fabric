@@ -34,9 +34,18 @@ use teios_app_rp2040::{
 /// the teiOS [`Runtime`] dispatches across them directly. THIS is the
 /// registry the runtime kernel prices and chooses from — the old hardcoded
 /// `if substrate == DMA { … } else { … }` race is gone.
-const SUBSTRATES: &[Substrate] = &[
-    Substrate { id: SUBSTRATE_CPU, primitive_id: PRIMITIVE_HASH, run: crc32_software },
-    Substrate { id: SUBSTRATE_DMA, primitive_id: PRIMITIVE_HASH, run: dma_sniffer_crc32 },
+// Both RP2040 substrates are pure compute — no peripheral context — so the
+// runtime context is `()`. Thin adapters give them the `fn(&mut Ctx, &[u8])`
+// shape the kernel expects.
+fn cpu_substrate(_: &mut (), d: &[u8]) -> u32 {
+    crc32_software(d)
+}
+fn dma_substrate(_: &mut (), d: &[u8]) -> u32 {
+    dma_sniffer_crc32(d)
+}
+const SUBSTRATES: &[Substrate<()>] = &[
+    Substrate { id: SUBSTRATE_CPU, primitive_id: PRIMITIVE_HASH, run: cpu_substrate },
+    Substrate { id: SUBSTRATE_DMA, primitive_id: PRIMITIVE_HASH, run: dma_substrate },
 ];
 
 bind_interrupts!(struct Irqs {
@@ -94,7 +103,7 @@ pub mod tei {
         /// substrate registry, makes the dispatch decision, accounts the
         /// ledger, and folds measured joules back in. The harness is now a
         /// thin transport over it.
-        pub(super) rt: &'a mut Runtime<'static, COST_CAPACITY>,
+        pub(super) rt: &'a mut Runtime<'static, (), COST_CAPACITY>,
         pub(super) line: String<LINE_CAP>,
         /// Optional on-board energy meter (INA228 on the supply rail). When
         /// present, each run's ledger carries Measured joules instead of
@@ -121,12 +130,12 @@ pub mod tei {
             let t0 = Instant::now();
             let run = match self
                 .rt
-                .run_on(substrate, self.buf, 1, self.timer, self.meter.as_deref_mut())
+                .run_on(substrate, &mut (), self.buf, 1, self.timer, self.meter.as_deref_mut())
             {
                 Some(r) => r,
                 None => self
                     .rt
-                    .run(primitive, self.buf, 1, self.timer, self.meter.as_deref_mut())
+                    .run(primitive, &mut (), self.buf, 1, self.timer, self.meter.as_deref_mut())
                     .ok_or(EndpointError::Disabled)?,
             };
             self.emit(run, t0).await
@@ -140,7 +149,7 @@ pub mod tei {
             let t0 = Instant::now();
             let run = self
                 .rt
-                .run(primitive, self.buf, 1, self.timer, self.meter.as_deref_mut())
+                .run(primitive, &mut (), self.buf, 1, self.timer, self.meter.as_deref_mut())
                 .ok_or(EndpointError::Disabled)?;
             self.emit(run, t0).await
         }
@@ -284,7 +293,7 @@ async fn stream<'d>(
     timer: &'d TimerCycleSource,
     cyccnt: bool,
     buf: &'d [u8; BUF_LEN],
-    rt: &'d mut Runtime<'static, COST_CAPACITY>,
+    rt: &'d mut Runtime<'static, (), COST_CAPACITY>,
     mut meter: Option<&'d mut (dyn EnergyMeter + 'static)>,
 ) -> Result<(), EndpointError> {
     let mut boot: String<LINE_CAP> = String::new();

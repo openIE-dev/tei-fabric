@@ -15,6 +15,10 @@ pub async fn app(tei: &mut Tei<'_>) -> Result<(), TeiError> {
     let hw = tei.run_on(SUBSTRATE_CRC_HW, PRIMITIVE_HASH).await?;
     tei.check(m7.result, hw.result).await?;
     tei.dispatch(PRIMITIVE_HASH).await?;
+    // teiOS dispatches to the substrate it just measured cheapest; then
+    // publish the calibrated prices home (Studio relays to HUB/FLEET).
+    tei.run(PRIMITIVE_HASH).await?;
+    tei.publish(PRIMITIVE_HASH).await?;
     tei.sleep_ms(1000).await;
     Ok(())
 }

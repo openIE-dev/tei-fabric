@@ -44,12 +44,30 @@ use embassy_usb::driver::EndpointError;
 use heapless::String;
 use panic_halt as _;
 use static_cell::StaticCell;
-use tei_ledger::{CostTable, EnergyMeter, EventLedger, JoulesSource};
+use tei_ledger::{EnergyMeter, EventLedger};
+use tei_rt::{Runtime, Substrate};
 use teios_h747::{
-    BOARD_ID, BUF_LEN, COST_CAPACITY, PRIMITIVE_HASH, SUBSTRATE_CRC_HW, crc32_software,
-    fill_pattern, shipped_cost_table, write_boot_line, write_check_line, write_dispatch_line,
-    write_ledger_line,
+    BOARD_ID, BUF_LEN, COST_CAPACITY, PRIMITIVE_HASH, SUBSTRATE_CRC_HW, SUBSTRATE_M7,
+    crc32_software, fill_pattern, shipped_cost_table, write_boot_line, write_check_line,
+    write_dispatch_line, write_ledger_line, write_report_line,
 };
+
+/// The H7's substrates for the hash primitive: M7 software CRC32 and the
+/// STM32 hardware CRC unit. The hardware one needs the CRC peripheral, so the
+/// runtime context is the embassy [`Crc`]; the M7 path ignores it. (M4 is a
+/// priced cost-table menu entry, not a runtime substrate — see SUBSTRATE_M4.)
+fn m7_substrate(_: &mut Crc<'static>, d: &[u8]) -> u32 {
+    crc32_software(d)
+}
+fn crc_hw_substrate(crc: &mut Crc<'static>, d: &[u8]) -> u32 {
+    crc.reset();
+    // CRC unit result, then the software final-XOR for zlib CRC32.
+    crc.feed_bytes(d) ^ 0xFFFF_FFFF
+}
+const SUBSTRATES: &[Substrate<Crc<'static>>] = &[
+    Substrate { id: SUBSTRATE_M7, primitive_id: PRIMITIVE_HASH, run: m7_substrate },
+    Substrate { id: SUBSTRATE_CRC_HW, primitive_id: PRIMITIVE_HASH, run: crc_hw_substrate },
+];
 
 bind_interrupts!(struct Irqs {
     OTG_HS => InterruptHandler<USB_OTG_HS>;
@@ -105,7 +123,9 @@ pub mod tei {
         pub(super) cycles: &'a DwtCycleSource,
         pub(super) crc: &'a mut Crc<'static>,
         pub(super) buf: &'a [u8; BUF_LEN],
-        pub(super) table: &'a CostTable<COST_CAPACITY>,
+        /// The teiOS runtime kernel (cost table + substrate registry). The
+        /// CRC peripheral above is the runtime's substrate context.
+        pub(super) rt: &'a mut Runtime<'static, Crc<'static>, COST_CAPACITY>,
         pub(super) line: String<LINE_CAP>,
         /// Optional INA228 on the supply rail (`--features measured-ina228`).
         /// When present, ledgers carry Measured joules. `'static` dyn — the
@@ -120,41 +140,69 @@ pub mod tei {
         pub async fn run_on(
             &mut self,
             substrate: &'static str,
-            _primitive: u32,
+            primitive: u32,
         ) -> Result<Run, TeiError> {
-            if let Some(m) = self.meter.as_deref_mut() {
-                m.reset();
-            }
-            let (result, mut ledger) = if substrate == SUBSTRATE_CRC_HW {
-                let t0 = Instant::now();
-                self.crc.reset();
-                // CRC unit, then software final-XOR for zlib CRC32.
-                let raw = self.crc.feed_bytes(self.buf);
-                let crc = raw ^ 0xFFFF_FFFF;
-                let mut l = EventLedger::new(JoulesSource::Table);
-                l.accel_invocations = 1;
-                l.active_us = t0.elapsed().as_micros();
-                (crc, l)
-            } else {
-                let t0 = Instant::now();
-                use tei_ledger::CycleSource;
-                let c0 = self.cycles.now();
-                let crc = crc32_software(self.buf);
-                let mut l = EventLedger::new(JoulesSource::Table);
-                l.cycles = self.cycles.delta(c0);
-                l.active_us = t0.elapsed().as_micros();
-                (crc, l)
+            // The runtime does the work (reset meter, run the named substrate
+            // with the CRC unit as context, time it, read joules, re-price).
+            let t0 = Instant::now();
+            let run = match self.rt.run_on(
+                substrate,
+                self.crc,
+                self.buf,
+                1,
+                self.cycles,
+                self.meter.as_deref_mut(),
+            ) {
+                Some(r) => r,
+                None => self
+                    .rt
+                    .run(primitive, self.crc, self.buf, 1, self.cycles, self.meter.as_deref_mut())
+                    .ok_or(EndpointError::Disabled)?,
             };
-            if let Some(m) = self.meter.as_deref_mut() {
-                if let Some(j) = m.joules() {
-                    ledger.joules = Some(j);
-                    ledger.joules_source = JoulesSource::Measured;
-                }
+            self.emit(run, t0).await
+        }
+
+        /// The teiOS call: run `primitive` on whatever substrate the runtime
+        /// dispatches to (lowest measured joules, or the shipped table before
+        /// calibration). The app names no substrate — the kernel chooses.
+        pub async fn run(&mut self, primitive: u32) -> Result<Run, TeiError> {
+            let t0 = Instant::now();
+            let run = self
+                .rt
+                .run(primitive, self.crc, self.buf, 1, self.cycles, self.meter.as_deref_mut())
+                .ok_or(EndpointError::Disabled)?;
+            self.emit(run, t0).await
+        }
+
+        /// Decorate a runtime [`tei_rt::Run`] with this board's extra ledger
+        /// counters, stream it, return the app's result + ledger.
+        async fn emit(&mut self, run: tei_rt::Run, t0: Instant) -> Result<Run, TeiError> {
+            let mut ledger = run.ledger;
+            ledger.active_us = t0.elapsed().as_micros();
+            if run.substrate == SUBSTRATE_CRC_HW {
+                ledger.accel_invocations = 1;
             }
             self.line.clear();
-            write_ledger_line(&mut self.line, substrate, 1, &ledger).ok();
+            write_ledger_line(&mut self.line, run.substrate, 1, &ledger).ok();
             send_line(self.class, &self.line).await?;
-            Ok(Run { result, ledger })
+            Ok(Run { result: run.result, ledger })
+        }
+
+        /// Publish the runtime's calibrated prices home — one `report` line
+        /// per priced substrate; Studio relays them to the fabric (HUB/FLEET).
+        pub async fn publish(&mut self, primitive: u32) -> Result<(), TeiError> {
+            let mut snap: [Option<tei_ledger::CostEntry>; COST_CAPACITY] = [None; COST_CAPACITY];
+            let mut k = 0;
+            for e in self.rt.costs().for_primitive(primitive) {
+                snap[k] = Some(*e);
+                k += 1;
+            }
+            for e in snap.iter().take(k).flatten() {
+                self.line.clear();
+                write_report_line(&mut self.line, e, 1).ok();
+                send_line(self.class, &self.line).await?;
+            }
+            Ok(())
         }
 
         pub async fn check(&mut self, a: u32, b: u32) -> Result<(), TeiError> {
@@ -165,7 +213,7 @@ pub mod tei {
 
         pub async fn dispatch(&mut self, primitive: u32) -> Result<(), TeiError> {
             self.line.clear();
-            write_dispatch_line(&mut self.line, self.table, primitive).ok();
+            write_dispatch_line(&mut self.line, self.rt.costs(), primitive).ok();
             send_line(self.class, &self.line).await
         }
 
@@ -282,7 +330,8 @@ async fn main(spawner: Spawner) {
 
     let buf: &'static mut [u8; BUF_LEN] = unsafe { &mut (*core::ptr::addr_of_mut!(WORKLOAD)).0 };
     fill_pattern(buf);
-    let table = shipped_cost_table();
+    // The teiOS runtime: the H7's substrates + its shipped cost table.
+    let mut rt = Runtime::new(SUBSTRATES, shipped_cost_table());
 
     // Optional INA228 on I2C1 (PB6 SCL / PB7 SDA). BENCH-PENDING: the I2C pins
     // + the shunt (0.015 Ω) / max-current (5 A) must match the part wired
@@ -300,7 +349,7 @@ async fn main(spawner: Spawner) {
             ina.as_mut().map(|m| m as &mut (dyn EnergyMeter + 'static));
         #[cfg(not(feature = "measured-ina228"))]
         let meter: Option<&mut (dyn EnergyMeter + 'static)> = None;
-        let _ = stream(&mut class, &cycles, &mut crc, buf, &table, meter).await;
+        let _ = stream(&mut class, &cycles, &mut crc, buf, &mut rt, meter).await;
     }
 }
 
@@ -309,7 +358,7 @@ async fn stream(
     cycles: &DwtCycleSource,
     crc: &mut Crc<'static>,
     buf: &[u8; BUF_LEN],
-    table: &CostTable<COST_CAPACITY>,
+    rt: &mut Runtime<'static, Crc<'static>, COST_CAPACITY>,
     mut meter: Option<&mut (dyn EnergyMeter + 'static)>,
 ) -> Result<(), EndpointError> {
     let mut boot: String<LINE_CAP> = String::new();
@@ -323,7 +372,7 @@ async fn stream(
             cycles,
             crc,
             buf,
-            table,
+            rt,
             line: String::new(),
             meter: meter.as_deref_mut(),
         };

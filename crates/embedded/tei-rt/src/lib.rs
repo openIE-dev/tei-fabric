@@ -3,7 +3,7 @@
 //!
 //! ## What this is
 //!
-//! Every `teios-*` board image today **hardcodes** the same loop: run the
+//! Every `teios-*` board image once **hardcoded** the same loop: run the
 //! primitive on substrate A, run it on substrate B, cross-check, emit a
 //! dispatch line. That loop, factored out, is the runtime the
 //! EMBEDDED-ROADMAP §3.5 calls **teiOS**:
@@ -22,6 +22,16 @@
 //!    provenance ([`JoulesSource`]);
 //! 3. **calibrates** — folds the *measured* joules back into the cost table,
 //!    so the next dispatch is priced on reality, not the shipped guess.
+//!
+//! ## The substrate context (`Ctx`)
+//!
+//! Some substrates are pure compute (software CRC); others need a peripheral
+//! (an STM32 CRC unit, a DMA engine). So a substrate's work is
+//! `fn(&mut Ctx, &[u8]) -> u32`, and the [`Runtime`] is generic over the
+//! board's context `Ctx` — the bundle of peripherals its substrates touch.
+//! Boards whose substrates are all pure use `Ctx = ()`. The kernel never
+//! looks inside `Ctx`; it just threads `&mut Ctx` to whichever substrate it
+//! dispatches to.
 //!
 //! ## What this is not (yet)
 //!
@@ -42,24 +52,31 @@ pub use tei_ledger::{
 
 /// How a board computes one primitive on one substrate.
 ///
-/// The work signature is `fn(&[u8]) -> u32` — the embedded profile's first
-/// primitives (hash/CRC/checksum) all fold a byte workload to a 32-bit
-/// result, which is also exactly what makes a cross-substrate [`check`]
-/// possible. Richer result types are a later generalization; this matches
-/// every `teios-*` image shipping today.
+/// The work is `fn(&mut Ctx, &[u8]) -> u32`: it folds the byte workload to a
+/// 32-bit result (the embedded profile's hash/CRC/checksum primitives — and
+/// what makes a cross-substrate [`check`] possible), using the board context
+/// `Ctx` for any peripheral it needs (pure-compute substrates ignore it). A
+/// function pointer (not a closure) keeps the registry allocation-free.
 ///
 /// [`check`]: Runtime::check
-#[derive(Clone, Copy)]
-pub struct Substrate {
-    /// Substrate name, fabric conventions: `"cpu@150mhz"`, `"pio"`,
-    /// `"crca"`, `"dma-sniffer"`, … Matches [`CostEntry::substrate`].
+pub struct Substrate<Ctx> {
+    /// Substrate name, fabric conventions: `"cpu@150mhz"`, `"crc-hw"`,
+    /// `"dma-sniffer"`, … Matches [`CostEntry::substrate`].
     pub id: &'static str,
     /// The Periodic Stack primitive this substrate computes.
     pub primitive_id: u32,
-    /// The work: fold the byte workload to a 32-bit result. A function
-    /// pointer (not a closure) keeps the registry allocation-free.
-    pub run: fn(&[u8]) -> u32,
+    /// The work: `(ctx, workload) -> result`.
+    pub run: fn(&mut Ctx, &[u8]) -> u32,
 }
+
+// A Substrate is always Copy (fn pointer + &'static str + u32) regardless of
+// Ctx — a derive would wrongly demand `Ctx: Copy`, so impl by hand.
+impl<Ctx> Clone for Substrate<Ctx> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<Ctx> Copy for Substrate<Ctx> {}
 
 /// The outcome of one dispatched run.
 #[derive(Debug, Clone)]
@@ -72,18 +89,19 @@ pub struct Run {
     pub ledger: EventLedger,
 }
 
-/// The teiOS runtime: a fixed substrate set + a mutable cost table.
+/// The teiOS runtime: a fixed substrate set + a mutable cost table, over a
+/// board context `Ctx`.
 ///
 /// `N` is the cost-table capacity (primitives × substrates — small).
-pub struct Runtime<'s, const N: usize> {
-    substrates: &'s [Substrate],
+pub struct Runtime<'s, Ctx, const N: usize> {
+    substrates: &'s [Substrate<Ctx>],
     costs: CostTable<N>,
 }
 
-impl<'s, const N: usize> Runtime<'s, N> {
+impl<'s, Ctx, const N: usize> Runtime<'s, Ctx, N> {
     /// Build a runtime over a board's substrates and its (possibly empty,
     /// possibly shipped-Table-tier) cost table.
-    pub fn new(substrates: &'s [Substrate], costs: CostTable<N>) -> Self {
+    pub fn new(substrates: &'s [Substrate<Ctx>], costs: CostTable<N>) -> Self {
         Self { substrates, costs }
     }
 
@@ -95,7 +113,7 @@ impl<'s, const N: usize> Runtime<'s, N> {
     /// The substrate teiOS would dispatch a primitive to **right now**: the
     /// lowest-joule priced substrate, or — before any price exists (cold
     /// start) — the first registered substrate for that primitive.
-    pub fn dispatch(&self, primitive_id: u32) -> Option<&'s Substrate> {
+    pub fn dispatch(&self, primitive_id: u32) -> Option<&'s Substrate<Ctx>> {
         if let Some(e) = self.costs.cheapest(primitive_id) {
             if let Some(s) = self
                 .substrates
@@ -122,6 +140,7 @@ impl<'s, const N: usize> Runtime<'s, N> {
     pub fn run<C: CycleSource>(
         &mut self,
         primitive_id: u32,
+        ctx: &mut Ctx,
         data: &[u8],
         n_ops: u64,
         cycles: &C,
@@ -131,7 +150,7 @@ impl<'s, const N: usize> Runtime<'s, N> {
         // re-priced (mutable) without a borrow conflict.
         let sub = self.dispatch(primitive_id)?;
         let (id, f) = (sub.id, sub.run);
-        let run = exec(id, f, primitive_id, data, n_ops, cycles, meter);
+        let run = exec(id, f, ctx, data, cycles, meter);
         self.reprice(&run, n_ops);
         Some(run)
     }
@@ -145,13 +164,15 @@ impl<'s, const N: usize> Runtime<'s, N> {
     pub fn run_on<C: CycleSource>(
         &mut self,
         substrate_id: &str,
+        ctx: &mut Ctx,
         data: &[u8],
         n_ops: u64,
         cycles: &C,
         meter: Option<&mut (dyn EnergyMeter + '_)>,
     ) -> Option<Run> {
         let sub = self.substrates.iter().find(|s| s.id == substrate_id)?;
-        let run = exec(sub.id, sub.run, sub.primitive_id, data, n_ops, cycles, meter);
+        let (id, f) = (sub.id, sub.run);
+        let run = exec(id, f, ctx, data, cycles, meter);
         self.reprice(&run, n_ops);
         Some(run)
     }
@@ -166,6 +187,7 @@ impl<'s, const N: usize> Runtime<'s, N> {
     pub fn calibrate<C: CycleSource>(
         &mut self,
         primitive_id: u32,
+        ctx: &mut Ctx,
         data: &[u8],
         n_ops: u64,
         cycles: &C,
@@ -174,7 +196,7 @@ impl<'s, const N: usize> Runtime<'s, N> {
         let subs = self.substrates; // slice ref is Copy → frees `self` for &mut
         let mut measured = 0;
         for s in subs.iter().filter(|s| s.primitive_id == primitive_id) {
-            let run = exec(s.id, s.run, primitive_id, data, n_ops, cycles, meter.as_deref_mut());
+            let run = exec(s.id, s.run, ctx, data, cycles, meter.as_deref_mut());
             self.reprice(&run, n_ops);
             measured += 1;
         }
@@ -210,12 +232,11 @@ impl<'s, const N: usize> Runtime<'s, N> {
 
 /// Run one substrate's work, instrumented: reset the meter, time the call on
 /// the cycle source, read joules, build the ledger with honest provenance.
-fn exec<C: CycleSource>(
+fn exec<C: CycleSource, Ctx>(
     id: &'static str,
-    f: fn(&[u8]) -> u32,
-    _primitive_id: u32,
+    f: fn(&mut Ctx, &[u8]) -> u32,
+    ctx: &mut Ctx,
     data: &[u8],
-    n_ops: u64,
     cycles: &C,
     // `+ '_`: the trait-object lifetime is independent of the (short) borrow,
     // so a reborrow from the calibration loop is accepted.
@@ -225,10 +246,9 @@ fn exec<C: CycleSource>(
         m.reset();
     }
     let c0 = cycles.now();
-    let result = f(data);
+    let result = f(ctx, data);
     let mut ledger = EventLedger::new(JoulesSource::Table);
     ledger.cycles = cycles.delta(c0);
-    let _ = n_ops;
     if let Some(m) = meter.as_deref_mut() {
         if let Some(j) = m.joules() {
             ledger.joules = Some(j);
@@ -286,23 +306,22 @@ mod tests {
         }
     }
 
-    // Two substrates for primitive 36 (hash): a "software" sum and a
-    // "hardware" sum that returns the same value (so check() passes).
-    fn sw(d: &[u8]) -> u32 {
+    // Two pure-compute substrates for primitive 36 (hash) over Ctx = ():
+    // a "software" sum and an "accel" sum returning the same value.
+    fn sw(_: &mut (), d: &[u8]) -> u32 {
         d.iter().fold(0u32, |a, &b| a.wrapping_add(b as u32))
     }
-    fn hw(d: &[u8]) -> u32 {
+    fn hw(_: &mut (), d: &[u8]) -> u32 {
         d.iter().fold(0u32, |a, &b| a.wrapping_add(b as u32))
     }
-    const SUBS: &[Substrate] = &[
+    const SUBS: &[Substrate<()>] = &[
         Substrate { id: "cpu", primitive_id: 36, run: sw },
         Substrate { id: "accel", primitive_id: 36, run: hw },
     ];
 
     #[test]
     fn cold_dispatch_picks_first_registered() {
-        let rt: Runtime<'_, 8> = Runtime::new(SUBS, CostTable::new());
-        // No prices yet → first registered substrate for the primitive.
+        let rt: Runtime<'_, (), 8> = Runtime::new(SUBS, CostTable::new());
         assert_eq!(rt.dispatch(36).unwrap().id, "cpu");
         assert!(rt.dispatch(99).is_none());
     }
@@ -316,52 +335,49 @@ mod tests {
         costs
             .upsert(CostEntry { primitive_id: 36, substrate: "accel", j_per_op: 4.0e-6, source: JoulesSource::Table })
             .unwrap();
-        let rt: Runtime<'_, 8> = Runtime::new(SUBS, costs);
-        // Cheapest priced substrate wins, even before any measurement.
+        let rt: Runtime<'_, (), 8> = Runtime::new(SUBS, costs);
         assert_eq!(rt.dispatch(36).unwrap().id, "accel");
     }
 
     #[test]
     fn run_instruments_a_ledger_and_checks() {
         let cyc = StepCycles::new(1000);
-        let mut rt: Runtime<'_, 8> = Runtime::new(SUBS, CostTable::new());
+        let mut rt: Runtime<'_, (), 8> = Runtime::new(SUBS, CostTable::new());
         let data = [1u8, 2, 3, 4];
-        let a = rt.run(36, &data, 4, &cyc, None).unwrap();
-        let b = rt.run(36, &data, 4, &cyc, None).unwrap();
+        let mut ctx = ();
+        let a = rt.run(36, &mut ctx, &data, 4, &cyc, None).unwrap();
+        let b = rt.run(36, &mut ctx, &data, 4, &cyc, None).unwrap();
         assert!(a.ledger.cycles > 0);
-        assert!(Runtime::<8>::check(a.result, b.result));
-        assert_eq!(a.result, 10); // 1+2+3+4
+        assert!(Runtime::<(), 8>::check(a.result, b.result));
+        assert_eq!(a.result, 10);
     }
 
     #[test]
     fn calibration_reprices_and_flips_dispatch() {
         let cyc = StepCycles::new(1000);
-        let mut rt: Runtime<'_, 8> = Runtime::new(SUBS, CostTable::new());
-        // Cold: dispatch → "cpu" (first registered).
+        let mut rt: Runtime<'_, (), 8> = Runtime::new(SUBS, CostTable::new());
         assert_eq!(rt.dispatch(36).unwrap().id, "cpu");
-        // Calibrate: measure cpu @ 8 µJ then accel @ 2 µJ over the 4 ops.
         let mut meter = FixedMeter { readings: &[8.0e-6, 2.0e-6], i: 0 };
         let data = [1u8, 2, 3, 4];
-        let n = rt.calibrate(36, &data, 4, &cyc, Some(&mut meter));
+        let mut ctx = ();
+        let n = rt.calibrate(36, &mut ctx, &data, 4, &cyc, Some(&mut meter));
         assert_eq!(n, 2);
-        // Both entries are now Measured-tier and priced from reality…
         let cpu = rt.costs().for_primitive(36).find(|e| e.substrate == "cpu").unwrap();
         assert_eq!(cpu.source, JoulesSource::Measured);
         assert!((cpu.j_per_op - 2.0e-6).abs() < 1e-12); // 8µJ / 4 ops
-        // …and dispatch now flips to the truly-cheapest substrate.
         assert_eq!(rt.dispatch(36).unwrap().id, "accel");
     }
 
     #[test]
     fn run_after_calibration_emits_measured_ledger() {
         let cyc = StepCycles::new(500);
-        let mut rt: Runtime<'_, 8> = Runtime::new(SUBS, CostTable::new());
+        let mut rt: Runtime<'_, (), 8> = Runtime::new(SUBS, CostTable::new());
         let data = [9u8; 16];
         let mut meter = FixedMeter { readings: &[1.6e-5], i: 0 };
-        let run = rt.run(36, &data, 16, &cyc, Some(&mut meter)).unwrap();
+        let mut ctx = ();
+        let run = rt.run(36, &mut ctx, &data, 16, &cyc, Some(&mut meter)).unwrap();
         assert_eq!(run.ledger.joules_source, JoulesSource::Measured);
         assert_eq!(run.ledger.joules, Some(1.6e-5));
-        // The cost table learned this substrate's price.
         let e = rt.costs().cheapest(36).unwrap();
         assert_eq!(e.source, JoulesSource::Measured);
         assert!((e.j_per_op - 1.0e-6).abs() < 1e-12); // 16µJ / 16 ops
