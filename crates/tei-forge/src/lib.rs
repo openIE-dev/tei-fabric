@@ -276,6 +276,15 @@ pub const BENCH_BOARDS: &[&str] = &[
     "alchitry-au-plus",
     "alchitry-pt-v2",
     "alchitry-cu-v2",
+    // Zynq SoC + instrument boards surfaced in the picker (registry was
+    // hiding them). Energy path = on-board PMIC (Zynq family).
+    "kv260",
+    "kr260",
+    "kd240",
+    "pynq-z2",
+    "stemlab-125-14",
+    "stemlab-125-10",
+    "sdrlab-122-16",
 ];
 
 /// The chipdb board backing a forge target — the canonical identity
