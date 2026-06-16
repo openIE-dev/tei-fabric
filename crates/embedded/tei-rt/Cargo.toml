@@ -1,0 +1,16 @@
+[package]
+name = "tei-rt"
+version = "0.1.0"
+edition = "2021"
+description = "teiOS runtime kernel — the no_std dispatch + calibration core. Given a board's registered substrates and its cost table, it runs a primitive on the lowest-joule substrate, accounts an EventLedger, and folds measured energy back into the table (the calibration agent). This is what every teios-* board image hardcodes today, factored into the runtime the EMBEDDED-ROADMAP §3.5 names teiOS."
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "tei_rt"
+path = "src/lib.rs"
+
+[dependencies]
+tei-ledger = { path = "../tei-ledger" }
+
+[dev-dependencies]
+tei-ledger = { path = "../tei-ledger", features = ["serde"] }
