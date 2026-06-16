@@ -55,10 +55,24 @@ Two independent connections — don't conflate them:
   rail to state in any report. Measuring a downstream rail means moving the
   shunt there.)
 
-Firmware constants (the measured build's defaults): addr `0x40`, shunt
-`0.015 Ω`, max-current `5 A`, low-range. If your breakout's shunt differs, the
-J/op scales linearly — re-build with adjusted constants (a one-line bench
-tune in `teios-app-rp2040/src/fw.rs`).
+Firmware constants (the measured build's defaults, `teios-app-rp2040/src/fw.rs`):
+addr `0x40`, shunt `0.015 Ω`, max-current `5 A`, **low-range**. The Adafruit
+ADA5832 matches addr + shunt out of the box, so the defaults *work as-is* —
+the energy reading is accurate (the SHUNT_CAL calibration is exact at any
+`max_a`).
+
+**Resolution tune (optional but worth it for a small board).** Low-range is
+ADCRANGE=1 = ±40.96 mV full-scale; across the 15 mΩ shunt that ceils
+measurable current at ≈ **2.73 A** (40.96 mV / 0.015 Ω) — far above any MCU's
+draw, so low-range is the right pick. But `max_a = 5 A` sets a coarse
+`CURRENT_LSB = 5 / 2¹⁹ ≈ 9.5 µA`. A Feather pulls ~50–200 mA, so dropping
+`max_a` to ~`1.0` in the `Ina228::new(..)` call gives ~5× finer resolution
+(15 mΩ × 1 A = 15 mV, still inside ±40.96 mV) — accuracy unchanged, just more
+bits where the signal lives. (Verified against the TI INA228 datasheet
+SBOS725 + the Adafruit ADA5832 spec, 2026-06.)
+
+If your breakout's shunt differs from 15 mΩ, the J/op scales linearly — set
+the real shunt value in the same one-line constant and re-build.
 
 ## Step 3 — observe (CONSOLE)
 
