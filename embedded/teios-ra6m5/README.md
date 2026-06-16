@@ -97,13 +97,22 @@ cargo test --lib --target aarch64-apple-darwin   # or your host triple
 - **Synchronous app**: no async runtime exists for RA, so `app` is a
   plain `fn`, not `async fn`.
 
-## Measured joules — pending a bare-metal IIC driver
+## Measured joules — `--features measured-ina228`
 
-The other skeletons gain `JoulesSource::Measured` via the `tei-ina228`
-EnergyMeter over `embedded-hal` 1.0 I²C (`--features measured-ina228`). The
-RA6M5 is bare-metal `cortex-m-rt` + `ra6m5-pac` with **no `embedded-hal` I²C
-implementation**, so the INA228 can't be driven here yet — it would need a
-small RA6M5 **IIC** (`R_IIC`) driver that implements `embedded_hal::i2c::I2c`.
-Until then this board stays Table-tier (or semihosting-reported cycles); the
-measured path lands with that IIC driver. (Everything else — the energy math
-in `tei-ina228`, the EnergyMeter contract — is board-agnostic and ready.)
+Like the other skeletons, the C33 reports `JoulesSource::Measured` via the
+`tei-ina228` EnergyMeter over `embedded-hal` 1.0 I²C. The catch was that this
+image is bare-metal `cortex-m-rt` + `ra6m5-pac` with no HAL, so nothing
+implemented the I²C trait. [`src/riic.rs`](src/riic.rs) closes that: a small
+blocking **RIIC master on IIC0** that `impl embedded_hal::i2c::I2c`, so the
+INA228 binds here exactly as it does on the embassy boards.
+
+```sh
+cargo build --release --target thumbv8m.main-none-eabihf --features measured-ina228
+```
+
+**Compile-verified, not hardware-verified** (same boundary as the CRCA path):
+the RIIC register *sequence* and the bit-rate divisors (`ICMR1.CKS`,
+`ICBRH`/`ICBRL`, nominal for ~100 kHz) are the on-bench step once the PCLKB
+clock tree is configured, and the receive WAIT/ACKBT last-byte NACK wants a
+scope to confirm. The energy math in `tei-ina228` and the EnergyMeter contract
+are board-agnostic and unchanged.

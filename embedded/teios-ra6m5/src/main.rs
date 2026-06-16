@@ -10,6 +10,10 @@
 mod app;
 #[cfg(all(target_arch = "arm", target_os = "none"))]
 mod fw;
+// The RIIC master (embedded-hal I2c) backing the INA228 EnergyMeter — only
+// when the Measured-joules variant is built.
+#[cfg(all(target_arch = "arm", target_os = "none", feature = "measured-ina228"))]
+mod riic;
 
 #[cfg(not(all(target_arch = "arm", target_os = "none")))]
 fn main() {

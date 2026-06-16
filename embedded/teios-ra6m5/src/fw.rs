@@ -37,7 +37,7 @@ use panic_halt as _;
 use ra6m5_pac::crc::{Crcdor, CrcdirBy, crccr0::{Gps, Lms}};
 use ra6m5_pac::mstp::mstpcrc::Mstpc1;
 use ra6m5_pac::{self as pac, NoBitfieldReg};
-use tei_ledger::{CostTable, EventLedger, JoulesSource};
+use tei_ledger::{CostTable, EnergyMeter, EventLedger, JoulesSource};
 use teios_ra6m5::{
     BUF_LEN, COST_CAPACITY, SUBSTRATE_CRC_HW, crc32_software, shipped_cost_table, write_boot_line,
     write_check_line, write_dispatch_line, write_ledger_line,
@@ -122,6 +122,10 @@ pub mod tei {
         pub(super) buf: &'a [u8; BUF_LEN],
         pub(super) table: &'a CostTable<COST_CAPACITY>,
         pub(super) line: String<LINE_CAP>,
+        /// Optional INA228 (`--features measured-ina228`, over `crate::riic`).
+        /// When present, ledgers carry Measured joules instead of Table-tier
+        /// constants. `'static` dyn — the meter lives for the whole program.
+        pub(super) meter: Option<&'a mut (dyn EnergyMeter + 'static)>,
     }
 
     impl<'a> Tei<'a> {
@@ -130,6 +134,9 @@ pub mod tei {
         /// else the M33 software path (DWT-counted).
         pub fn run_on(&mut self, substrate: &'static str, _primitive: u32) -> Result<Run, TeiError> {
             use tei_ledger::CycleSource;
+            if let Some(m) = self.meter.as_deref_mut() {
+                m.reset();
+            }
             let c0 = self.cycles.now();
             let (result, accel) = if substrate == SUBSTRATE_CRC_HW {
                 (crca_crc32(self.buf), true)
@@ -140,6 +147,12 @@ pub mod tei {
             l.cycles = self.cycles.delta(c0);
             if accel {
                 l.accel_invocations = 1;
+            }
+            if let Some(m) = self.meter.as_deref_mut() {
+                if let Some(j) = m.joules() {
+                    l.joules = Some(j);
+                    l.joules_source = JoulesSource::Measured;
+                }
             }
             self.line.clear();
             write_ledger_line(&mut self.line, substrate, 1, &l).ok();
@@ -192,18 +205,34 @@ fn main() -> ! {
     let table = shipped_cost_table();
     let mut out = hio::hstdout().unwrap();
 
+    // Optional INA228 on IIC0 via our RIIC master. BENCH-PENDING: the SCL/SDA
+    // pins + shunt (0.015 Ω) / max-current (5 A) must match the part wired
+    // in-line on the C33 carrier's supply rail. Without the feature the
+    // ledger stays Table-tier.
+    #[cfg(feature = "measured-ina228")]
+    let mut ina = {
+        let i2c = unsafe { crate::riic::Riic0::new() };
+        tei_ina228::Ina228::new(i2c, tei_ina228::DEFAULT_ADDR, 0.015, 5.0, true).ok()
+    };
+
     let mut boot: String<LINE_CAP> = String::new();
     write_boot_line(&mut boot, true).ok(); // M33 has DWT CYCCNT
     let _ = out.write_str(boot.as_str());
     let _ = out.write_str("\n");
 
     loop {
+        #[cfg(feature = "measured-ina228")]
+        let meter: Option<&mut (dyn EnergyMeter + 'static)> =
+            ina.as_mut().map(|m| m as &mut (dyn EnergyMeter + 'static));
+        #[cfg(not(feature = "measured-ina228"))]
+        let meter: Option<&mut (dyn EnergyMeter + 'static)> = None;
         let mut tei = Tei {
             out: &mut out,
             cycles: &cycles,
             buf: &WORKLOAD,
             table: &table,
             line: String::new(),
+            meter,
         };
         let _ = crate::app::app(&mut tei);
     }
