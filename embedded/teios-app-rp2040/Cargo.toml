@@ -33,6 +33,11 @@ board-pico = ["embassy-rp/boot2-w25q080"]
 # (Feather STEMMA QT = GP2 SDA / GP3 SCL). The ledger then reports
 # JoulesSource::Measured. Needs the INA228 shunt in-line on the rail — see fw.rs.
 measured-ina228 = ["dep:tei-ina228"]
+# Per-task active-time ledgers: turn on Embassy's executor `trace` hooks and
+# link tei-embassy (which implements them). teiOS then attributes CPU-active
+# time to every task automatically — no app instrumentation. Read via
+# tei_embassy::snapshot. Orthogonal to the per-primitive dispatch ledger.
+trace = ["dep:tei-embassy", "embassy-executor/trace"]
 
 [dependencies]
 # The TEI Embedded device contract (E0). Core only — no serde on target;
@@ -57,6 +62,10 @@ static_cell = "2.1"
 # The teiOS runtime kernel: dispatch + ledger + calibration over the board's
 # registered substrates. The firmware is now a thin transport over it.
 tei-rt = { path = "../../crates/embedded/tei-rt" }
+# Per-task trace ledgers (optional, --features trace): implements Embassy's
+# trace hooks. Linked but not directly called — embassy-executor resolves its
+# trace extern block against tei-embassy's exported symbols.
+tei-embassy = { path = "../../crates/embedded/tei-embassy", optional = true }
 # thumbv6m (M0+) has no atomic CAS: route portable-atomic (used by
 # static_cell and embassy internals) through critical-section, which
 # embassy-rp's critical-section-impl provides.

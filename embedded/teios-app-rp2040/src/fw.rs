@@ -48,6 +48,12 @@ const SUBSTRATES: &[Substrate<()>] = &[
     Substrate { id: SUBSTRATE_DMA, primitive_id: PRIMITIVE_HASH, run: dma_substrate },
 ];
 
+// Force the linker to keep tei-embassy's `#[unsafe(no_mangle)]` trace hooks,
+// which embassy-executor's `trace` feature resolves at link time. The crate
+// is never called directly, so without this it could be dropped.
+#[cfg(feature = "trace")]
+use tei_embassy as _;
+
 bind_interrupts!(struct Irqs {
     USBCTRL_IRQ => InterruptHandler<USB>;
 });

@@ -17,6 +17,7 @@ members = [
     "crates/embedded/tei-ledger",
     "crates/embedded/tei-ina228",
     "crates/embedded/tei-rt",
+    "crates/embedded/tei-embassy",
     "crates/tei-stack",
     "crates/tei-ir",
     "crates/tei-substrate-traits",

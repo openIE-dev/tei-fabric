@@ -1,0 +1,17 @@
+[package]
+name = "tei-embassy"
+version = "0.1.0"
+edition = "2021"
+description = "teiOS Embassy binding — implements embassy-executor's `trace` hooks so teiOS keeps a per-task active-time ledger automatically (no per-task instrumentation in app code). Complements tei-rt's per-primitive dispatch ledger with a per-task energy-attribution view. EMBEDDED-ROADMAP §8: 'Embassy needs no fork or wrapper.'"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "tei_embassy"
+path = "src/lib.rs"
+
+# The per-task accounting (TaskLedgers) is pure and host-tested. The trace
+# hooks + the global behind a critical section need embassy-time's clock and
+# only build for the embedded target.
+[target.'cfg(all(target_arch = "arm", target_os = "none"))'.dependencies]
+critical-section = "1"
+embassy-time = "0.5"
