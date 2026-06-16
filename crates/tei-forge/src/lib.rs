@@ -60,10 +60,11 @@ pub struct ForgeRequest {
     pub target: String,
     /// The user-editable `app.rs` source.
     pub app_source: String,
-    /// Build the **Measured** variant — wire in the INA228 EnergyMeter so
-    /// the ledger reports `JoulesSource::Measured` instead of Table-tier
-    /// constants. Honored only when the target declares a
-    /// [`Target::measured_feature`]; ignored (no-op) otherwise.
+    /// Build the **Measured** variant — wire the board's EnergyMeter into
+    /// the firmware so the ledger reports `JoulesSource::Measured` instead
+    /// of Table-tier constants. Honored only when the target's energy
+    /// source has a shipped firmware driver (see [`Target::measured_feature`]);
+    /// a no-op otherwise.
     #[serde(default)]
     pub measured: bool,
 }
@@ -145,11 +146,32 @@ pub struct Target {
     pub features: &'static [&'static str],
     /// `--no-default-features` when selecting a non-default board.
     pub no_default_features: bool,
-    /// The cargo feature that wires in the INA228 EnergyMeter for the
-    /// **Measured** joules variant (e.g. `"measured-ina228"`). `None` for
-    /// targets with no `embedded-hal` I²C path yet (the bare-metal RA6M5).
+}
+
+impl Target {
+    /// The board's energy-measurement path, from the single registry
+    /// (`ofpga-chipdb`). The energy story is NOT anchored to one part —
+    /// this is the abstraction; the INA228 is just one driver.
+    pub fn energy_source(&self) -> ofpga_chipdb::boards::EnergySource {
+        board_info(self.id)
+            .map(ofpga_chipdb::boards::energy_source)
+            .unwrap_or(ofpga_chipdb::boards::EnergySource::None)
+    }
+
+    /// The cargo feature that wires the EnergyMeter into the firmware for
+    /// the **Measured** variant, derived from [`Self::energy_source`].
+    /// Today only the external-shunt (INA228) path has a shipped firmware
+    /// driver → `"measured-ina228"`; every other source (on-board PMIC,
+    /// Linux software telemetry, accelerator, or none) returns `None`
+    /// here — those boards measure outside the cross-compiled image.
     /// Added to the build only when [`ForgeRequest::measured`] is set.
-    pub measured_feature: Option<&'static str>,
+    pub fn measured_feature(&self) -> Option<&'static str> {
+        use ofpga_chipdb::boards::{EnergySource, ShuntDriver};
+        match self.energy_source() {
+            EnergySource::ExternalShunt(ShuntDriver::Ina228) => Some("measured-ina228"),
+            _ => None,
+        }
+    }
 }
 
 /// The targets the forge can build today. Bench-first: the RP2040
@@ -164,7 +186,6 @@ pub const TARGETS: &[Target] = &[
         family: "rp2040",
         features: &["board-feather-rp2040"],
         no_default_features: false,
-        measured_feature: Some("measured-ina228"),
     },
     Target {
         id: "pico",
@@ -174,7 +195,6 @@ pub const TARGETS: &[Target] = &[
         family: "rp2040",
         features: &["board-pico"],
         no_default_features: true,
-        measured_feature: Some("measured-ina228"),
     },
     // Portenta H7 / H7 Lite — Cortex-M7, DFU-flashed .bin (E1b). The
     // skeleton is the teios-h747 crate; its target/ default is gated so
@@ -189,7 +209,6 @@ pub const TARGETS: &[Target] = &[
         family: "stm32h7",
         features: &["board-portenta-h7"],
         no_default_features: false,
-        measured_feature: Some("measured-ina228"),
     },
     Target {
         id: "portenta-h7-lite",
@@ -199,7 +218,6 @@ pub const TARGETS: &[Target] = &[
         family: "stm32h7",
         features: &["board-portenta-h7-lite"],
         no_default_features: true,
-        measured_feature: Some("measured-ina228"),
     },
     // Nicla Voice / Nicla Sense ME — nRF52832 (Cortex-M4F), UART
     // transport (no USB on this part), DFU/probe-flashed .bin (E1c).
@@ -212,7 +230,6 @@ pub const TARGETS: &[Target] = &[
         family: "nrf52832",
         features: &["board-nicla-voice"],
         no_default_features: false,
-        measured_feature: Some("measured-ina228"),
     },
     Target {
         id: "nicla-sense",
@@ -222,7 +239,6 @@ pub const TARGETS: &[Target] = &[
         family: "nrf52832",
         features: &["board-nicla-sense"],
         no_default_features: true,
-        measured_feature: Some("measured-ina228"),
     },
     // Portenta C33 — Renesas RA6M5 (Cortex-M33), bare-metal (no embassy
     // HAL), CRCA hardware-CRC substrate, semihosting transport,
@@ -235,9 +251,6 @@ pub const TARGETS: &[Target] = &[
         family: "ra6m5",
         features: &["board-portenta-c33"],
         no_default_features: false,
-        // Bare-metal RA6M5 — no embedded-hal I²C path yet, so no INA228
-        // EnergyMeter. Stays Table-tier until an R_IIC driver lands.
-        measured_feature: None,
     },
 ];
 
@@ -250,7 +263,19 @@ pub fn target(id: &str) -> Option<&'static Target> {
 /// flow) but ARE in the chipdb registry, so Studio's BOARD view can show
 /// their identity / 3D / pinout. View-only — not buildable by the forge.
 /// Ids are chipdb aliases (resolve via [`board_info`]).
-pub const BENCH_BOARDS: &[&str] = &["nano-matter", "openmv-ae3", "tachyon", "coral-dev-mini"];
+pub const BENCH_BOARDS: &[&str] = &[
+    "nano-matter",
+    "openmv-ae3",
+    "tachyon",
+    "coral-dev-mini",
+    // Linux SBC + Hailo NPU — software telemetry + accelerator energy.
+    "pi5",
+    // Alchitry FPGA family — fabric is the substrate, bitstream is the
+    // "program", external shunt for joules (Tier-0, not a forge target).
+    "alchitry-au-v2",
+    "alchitry-au-plus",
+    "alchitry-pt-v2",
+];
 
 /// The chipdb board backing a forge target — the canonical identity
 /// (name, vendor, chip, family, price, url). Board identity is owned by

@@ -184,7 +184,11 @@ fn package_bin(elf: &Path, out: &Path) -> Result<(), String> {
 
 /// Find `llvm-objcopy` under the active rust toolchain's sysroot.
 fn llvm_objcopy() -> Option<PathBuf> {
-    let out = Command::new("rustc").arg("--print").arg("sysroot").output().ok()?;
+    let out = Command::new("rustc")
+        .arg("--print")
+        .arg("sysroot")
+        .output()
+        .ok()?;
     if !out.status.success() {
         return None;
     }
@@ -266,7 +270,7 @@ fn run_cargo(
     // request asks for it AND the target supports it (no-op on bare-metal
     // RA6M5, which declares no measured_feature).
     if req.measured {
-        if let Some(mf) = tgt.measured_feature {
+        if let Some(mf) = tgt.measured_feature() {
             cargo_args.push("--features".into());
             cargo_args.push(mf.into());
         }

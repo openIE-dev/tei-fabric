@@ -233,9 +233,14 @@ async fn get_forge_targets(State(state): State<AppState>) -> Json<serde_json::Va
                 "chip_family": b.map(|b| b.fpga_family),
                 "price_usd": b.map(|b| b.price_usd),
                 "url": b.map(|b| b.url),
-                // Whether the Measured-joules variant (INA228 EnergyMeter)
-                // can be built for this target — drives the BUILD checkbox.
-                "measured": t.measured_feature.is_some(),
+                // Whether a Measured build (firmware EnergyMeter driver)
+                // can be cross-compiled for this target — drives the
+                // BUILD checkbox. Today: the external-shunt (INA228) path.
+                "measured": t.measured_feature().is_some(),
+                // The board's energy-measurement path (the abstraction —
+                // external shunt / on-board PMIC / software / accelerator).
+                "energy_source": b.map(|b| tei_forge::ofpga_chipdb::boards::energy_source(b).tag()),
+                "energy_how": b.map(|b| tei_forge::ofpga_chipdb::boards::energy_source(b).label()),
             })
         })
         .collect();
@@ -253,6 +258,7 @@ async fn get_forge_board_list() -> Json<serde_json::Value> {
             "kind": kind,
             "name": b.map(|b| b.name),
             "chip": b.map(|b| b.fpga_device),
+            "energy_source": b.map(|b| tei_forge::ofpga_chipdb::boards::energy_source(b).tag()),
         })
     };
     let mut boards: Vec<_> = tei_forge::TARGETS.iter().map(|t| ident(t.id, "forge")).collect();
@@ -299,6 +305,11 @@ async fn get_forge_board(
         "clock_mhz": board.clock_mhz,
         "price_usd": board.price_usd,
         "url": board.url,
+        // How this board reports joules into the ledger (the abstraction —
+        // not anchored to one part) + any carrier needed to reach the rail.
+        "energy_source": tei_forge::ofpga_chipdb::boards::energy_source(board).tag(),
+        "energy_how": tei_forge::ofpga_chipdb::boards::energy_source(board).label(),
+        "carrier_note": tei_forge::ofpga_chipdb::boards::carrier_note(board),
         "pinout": pinout,
     })))
 }

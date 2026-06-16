@@ -807,9 +807,12 @@ async function boardLoad(id) {
     ['name', b.name], ['vendor', b.vendor], ['chip', b.chip],
     ['family', b.chip_family], ['clock', b.clock_mhz ? b.clock_mhz + ' MHz' : null],
     ['price', b.price_usd ? '$' + b.price_usd.toFixed(2) : null],
+    ['joules', b.energy_how],
   ].filter(([, v]) => v).map(([k, v]) =>
     `<div class="flex justify-between gap-3"><span class="text-brand-gray uppercase text-[10px] tracking-wider pt-0.5">${k}</span><span class="text-brand-white text-right">${v}</span></div>`
-  ).join('') + (b.url ? `<a href="${b.url}" target="_blank" rel="noopener" class="block mt-2 text-brand-amber text-[11px] hover:underline">product page ↗</a>` : '');
+  ).join('')
+    + (b.carrier_note ? `<p class="mt-2 text-brand-gray text-[10px] leading-snug border-l-2 border-brand-amber/40 pl-2">${b.carrier_note}</p>` : '')
+    + (b.url ? `<a href="${b.url}" target="_blank" rel="noopener" class="block mt-2 text-brand-amber text-[11px] hover:underline">product page ↗</a>` : '');
 
   boardModel(id);
 
