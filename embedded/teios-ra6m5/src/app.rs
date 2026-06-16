@@ -13,6 +13,10 @@ pub fn app(tei: &mut Tei) -> Result<(), TeiError> {
     let hw = tei.run_on(SUBSTRATE_CRC_HW, PRIMITIVE_HASH)?;
     tei.check(m33.result, hw.result)?;
     tei.dispatch(PRIMITIVE_HASH)?;
+    // teiOS dispatches to the substrate it measured cheapest (M33 vs CRCA),
+    // then publishes the calibrated prices home.
+    tei.run(PRIMITIVE_HASH)?;
+    tei.publish(PRIMITIVE_HASH)?;
     tei.sleep_ms(1000);
     Ok(())
 }

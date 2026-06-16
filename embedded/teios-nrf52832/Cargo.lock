@@ -871,6 +871,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "tei-rt"
+version = "0.1.0"
+dependencies = [
+ "tei-ledger",
+]
+
+[[package]]
 name = "teios-core"
 version = "0.1.0"
 dependencies = [
@@ -892,6 +899,7 @@ dependencies = [
  "static_cell",
  "tei-ina228",
  "tei-ledger",
+ "tei-rt",
  "teios-core",
 ]
 

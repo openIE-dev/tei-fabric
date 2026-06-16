@@ -13,6 +13,10 @@ use teios_nrf52832::{PRIMITIVE_HASH, SUBSTRATE_M4};
 pub async fn app(tei: &mut Tei<'_>) -> Result<(), TeiError> {
     let _m4 = tei.run_on(SUBSTRATE_M4, PRIMITIVE_HASH).await?;
     tei.dispatch(PRIMITIVE_HASH).await?;
+    // teiOS dispatches (here always the M4 — the only runnable substrate),
+    // then publishes the calibrated prices home (Studio → HUB/FLEET).
+    tei.run(PRIMITIVE_HASH).await?;
+    tei.publish(PRIMITIVE_HASH).await?;
     tei.sleep_ms(1000).await;
     Ok(())
 }

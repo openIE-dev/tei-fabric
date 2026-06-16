@@ -168,6 +168,8 @@ use teios_nrf52832::{PRIMITIVE_HASH, SUBSTRATE_M4};
 pub async fn app(tei: &mut Tei<'_>) -> Result<(), TeiError> {
     let _m4 = tei.run_on(SUBSTRATE_M4, PRIMITIVE_HASH).await?;
     tei.dispatch(PRIMITIVE_HASH).await?;
+    tei.run(PRIMITIVE_HASH).await?;
+    tei.publish(PRIMITIVE_HASH).await?;
     tei.sleep_ms(1000).await;
     Ok(())
 }
@@ -220,6 +222,8 @@ pub fn app(tei: &mut Tei) -> Result<(), TeiError> {
     let hw = tei.run_on(SUBSTRATE_CRC_HW, PRIMITIVE_HASH)?;
     tei.check(m33.result, hw.result)?;
     tei.dispatch(PRIMITIVE_HASH)?;
+    tei.run(PRIMITIVE_HASH)?;
+    tei.publish(PRIMITIVE_HASH)?;
     tei.sleep_ms(1000);
     Ok(())
 }
@@ -272,11 +276,12 @@ fn broken_app_returns_compiler_error_not_panic() {
     };
     let req = ForgeRequest {
         target: "feather-rp2040".into(),
-        // type error: assigning a Run to a u32
+        // type error: assigning a Run to a u32 (correct lifetimes, so the
+        // type mismatch — not an arg-count error — is what fails).
         app_source: r#"
 use crate::fw::tei::{Tei, TeiError};
 use teios_app_rp2040::{PRIMITIVE_HASH, SUBSTRATE_CPU};
-pub async fn app(tei: &mut Tei<'_>) -> Result<(), TeiError> {
+pub async fn app(tei: &mut Tei<'_, '_>) -> Result<(), TeiError> {
     let _x: u32 = tei.run_on(SUBSTRATE_CPU, PRIMITIVE_HASH).await?;
     Ok(())
 }

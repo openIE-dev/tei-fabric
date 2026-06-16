@@ -35,11 +35,24 @@ use embassy_nrf::{bind_interrupts, peripherals};
 use embassy_time::{Duration, Instant, Ticker, Timer};
 use heapless::String;
 use panic_halt as _;
-use tei_ledger::{CostTable, EnergyMeter, EventLedger, JoulesSource};
+use tei_ledger::{EnergyMeter, EventLedger};
+use tei_rt::{Runtime, Substrate};
 use teios_nrf52832::{
-    BUF_LEN, COST_CAPACITY, crc32_software, shipped_cost_table, write_boot_line, write_check_line,
-    write_dispatch_line, write_ledger_line,
+    BUF_LEN, COST_CAPACITY, PRIMITIVE_HASH, SUBSTRATE_M4, crc32_software, shipped_cost_table,
+    write_boot_line, write_check_line, write_dispatch_line, write_ledger_line, write_report_line,
 };
+
+/// The Nicla nRF52832's only runnable substrate: software CRC32 on the M4
+/// (pure compute → context `()`). The always-on accelerator (NDP120 / BHI260)
+/// is a priced cost-table menu entry, not a runtime substrate.
+fn m4_substrate(_: &mut (), d: &[u8]) -> u32 {
+    crc32_software(d)
+}
+const SUBSTRATES: &[Substrate<()>] = &[Substrate {
+    id: SUBSTRATE_M4,
+    primitive_id: PRIMITIVE_HASH,
+    run: m4_substrate,
+}];
 
 bind_interrupts!(struct Irqs {
     UARTE0 => uarte::InterruptHandler<peripherals::UARTE0>;
@@ -100,7 +113,8 @@ pub mod tei {
         pub(super) uart: &'a mut Uarte<'static, peripherals::UARTE0>,
         pub(super) cycles: &'a DwtCycleSource,
         pub(super) buf: &'a [u8; BUF_LEN],
-        pub(super) table: &'a CostTable<COST_CAPACITY>,
+        /// The teiOS runtime kernel (cost table + substrate registry).
+        pub(super) rt: &'a mut Runtime<'static, (), COST_CAPACITY>,
         pub(super) line: String<LINE_CAP>,
         /// Optional INA228 (`--features measured-ina228`). When present,
         /// ledgers carry Measured joules. `'static` dyn — lives for the program.
@@ -114,28 +128,56 @@ pub mod tei {
         pub async fn run_on(
             &mut self,
             substrate: &'static str,
-            _primitive: u32,
+            primitive: u32,
         ) -> Result<Run, TeiError> {
-            use tei_ledger::CycleSource;
-            if let Some(m) = self.meter.as_deref_mut() {
-                m.reset();
-            }
             let t0 = Instant::now();
-            let c0 = self.cycles.now();
-            let crc = crc32_software(self.buf);
-            let mut l = EventLedger::new(JoulesSource::Table);
-            l.cycles = self.cycles.delta(c0);
-            l.active_us = t0.elapsed().as_micros();
-            if let Some(m) = self.meter.as_deref_mut() {
-                if let Some(j) = m.joules() {
-                    l.joules = Some(j);
-                    l.joules_source = JoulesSource::Measured;
-                }
-            }
+            let run = match self
+                .rt
+                .run_on(substrate, &mut (), self.buf, 1, self.cycles, self.meter.as_deref_mut())
+            {
+                Some(r) => r,
+                None => self
+                    .rt
+                    .run(primitive, &mut (), self.buf, 1, self.cycles, self.meter.as_deref_mut())
+                    .ok_or(uarte::Error::BufferNotInRAM)?,
+            };
+            self.emit(run, t0).await
+        }
+
+        /// The teiOS call: run `primitive` on the runtime's dispatched
+        /// substrate (here always the M4 — the only runnable one).
+        pub async fn run(&mut self, primitive: u32) -> Result<Run, TeiError> {
+            let t0 = Instant::now();
+            let run = self
+                .rt
+                .run(primitive, &mut (), self.buf, 1, self.cycles, self.meter.as_deref_mut())
+                .ok_or(uarte::Error::BufferNotInRAM)?;
+            self.emit(run, t0).await
+        }
+
+        async fn emit(&mut self, run: tei_rt::Run, t0: Instant) -> Result<Run, TeiError> {
+            let mut ledger = run.ledger;
+            ledger.active_us = t0.elapsed().as_micros();
             self.line.clear();
-            write_ledger_line(&mut self.line, substrate, 1, &l).ok();
+            write_ledger_line(&mut self.line, run.substrate, 1, &ledger).ok();
             send_line(self.uart, &self.line).await?;
-            Ok(Run { result: crc, ledger: l })
+            Ok(Run { result: run.result, ledger })
+        }
+
+        /// Publish the runtime's calibrated prices home (Studio → HUB/FLEET).
+        pub async fn publish(&mut self, primitive: u32) -> Result<(), TeiError> {
+            let mut snap: [Option<tei_ledger::CostEntry>; COST_CAPACITY] = [None; COST_CAPACITY];
+            let mut k = 0;
+            for e in self.rt.costs().for_primitive(primitive) {
+                snap[k] = Some(*e);
+                k += 1;
+            }
+            for e in snap.iter().take(k).flatten() {
+                self.line.clear();
+                write_report_line(&mut self.line, e, 1).ok();
+                send_line(self.uart, &self.line).await?;
+            }
+            Ok(())
         }
 
         /// Cross-check two substrate results — available for apps that
@@ -149,7 +191,7 @@ pub mod tei {
 
         pub async fn dispatch(&mut self, primitive: u32) -> Result<(), TeiError> {
             self.line.clear();
-            write_dispatch_line(&mut self.line, self.table, primitive).ok();
+            write_dispatch_line(&mut self.line, self.rt.costs(), primitive).ok();
             send_line(self.uart, &self.line).await
         }
 
@@ -182,7 +224,8 @@ async fn main(_spawner: Spawner) {
     // new(uarte, rxd, txd, irq, config)
     let mut uart = Uarte::new(p.UARTE0, p.P0_08, p.P0_06, Irqs, cfg);
 
-    let table = shipped_cost_table();
+    // The teiOS runtime: the M4 substrate + the shipped cost table.
+    let mut rt = Runtime::new(SUBSTRATES, shipped_cost_table());
 
     // Optional INA228 on TWIM0 (P0.14 SDA / P0.15 SCL). BENCH-PENDING: the
     // pins + shunt (0.015 Ω) / max-current (5 A) must match the part wired
@@ -212,7 +255,7 @@ async fn main(_spawner: Spawner) {
             uart: &mut uart,
             cycles: &cycles,
             buf: &WORKLOAD,
-            table: &table,
+            rt: &mut rt,
             line: String::new(),
             meter,
         };

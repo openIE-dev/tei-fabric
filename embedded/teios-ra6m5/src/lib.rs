@@ -100,6 +100,16 @@ pub fn write_ledger_line<W: Write>(
     teios_core::write_ledger_line(w, &BOARD, substrate, n_ops, ledger)
 }
 
+/// `{"type":"report",...}` — a calibration report for one priced substrate,
+/// stamped with this board's id. The relay carries it to the fabric.
+pub fn write_report_line<W: Write>(
+    w: &mut W,
+    entry: &tei_ledger::CostEntry,
+    n_ops: u64,
+) -> fmt::Result {
+    teios_core::write_report_line(w, &BOARD, entry, n_ops)
+}
+
 pub use teios_core::{write_check_line, write_dispatch_line};
 
 #[cfg(test)]

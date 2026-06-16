@@ -37,11 +37,27 @@ use panic_halt as _;
 use ra6m5_pac::crc::{Crcdor, CrcdirBy, crccr0::{Gps, Lms}};
 use ra6m5_pac::mstp::mstpcrc::Mstpc1;
 use ra6m5_pac::{self as pac, NoBitfieldReg};
-use tei_ledger::{CostTable, EnergyMeter, EventLedger, JoulesSource};
+use tei_ledger::{EnergyMeter, EventLedger};
+use tei_rt::{Runtime, Substrate};
 use teios_ra6m5::{
-    BUF_LEN, COST_CAPACITY, SUBSTRATE_CRC_HW, crc32_software, shipped_cost_table, write_boot_line,
-    write_check_line, write_dispatch_line, write_ledger_line,
+    BUF_LEN, COST_CAPACITY, PRIMITIVE_HASH, SUBSTRATE_CRC_HW, SUBSTRATE_M33, crc32_software,
+    shipped_cost_table, write_boot_line, write_check_line, write_dispatch_line, write_ledger_line,
+    write_report_line,
 };
+
+/// The Portenta C33's substrates: M33 software CRC32 and the RA6M5 CRCA
+/// hardware-CRC peripheral. Both are pure `fn(&[u8]) -> u32` (the CRCA one
+/// pokes the PAC directly, after `crca_init`), so the runtime context is `()`.
+fn m33_substrate(_: &mut (), d: &[u8]) -> u32 {
+    crc32_software(d)
+}
+fn crca_substrate(_: &mut (), d: &[u8]) -> u32 {
+    crca_crc32(d)
+}
+const SUBSTRATES: &[Substrate<()>] = &[
+    Substrate { id: SUBSTRATE_M33, primitive_id: PRIMITIVE_HASH, run: m33_substrate },
+    Substrate { id: SUBSTRATE_CRC_HW, primitive_id: PRIMITIVE_HASH, run: crca_substrate },
+];
 
 const LINE_CAP: usize = teios_core::LINE_CAP;
 
@@ -120,7 +136,8 @@ pub mod tei {
         pub(super) out: &'a mut HostStream,
         pub(super) cycles: &'a DwtCycleSource,
         pub(super) buf: &'a [u8; BUF_LEN],
-        pub(super) table: &'a CostTable<COST_CAPACITY>,
+        /// The teiOS runtime kernel (cost table + substrate registry).
+        pub(super) rt: &'a mut Runtime<'static, (), COST_CAPACITY>,
         pub(super) line: String<LINE_CAP>,
         /// Optional INA228 (`--features measured-ina228`, over `crate::riic`).
         /// When present, ledgers carry Measured joules instead of Table-tier
@@ -132,32 +149,64 @@ pub mod tei {
         /// Run `primitive` on the named substrate; price it; stream the
         /// ledger line. `crca` uses the hardware peripheral; everything
         /// else the M33 software path (DWT-counted).
-        pub fn run_on(&mut self, substrate: &'static str, _primitive: u32) -> Result<Run, TeiError> {
-            use tei_ledger::CycleSource;
-            if let Some(m) = self.meter.as_deref_mut() {
-                m.reset();
-            }
-            let c0 = self.cycles.now();
-            let (result, accel) = if substrate == SUBSTRATE_CRC_HW {
-                (crca_crc32(self.buf), true)
-            } else {
-                (crc32_software(self.buf), false)
+        pub fn run_on(&mut self, substrate: &'static str, primitive: u32) -> Result<Run, TeiError> {
+            // The runtime does the work: run the named substrate, time it on
+            // the DWT cycle source, read the meter, re-price the table.
+            let run = match self.rt.run_on(
+                substrate,
+                &mut (),
+                self.buf,
+                1,
+                self.cycles,
+                self.meter.as_deref_mut(),
+            ) {
+                Some(r) => r,
+                None => self
+                    .rt
+                    .run(primitive, &mut (), self.buf, 1, self.cycles, self.meter.as_deref_mut())
+                    .ok_or(())?,
             };
-            let mut l = EventLedger::new(JoulesSource::Table);
-            l.cycles = self.cycles.delta(c0);
-            if accel {
-                l.accel_invocations = 1;
-            }
-            if let Some(m) = self.meter.as_deref_mut() {
-                if let Some(j) = m.joules() {
-                    l.joules = Some(j);
-                    l.joules_source = JoulesSource::Measured;
-                }
+            self.emit(run)
+        }
+
+        /// The teiOS call: run `primitive` on the runtime's dispatched
+        /// substrate — the kernel chooses (M33 vs CRCA by measured joules).
+        pub fn run(&mut self, primitive: u32) -> Result<Run, TeiError> {
+            let run = self
+                .rt
+                .run(primitive, &mut (), self.buf, 1, self.cycles, self.meter.as_deref_mut())
+                .ok_or(())?;
+            self.emit(run)
+        }
+
+        /// Decorate a runtime [`tei_rt::Run`] with the board's extra counters,
+        /// stream it, return the result + ledger.
+        fn emit(&mut self, run: tei_rt::Run) -> Result<Run, TeiError> {
+            let mut ledger = run.ledger;
+            if run.substrate == SUBSTRATE_CRC_HW {
+                ledger.accel_invocations = 1;
             }
             self.line.clear();
-            write_ledger_line(&mut self.line, substrate, 1, &l).ok();
+            write_ledger_line(&mut self.line, run.substrate, 1, &ledger).ok();
             self.send()?;
-            Ok(Run { result, ledger: l })
+            Ok(Run { result: run.result, ledger })
+        }
+
+        /// Publish the runtime's calibrated prices home — one `report` line
+        /// per priced substrate; the relay carries them to the fabric.
+        pub fn publish(&mut self, primitive: u32) -> Result<(), TeiError> {
+            let mut snap: [Option<tei_ledger::CostEntry>; COST_CAPACITY] = [None; COST_CAPACITY];
+            let mut k = 0;
+            for e in self.rt.costs().for_primitive(primitive) {
+                snap[k] = Some(*e);
+                k += 1;
+            }
+            for e in snap.iter().take(k).flatten() {
+                self.line.clear();
+                write_report_line(&mut self.line, e, 1).ok();
+                self.send()?;
+            }
+            Ok(())
         }
 
         pub fn check(&mut self, a: u32, b: u32) -> Result<(), TeiError> {
@@ -168,7 +217,7 @@ pub mod tei {
 
         pub fn dispatch(&mut self, primitive: u32) -> Result<(), TeiError> {
             self.line.clear();
-            write_dispatch_line(&mut self.line, self.table, primitive).ok();
+            write_dispatch_line(&mut self.line, self.rt.costs(), primitive).ok();
             self.send()
         }
 
@@ -202,7 +251,8 @@ fn main() -> ! {
 
     crca_init();
 
-    let table = shipped_cost_table();
+    // The teiOS runtime: the M33 + CRCA substrates and the shipped cost table.
+    let mut rt = Runtime::new(SUBSTRATES, shipped_cost_table());
     let mut out = hio::hstdout().unwrap();
 
     // Optional INA228 on IIC0 via our RIIC master. BENCH-PENDING: the SCL/SDA
@@ -230,7 +280,7 @@ fn main() -> ! {
             out: &mut out,
             cycles: &cycles,
             buf: &WORKLOAD,
-            table: &table,
+            rt: &mut rt,
             line: String::new(),
             meter,
         };

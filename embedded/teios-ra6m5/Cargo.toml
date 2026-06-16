@@ -21,6 +21,8 @@ teios-core = { path = "../teios-core" }
 ra6m5-pac = { version = "0.3", features = ["rt", "crc", "mstp", "iic0"] }
 cortex-m = { version = "0.7.6", features = ["inline-asm", "critical-section-single-core"] }
 cortex-m-rt = "0.7"
+# The teiOS runtime kernel (Ctx = (); M33 + CRCA substrates are free fns).
+tei-rt = { path = "../../crates/embedded/tei-rt" }
 # Measured-tier joules (optional): the INA228 EnergyMeter over our own RIIC
 # master driver (src/riic.rs), which implements embedded-hal 1.0 I2c. Brings
 # the C33 onto the Measured path despite the bare-metal (no-HAL) image.
