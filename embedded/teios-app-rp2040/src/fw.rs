@@ -21,12 +21,23 @@ use embassy_usb::driver::EndpointError;
 use heapless::String;
 use panic_halt as _;
 use static_cell::StaticCell;
-use tei_ledger::{CostTable, CycleSource, EnergyMeter, EventLedger, JoulesSource};
+use tei_ledger::{CycleSource, EnergyMeter, EventLedger};
+use tei_rt::{Runtime, Substrate};
 use teios_app_rp2040::{
-    BOARD_ID, BUF_LEN, COST_CAPACITY, SUBSTRATE_DMA, crc32_software,
+    BOARD_ID, BUF_LEN, COST_CAPACITY, PRIMITIVE_HASH, SUBSTRATE_CPU, SUBSTRATE_DMA, crc32_software,
     fill_pattern, shipped_cost_table, write_boot_line, write_check_line, write_dispatch_line,
     write_ledger_line,
 };
+
+/// The board's substrates for the hash primitive: software CRC32 on the M0+
+/// and the DMA-sniffer hardware CRC32. Both are pure `fn(&[u8]) -> u32`, so
+/// the teiOS [`Runtime`] dispatches across them directly. THIS is the
+/// registry the runtime kernel prices and chooses from — the old hardcoded
+/// `if substrate == DMA { … } else { … }` race is gone.
+const SUBSTRATES: &[Substrate] = &[
+    Substrate { id: SUBSTRATE_CPU, primitive_id: PRIMITIVE_HASH, run: crc32_software },
+    Substrate { id: SUBSTRATE_DMA, primitive_id: PRIMITIVE_HASH, run: dma_sniffer_crc32 },
+];
 
 bind_interrupts!(struct Irqs {
     USBCTRL_IRQ => InterruptHandler<USB>;
@@ -79,7 +90,11 @@ pub mod tei {
         pub(super) class: &'a mut CdcAcmClass<'static, Driver<'static, USB>>,
         pub(super) timer: &'a TimerCycleSource,
         pub(super) buf: &'a [u8; BUF_LEN],
-        pub(super) table: &'a CostTable<COST_CAPACITY>,
+        /// The teiOS runtime kernel: owns the (re-priced) cost table + the
+        /// substrate registry, makes the dispatch decision, accounts the
+        /// ledger, and folds measured joules back in. The harness is now a
+        /// thin transport over it.
+        pub(super) rt: &'a mut Runtime<'static, COST_CAPACITY>,
         pub(super) line: String<LINE_CAP>,
         /// Optional on-board energy meter (INA228 on the supply rail). When
         /// present, each run's ledger carries Measured joules instead of
@@ -98,41 +113,52 @@ pub mod tei {
         pub async fn run_on(
             &mut self,
             substrate: &'static str,
-            _primitive: u32,
+            primitive: u32,
         ) -> Result<Run, TeiError> {
-            // Zero the energy accumulator right before the primitive so the
-            // reading brackets exactly this run's window.
-            if let Some(m) = self.meter.as_deref_mut() {
-                m.reset();
-            }
-            let (result, mut ledger) = if substrate == SUBSTRATE_DMA {
-                let t0 = Instant::now();
-                let crc = dma_sniffer_crc32(self.buf);
-                let mut l = EventLedger::new(JoulesSource::Table);
-                l.dma_transfers = (BUF_LEN / 4) as u64;
-                l.accel_invocations = 1;
-                l.active_us = t0.elapsed().as_micros();
-                (crc, l)
-            } else {
-                let t0 = Instant::now();
-                let c0 = self.timer.now();
-                let crc = crc32_software(self.buf);
-                let mut l = EventLedger::new(JoulesSource::Table);
-                l.cycles = self.timer.delta(c0);
-                l.active_us = t0.elapsed().as_micros();
-                (crc, l)
+            // The runtime does the work: reset the meter, run the named
+            // substrate, time it on the cycle source, read joules, and
+            // re-price the cost table. Unknown name → the dispatched one.
+            let t0 = Instant::now();
+            let run = match self
+                .rt
+                .run_on(substrate, self.buf, 1, self.timer, self.meter.as_deref_mut())
+            {
+                Some(r) => r,
+                None => self
+                    .rt
+                    .run(primitive, self.buf, 1, self.timer, self.meter.as_deref_mut())
+                    .ok_or(EndpointError::Disabled)?,
             };
-            // Read measured joules for the window; upgrades provenance Table→Measured.
-            if let Some(m) = self.meter.as_deref_mut() {
-                if let Some(j) = m.joules() {
-                    ledger.joules = Some(j);
-                    ledger.joules_source = JoulesSource::Measured;
-                }
+            self.emit(run, t0).await
+        }
+
+        /// **The teiOS call**: run `primitive` on whatever substrate the
+        /// runtime currently dispatches to (lowest measured joules, or the
+        /// shipped table before calibration). The harness no longer names a
+        /// substrate — the kernel chooses.
+        pub async fn run(&mut self, primitive: u32) -> Result<Run, TeiError> {
+            let t0 = Instant::now();
+            let run = self
+                .rt
+                .run(primitive, self.buf, 1, self.timer, self.meter.as_deref_mut())
+                .ok_or(EndpointError::Disabled)?;
+            self.emit(run, t0).await
+        }
+
+        /// Decorate a runtime [`tei_rt::Run`] with this board's extra ledger
+        /// counters (which the generic kernel doesn't know), stream it, and
+        /// hand the app back its result + ledger.
+        async fn emit(&mut self, run: tei_rt::Run, t0: Instant) -> Result<Run, TeiError> {
+            let mut ledger = run.ledger;
+            ledger.active_us = t0.elapsed().as_micros();
+            if run.substrate == SUBSTRATE_DMA {
+                ledger.dma_transfers = (BUF_LEN / 4) as u64;
+                ledger.accel_invocations = 1;
             }
             self.line.clear();
-            write_ledger_line(&mut self.line, substrate, 1, &ledger).ok();
+            write_ledger_line(&mut self.line, run.substrate, 1, &ledger).ok();
             send_line(self.class, &self.line).await?;
-            Ok(Run { result, ledger })
+            Ok(Run { result: run.result, ledger })
         }
 
         /// Emit a cross-substrate result check.
@@ -146,7 +172,8 @@ pub mod tei {
         /// straight from the cost table).
         pub async fn dispatch(&mut self, primitive: u32) -> Result<(), TeiError> {
             self.line.clear();
-            write_dispatch_line(&mut self.line, self.table, primitive).ok();
+            // Straight from the runtime's live (re-priced) cost table.
+            write_dispatch_line(&mut self.line, self.rt.costs(), primitive).ok();
             send_line(self.class, &self.line).await
         }
 
@@ -203,7 +230,10 @@ async fn main(spawner: Spawner) {
 
     let buf: &'static mut [u8; BUF_LEN] = unsafe { &mut *core::ptr::addr_of_mut!(WORKLOAD) };
     fill_pattern(buf);
-    let table = shipped_cost_table();
+    // The teiOS runtime: the board's substrates + its shipped cost table.
+    // Persists across reconnects, so calibration learned in one session
+    // steers dispatch in the next.
+    let mut rt = Runtime::new(SUBSTRATES, shipped_cost_table());
 
     // Optional INA228 on I2C1 (Feather STEMMA QT: GP2 SDA / GP3 SCL).
     // BENCH-PENDING: the shunt (0.015 Ω) + max-current (5 A, low range) must
@@ -223,7 +253,7 @@ async fn main(spawner: Spawner) {
             ina.as_mut().map(|m| m as &mut (dyn EnergyMeter + 'static));
         #[cfg(not(feature = "measured-ina228"))]
         let meter: Option<&mut (dyn EnergyMeter + 'static)> = None;
-        let _ = stream(&mut class, &timer, cyccnt, buf, &table, meter).await;
+        let _ = stream(&mut class, &timer, cyccnt, buf, &mut rt, meter).await;
     }
 }
 
@@ -233,7 +263,7 @@ async fn stream<'d>(
     timer: &'d TimerCycleSource,
     cyccnt: bool,
     buf: &'d [u8; BUF_LEN],
-    table: &'d CostTable<COST_CAPACITY>,
+    rt: &'d mut Runtime<'static, COST_CAPACITY>,
     mut meter: Option<&'d mut (dyn EnergyMeter + 'static)>,
 ) -> Result<(), EndpointError> {
     let mut boot: String<LINE_CAP> = String::new();
@@ -246,7 +276,7 @@ async fn stream<'d>(
             class,
             timer,
             buf,
-            table,
+            rt,
             line: String::new(),
             meter: meter.as_deref_mut(),
         };

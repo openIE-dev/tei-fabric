@@ -125,13 +125,33 @@ impl<'s, const N: usize> Runtime<'s, N> {
         data: &[u8],
         n_ops: u64,
         cycles: &C,
-        meter: Option<&mut dyn EnergyMeter>,
+        meter: Option<&mut (dyn EnergyMeter + '_)>,
     ) -> Option<Run> {
         // Copy out of the (immutable) substrate slice so the table can be
         // re-priced (mutable) without a borrow conflict.
         let sub = self.dispatch(primitive_id)?;
         let (id, f) = (sub.id, sub.run);
         let run = exec(id, f, primitive_id, data, n_ops, cycles, meter);
+        self.reprice(&run, n_ops);
+        Some(run)
+    }
+
+    /// Run a primitive on a **named** substrate (not the dispatched one),
+    /// priced + re-priced like [`run`]. Used for explicit control and as the
+    /// per-substrate step of a calibration sweep. `None` if no substrate with
+    /// that id is registered.
+    ///
+    /// [`run`]: Runtime::run
+    pub fn run_on<C: CycleSource>(
+        &mut self,
+        substrate_id: &str,
+        data: &[u8],
+        n_ops: u64,
+        cycles: &C,
+        meter: Option<&mut (dyn EnergyMeter + '_)>,
+    ) -> Option<Run> {
+        let sub = self.substrates.iter().find(|s| s.id == substrate_id)?;
+        let run = exec(sub.id, sub.run, sub.primitive_id, data, n_ops, cycles, meter);
         self.reprice(&run, n_ops);
         Some(run)
     }
@@ -149,7 +169,7 @@ impl<'s, const N: usize> Runtime<'s, N> {
         data: &[u8],
         n_ops: u64,
         cycles: &C,
-        mut meter: Option<&mut dyn EnergyMeter>,
+        mut meter: Option<&mut (dyn EnergyMeter + '_)>,
     ) -> usize {
         let subs = self.substrates; // slice ref is Copy → frees `self` for &mut
         let mut measured = 0;
