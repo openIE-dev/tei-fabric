@@ -218,8 +218,39 @@ next backend milestone — honest status, not a dead button).</div>
 
       </div>
 
-      <div id="ws-data" class="ws hidden"><div class="glass-card p-6 max-w-xl"><p class="section-label mb-2">data</p><p class="text-brand-gray text-[13px]">Board data capture &amp; analysis lands after the console's dataset export. The joule traces in CONSOLE are the first dataset.</p></div></div>
-      <div id="ws-fleet" class="ws hidden"><div class="glass-card p-6 max-w-xl"><p class="section-label mb-2">fleet</p><p class="text-brand-gray text-[13px]">Multi-board operations + OTA land after Improv WiFi provisioning — boards will POST ledgers home without a browser tether.</p></div></div>
+      <div id="ws-data" class="ws hidden">
+        <div class="glass-card p-6 space-y-5">
+          <div class="flex items-center justify-between">
+            <p class="section-label">data — capture &amp; analyse the full ledger stream (beyond joules)</p>
+            <div class="flex items-center gap-3">
+              <button id="btn-data-rec" class="font-mono text-[11px] tracking-wider px-3 py-1.5 rounded-lg border border-brand-amber/40 text-brand-amber hover:bg-brand-amber/10">● RECORD</button>
+              <button id="btn-data-export" class="font-mono text-[10px] text-brand-gray hover:text-brand-light underline decoration-dotted">export CSV</button>
+              <button id="btn-data-clear" class="font-mono text-[10px] text-brand-gray hover:text-brand-light underline decoration-dotted">clear</button>
+            </div>
+          </div>
+          <p class="text-brand-gray text-[12px] leading-relaxed">CONSOLE shows joules; DATA records every ledger field a board emits — cycles, DMA transfers, ADC samples, accel invocations, sleep/active µs — into a session you can analyse and export. Connect a board (or hit SIMULATE) in CONSOLE, then RECORD here.</p>
+          <div id="data-stats" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+          <div>
+            <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-2">per-substrate rollup</p>
+            <div id="data-rollup" class="font-mono text-[12px] text-brand-light overflow-x-auto">—</div>
+          </div>
+          <details>
+            <summary class="font-mono text-[10px] text-brand-gray uppercase tracking-wider cursor-pointer hover:text-brand-light">captured rows</summary>
+            <div id="data-rows" class="font-mono text-[11px] text-brand-light overflow-x-auto mt-2 max-h-80 overflow-y-auto">—</div>
+          </details>
+        </div>
+      </div>
+      <div id="ws-fleet" class="ws hidden">
+        <div class="glass-card p-6 space-y-5">
+          <div class="flex items-center justify-between">
+            <p class="section-label">fleet — the deployment roster</p>
+            <button id="btn-fleet-refresh" class="font-mono text-[10px] text-brand-gray hover:text-brand-light underline decoration-dotted">refresh</button>
+          </div>
+          <p class="text-brand-gray text-[12px] leading-relaxed">Every device that has published a ledger home, plus the board connected to this browser. <span class="text-brand-light">OTA push + remote provisioning arrive with the teiOS update agent</span> — today FLEET is the roster + a flash/update handoff.</p>
+          <div id="fleet-local"></div>
+          <div id="fleet-roster" class="grid grid-cols-1 md:grid-cols-2 gap-2">loading…</div>
+        </div>
+      </div>
 
       <div id="ws-ai" class="ws hidden">
         <div class="glass-card p-6 max-w-2xl">
@@ -463,6 +494,7 @@ function logLine(s, cls) {
 function handleLine(line) {
   line = line.trim(); if (!line) return;
   let m; try { m = JSON.parse(line); } catch { logLine(line); return; }
+  if (dataRec.on && m.type === 'ledger') dataCapture(m);
   if (m.type === 'ledger') {
     counts.ledger++;
     boardId = m.board_id || boardId;
@@ -756,6 +788,8 @@ function wsShow(name) {
   if (history.replaceState) history.replaceState(null, '', '#' + name);
   if (name === 'console') { resize(); }
   if (name === 'hub') hubLoad();
+  if (name === 'fleet') fleetLoad();
+  if (name === 'data') dataRender();
   if (name === 'board') boardPopulate().then(() => {
     const d = new URLSearchParams(location.search).get('d');
     if (d && !diagramApplied) { diagramApplied = true; diagramApply(d); } else boardLoad();
@@ -859,6 +893,85 @@ async function hubRawLoad() {
   } catch { el.innerHTML = '<span class="text-brand-gray">store unreachable.</span>'; }
 }
 $('btn-hub-refresh')?.addEventListener('click', hubLoad);
+
+// ── DATA: record the full ledger stream, roll it up, export ──────────
+const dataRec = { on: false, rows: [], started: 0 };
+function dataCapture(m) {
+  const L = m.ledger || {};
+  dataRec.rows.push({
+    ts: Date.now(), substrate: m.substrate || '?', primitive_id: m.primitive_id ?? '',
+    cycles: L.cycles ?? '', dma_transfers: L.dma_transfers ?? '', adc_samples: L.adc_samples ?? '',
+    accel_invocations: L.accel_invocations ?? '', sleep_us: L.sleep_us ?? '', active_us: L.active_us ?? '',
+    joules: L.joules ?? '', joules_source: L.joules_source ?? '',
+  });
+  if (dataRec.rows.length > 5000) dataRec.rows.shift();
+  if (!document.getElementById('ws-data').classList.contains('hidden')) dataRender();
+}
+function dataRender() {
+  const stats = $('data-stats'), roll = $('data-rollup'), rowsEl = $('data-rows');
+  if (!stats) return;
+  const n = dataRec.rows.length;
+  const subs = new Set(dataRec.rows.map(r => r.substrate));
+  const totJ = dataRec.rows.reduce((a, r) => a + (Number(r.joules) || 0), 0);
+  const stat = (v, l) => `<div class="bg-black/30 rounded-lg p-3"><div class="text-brand-white text-lg font-semibold">${v}</div><div class="text-brand-gray text-[10px] uppercase tracking-wider">${l}</div></div>`;
+  stats.innerHTML = stat(n, 'rows') + stat(subs.size, 'substrates') + stat(totJ ? totJ.toExponential(2)+' J' : '—', 'total joules') + stat(dataRec.on ? '● recording' : (n ? 'stopped' : 'idle'), 'state');
+  // per-substrate rollup
+  const agg = {};
+  for (const r of dataRec.rows) {
+    const a = agg[r.substrate] ||= { n: 0, cyc: 0, act: 0, j: 0 };
+    a.n++; a.cyc += Number(r.cycles)||0; a.act += Number(r.active_us)||0; a.j += Number(r.joules)||0;
+  }
+  const keys = Object.keys(agg);
+  roll.innerHTML = keys.length ? '<table class="w-full"><thead><tr class="text-brand-gray text-left"><th class="pr-4 pb-2">substrate</th><th class="pr-4 pb-2">runs</th><th class="pr-4 pb-2">Σ cycles</th><th class="pr-4 pb-2">Σ active µs</th><th class="pb-2">Σ joules</th></tr></thead><tbody>' +
+    keys.map(k => `<tr class="border-t border-white/5"><td class="pr-4 py-1 text-brand-amber">${k}</td><td class="pr-4 py-1">${agg[k].n}</td><td class="pr-4 py-1">${agg[k].cyc.toLocaleString()}</td><td class="pr-4 py-1">${agg[k].act.toLocaleString()}</td><td class="py-1">${agg[k].j ? agg[k].j.toExponential(2) : '—'}</td></tr>`).join('') + '</tbody></table>'
+    : '<span class="text-brand-gray">no rows captured — connect a board or SIMULATE in CONSOLE, then RECORD.</span>';
+  // recent rows (last 60)
+  const recent = dataRec.rows.slice(-60).reverse();
+  rowsEl.innerHTML = recent.length ? '<table class="w-full"><thead><tr class="text-brand-gray text-left"><th class="pr-3 pb-1">t</th><th class="pr-3 pb-1">substrate</th><th class="pr-3 pb-1">prim</th><th class="pr-3 pb-1">cycles</th><th class="pr-3 pb-1">dma</th><th class="pr-3 pb-1">adc</th><th class="pr-3 pb-1">accel</th><th class="pr-3 pb-1">sleep µs</th><th class="pr-3 pb-1">active µs</th><th class="pr-3 pb-1">J</th><th class="pb-1">src</th></tr></thead><tbody>' +
+    recent.map(r => `<tr class="border-t border-white/5"><td class="pr-3 py-0.5 text-brand-gray">${new Date(r.ts).toLocaleTimeString()}</td><td class="pr-3 py-0.5 text-brand-amber">${r.substrate}</td><td class="pr-3 py-0.5">${r.primitive_id}</td><td class="pr-3 py-0.5">${r.cycles}</td><td class="pr-3 py-0.5">${r.dma_transfers}</td><td class="pr-3 py-0.5">${r.adc_samples}</td><td class="pr-3 py-0.5">${r.accel_invocations}</td><td class="pr-3 py-0.5">${r.sleep_us}</td><td class="pr-3 py-0.5">${r.active_us}</td><td class="pr-3 py-0.5">${r.joules !== '' ? Number(r.joules).toExponential(2) : '—'}</td><td class="py-0.5 text-brand-gray">${r.joules_source}</td></tr>`).join('') + '</tbody></table>' : '<span class="text-brand-gray">—</span>';
+}
+$('btn-data-rec')?.addEventListener('click', () => {
+  dataRec.on = !dataRec.on;
+  if (dataRec.on && !dataRec.started) dataRec.started = Date.now();
+  $('btn-data-rec').textContent = dataRec.on ? '■ STOP' : '● RECORD';
+  $('btn-data-rec').classList.toggle('bg-brand-amber/10', dataRec.on);
+  dataRender();
+});
+$('btn-data-clear')?.addEventListener('click', () => { dataRec.rows = []; dataRec.started = dataRec.on ? Date.now() : 0; dataRender(); });
+$('btn-data-export')?.addEventListener('click', () => {
+  if (!dataRec.rows.length) return;
+  const cols = ['ts','substrate','primitive_id','cycles','dma_transfers','adc_samples','accel_invocations','sleep_us','active_us','joules','joules_source'];
+  const csv = [cols.join(',')].concat(dataRec.rows.map(r => cols.map(c => r[c]).join(','))).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = 'teios-ledger-capture.csv'; a.click();
+});
+
+// ── FLEET: deployment roster (reported devices + local connect) ──────
+async function fleetLoad() {
+  const rosterEl = $('fleet-roster'), localEl = $('fleet-local');
+  // local connected board (from CONSOLE's WebSerial state)
+  if (localEl) {
+    const connected = !!port || /simulated|connected/.test($('conn-state')?.textContent || '');
+    localEl.innerHTML = connected
+      ? `<div class="bg-brand-green/10 border border-brand-green/30 rounded-lg p-3 font-mono text-[12px]"><span class="text-brand-green">● this browser</span> — ${boardId || 'board'} · ${$('conn-state').textContent}</div>`
+      : `<div class="bg-black/30 rounded-lg p-3 font-mono text-[11px] text-brand-gray">no board connected to this browser — CONNECT in CONSOLE to drive one directly.</div>`;
+  }
+  let d;
+  try { d = await fetch(`${API_BASE}/api/fleet`).then(x => x.json()); }
+  catch { if (rosterEl) rosterEl.innerHTML = '<span class="text-brand-gray">fleet service unreachable.</span>'; return; }
+  if (!rosterEl) return;
+  if (!d.roster.length) { rosterEl.innerHTML = '<span class="text-brand-gray">no devices have reported yet — a board that POSTs a calibration report appears here.</span>'; return; }
+  rosterEl.innerHTML = d.roster.map(r => {
+    const flash = r.forge ? `<button onclick="__hubFlash('${r.board_id}', true)" class="text-brand-amber text-[10px] hover:underline shrink-0">update →</button>` : '';
+    const seen = r.last_seen_ms ? new Date(r.last_seen_ms).toLocaleString() : '—';
+    return `<div class="bg-black/30 rounded-lg p-3 flex flex-col gap-1">
+      <div class="flex items-center gap-2"><span class="text-brand-white text-[12px] truncate flex-1">${r.name || r.board_id}</span>${flash}</div>
+      <div class="text-brand-gray text-[10px] truncate">${r.chip || r.board_id} · ${r.reports} report${r.reports===1?'':'s'} · ${r.substrates.length} substrate${r.substrates.length===1?'':'s'}</div>
+      <div class="text-brand-light text-[10px] truncate">latest ${r.latest_j_per_op ? Number(r.latest_j_per_op).toExponential(2)+' J/op' : '—'} <span class="text-brand-gray">(${r.latest_source||'?'})</span> · seen ${seen}</div></div>`;
+  }).join('');
+}
+$('btn-fleet-refresh')?.addEventListener('click', fleetLoad);
 
 // ── BOARD: visual board view (chipdb-driven pinout + digital twin) ────
 let boardLoaded = null;

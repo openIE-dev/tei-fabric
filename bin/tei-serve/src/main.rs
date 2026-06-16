@@ -569,6 +569,102 @@ async fn get_hub(State(state): State<AppState>) -> Json<serde_json::Value> {
     }))
 }
 
+/// GET /api/fleet — the deployment roster that backs Studio's FLEET
+/// workspace: one entry per device (keyed by its reported `board_id`) that
+/// has published a ledger home, with canonical identity, last-seen,
+/// substrates exercised, report count, and latest J/op. Honest scope: a
+/// `board_id` is a board *type* today — per-unit identity + OTA push +
+/// remote provisioning arrive with the teiOS update agent (the runtime that
+/// doesn't exist yet). This is the roster of who has reported, built over
+/// the data that exists.
+async fn get_fleet(State(state): State<AppState>) -> Json<serde_json::Value> {
+    use std::collections::{BTreeSet, HashMap};
+    use tei_forge::ofpga_chipdb::boards as cb;
+
+    let forge_names: std::collections::HashSet<&'static str> = tei_forge::TARGETS
+        .iter()
+        .filter_map(|t| tei_forge::board_info(t.id).map(|b| b.name))
+        .collect();
+
+    struct Dev {
+        reports: usize,
+        substrates: BTreeSet<String>,
+        primitives: BTreeSet<u32>,
+        last_seen: u64,
+        latest_jop: f64,
+        latest_src: String,
+    }
+    let mut devs: HashMap<String, Dev> = HashMap::new();
+    if let Ok(content) = std::fs::read_to_string(state.reports_path.as_ref()) {
+        for line in content.lines() {
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+                continue;
+            };
+            let Some(bid) = v.get("board_id").and_then(|x| x.as_str()) else {
+                continue;
+            };
+            let ts = v.get("received_unix_ms").and_then(|x| x.as_u64()).unwrap_or(0);
+            let d = devs.entry(bid.to_string()).or_insert_with(|| Dev {
+                reports: 0,
+                substrates: BTreeSet::new(),
+                primitives: BTreeSet::new(),
+                last_seen: 0,
+                latest_jop: 0.0,
+                latest_src: String::new(),
+            });
+            d.reports += 1;
+            if let Some(s) = v.get("substrate").and_then(|x| x.as_str()) {
+                d.substrates.insert(s.to_string());
+            }
+            if let Some(p) = v.get("primitive_id").and_then(|x| x.as_u64()) {
+                d.primitives.insert(p as u32);
+            }
+            if ts >= d.last_seen {
+                d.last_seen = ts;
+                d.latest_jop = v.get("j_per_op").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                d.latest_src = v
+                    .get("ledger")
+                    .and_then(|l| l.get("joules_source"))
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("table")
+                    .to_string();
+            }
+        }
+    }
+
+    let mut roster: Vec<_> = devs
+        .into_iter()
+        .map(|(bid, d)| {
+            let b = cb::find_board(&bid);
+            serde_json::json!({
+                "board_id": bid,
+                "name": b.map(|b| b.name),
+                "chip": b.map(|b| b.fpga_device),
+                "energy_source": b.map(|b| cb::energy_source(b).tag()),
+                "forge": b.map(|b| forge_names.contains(b.name)).unwrap_or(false),
+                "reports": d.reports,
+                "substrates": d.substrates.into_iter().collect::<Vec<_>>(),
+                "primitives": d.primitives.into_iter().collect::<Vec<_>>(),
+                "last_seen_ms": d.last_seen,
+                "latest_j_per_op": d.latest_jop,
+                "latest_source": d.latest_src,
+            })
+        })
+        .collect();
+    // Newest activity first.
+    roster.sort_by(|a, b| {
+        b["last_seen_ms"]
+            .as_u64()
+            .unwrap_or(0)
+            .cmp(&a["last_seen_ms"].as_u64().unwrap_or(0))
+    });
+
+    Json(serde_json::json!({
+        "devices": roster.len(),
+        "roster": roster,
+    }))
+}
+
 async fn post_dispatch(
     State(state): State<AppState>,
     Json(req): Json<DispatchRequest>,
@@ -1035,6 +1131,7 @@ async fn main() -> anyhow::Result<()> {
             get(get_calibration_reports).post(post_calibration_report),
         )
         .route("/api/hub", get(get_hub))
+        .route("/api/fleet", get(get_fleet))
         .route("/api/forge/build", post(post_forge_build))
         .route("/api/forge/targets", get(get_forge_targets))
         .route("/api/forge/board", get(get_forge_board))
