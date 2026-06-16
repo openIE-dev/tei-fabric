@@ -230,12 +230,33 @@ next backend milestone — honest status, not a dead button).</div>
       </div>
 
       <div id="ws-hub" class="ws hidden">
-        <div class="glass-card p-6">
-          <div class="flex items-center justify-between mb-4">
-            <p class="section-label">hub — the community calibration store</p>
+        <div class="glass-card p-6 space-y-6">
+          <div class="flex items-center justify-between">
+            <p class="section-label">hub — what your workload costs on every board</p>
             <button id="btn-hub-refresh" class="font-mono text-[10px] text-brand-gray hover:text-brand-light underline decoration-dotted">refresh</button>
           </div>
-          <div id="hub-table" class="font-mono text-[12px] text-brand-light overflow-x-auto">loading…</div>
+
+          <!-- coverage odometer -->
+          <div id="hub-coverage" class="grid grid-cols-2 md:grid-cols-5 gap-3"></div>
+
+          <!-- cost surface: pick a primitive → rank boards by measured joules -->
+          <div>
+            <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-2">cost surface — pick a primitive, rank boards by measured joules</p>
+            <select id="hub-prim" class="w-full md:w-[28rem] bg-black/40 rounded-lg px-3 py-2 font-mono text-[12px] text-brand-white border border-white/10 mb-3"></select>
+            <div id="hub-ranking" class="font-mono text-[12px]">—</div>
+          </div>
+
+          <!-- board cards -->
+          <div>
+            <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider mb-2">boards in the registry — measurement path + flash</p>
+            <div id="hub-boards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">loading…</div>
+          </div>
+
+          <!-- raw feed -->
+          <details>
+            <summary class="font-mono text-[10px] text-brand-gray uppercase tracking-wider cursor-pointer hover:text-brand-light">recent measurements (raw)</summary>
+            <div id="hub-table" class="font-mono text-[12px] text-brand-light overflow-x-auto mt-2">—</div>
+          </details>
         </div>
       </div>
     </div>
@@ -747,9 +768,78 @@ document.getElementById('rail').addEventListener('click', e => {
 });
 $('btn-open-ck')?.addEventListener('click', () => ckShow());
 
-// ── HUB: the community store browser ─────────────────────────────────
+// ── HUB: the calibration hub — workload × board cost surface ─────────
+let hubData = null;
+const esColor = { external_shunt: '#f0883e', onboard_pmic: '#3b82f6', software: '#3fb950', accelerator: '#a371f7', none: '#8b949e' };
+function hubFlash(id, forge) {
+  // Forge-buildable → BUILD workspace with the board preselected; otherwise
+  // the FLASH catalog. Both reuse the existing workspaces.
+  if (forge) { const sel = $('build-target'); if (sel) sel.value = id; wsShow('build'); }
+  else wsShow('flash');
+}
+window.__hubFlash = hubFlash;
+
+function hubRenderRanking() {
+  const wrap = $('hub-ranking'); if (!wrap || !hubData) return;
+  const pid = Number($('hub-prim')?.value);
+  if (!pid) { wrap.innerHTML = '<span class="text-brand-gray">no primitive measured yet — publish a CONSOLE selection to seed the surface.</span>'; return; }
+  const boardsById = Object.fromEntries(hubData.boards.map(b => [b.name, b]));
+  const rows = hubData.cells.filter(c => c.primitive_id === pid)
+    .sort((a, b) => a.j_per_op - b.j_per_op);
+  if (!rows.length) { wrap.innerHTML = '<span class="text-brand-gray">no measurements for this primitive.</span>'; return; }
+  wrap.innerHTML = rows.map((c, i) => {
+    const b = boardsById[c.board] || {};
+    const flash = b.forge ? `<button onclick="__hubFlash('${b.id}', true)" class="text-brand-amber hover:underline">flash →</button>` : '<span class="text-brand-gray/50">—</span>';
+    return `<div class="flex items-center gap-3 py-1 border-t border-white/5">
+      <span class="text-brand-gray w-5">${i === 0 ? '🥇' : i + 1}</span>
+      <span class="text-brand-white flex-1 truncate">${c.board}</span>
+      <span class="text-brand-amber w-24 text-right">${Number(c.j_per_op).toExponential(2)} J</span>
+      <span class="w-28 text-brand-gray truncate" title="${c.source}">${c.substrate}</span>
+      <span class="w-16 text-right">${flash}</span></div>`;
+  }).join('');
+}
+
 async function hubLoad() {
-  const el = $('hub-table');
+  const boardsEl = $('hub-boards'), covEl = $('hub-coverage'), primSel = $('hub-prim');
+  try {
+    hubData = await fetch(`${API_BASE}/api/hub`).then(x => x.json());
+  } catch { if (boardsEl) boardsEl.innerHTML = '<span class="text-brand-gray">hub unreachable.</span>'; return; }
+  const c = hubData.coverage || {};
+  const stat = (n, label) => `<div class="bg-black/30 rounded-lg p-3"><div class="text-brand-white text-lg font-semibold">${n}</div><div class="text-brand-gray text-[10px] uppercase tracking-wider">${label}</div></div>`;
+  if (covEl) covEl.innerHTML =
+    stat(c.boards_total ?? 0, 'boards') + stat(c.forge_targets ?? 0, 'flashable') +
+    stat(c.boards_measured ?? 0, 'measured') + stat(c.primitives_measured ?? 0, 'primitives') +
+    stat(c.reports_total ?? 0, 'reports');
+
+  // primitive selector (only those with measurements)
+  if (primSel) {
+    if (!hubData.primitives.length) {
+      primSel.innerHTML = '<option value="">— no primitives measured yet —</option>';
+    } else {
+      primSel.innerHTML = hubData.primitives.map(p =>
+        `<option value="${p.id}">${p.name} · best ${Number(p.best_j_per_op).toExponential(2)} J on ${p.best_board}</option>`).join('');
+    }
+  }
+  hubRenderRanking();
+
+  // board cards (every registry board: measurement path + report count + flash)
+  if (boardsEl) boardsEl.innerHTML = hubData.boards.map(b => {
+    const dot = `<span class="inline-block w-2 h-2 rounded-full shrink-0" style="background:${esColor[b.energy_source] || '#8b949e'}"></span>`;
+    const flash = b.forge ? `<button onclick="__hubFlash('${b.id}', true)" class="text-brand-amber text-[10px] hover:underline shrink-0">flash →</button>` : '';
+    const meas = b.report_count ? `<span class="text-brand-green text-[10px]">${b.report_count} meas</span>` : '<span class="text-brand-gray/50 text-[10px]">no data</span>';
+    return `<div class="bg-black/30 rounded-lg p-3 flex flex-col gap-1">
+      <div class="flex items-center gap-2"><span class="text-brand-white text-[12px] truncate flex-1">${b.name}</span>${flash}</div>
+      <div class="text-brand-gray text-[10px] truncate">${b.chip} · ${b.category}</div>
+      <div class="flex items-center gap-2">${dot}<span class="text-brand-light text-[10px] truncate flex-1" title="${b.energy_how}">${b.energy_how}</span>${meas}</div></div>`;
+  }).join('');
+
+  // raw feed (collapsible)
+  hubRawLoad();
+}
+$('hub-prim')?.addEventListener('change', hubRenderRanking);
+
+async function hubRawLoad() {
+  const el = $('hub-table'); if (!el) return;
   try {
     const r = await fetch(`${API_BASE}/api/calibration/reports?limit=100`).then(x => x.json());
     if (!r.count) { el.innerHTML = '<span class="text-brand-gray">no community rows yet — publish one from a CONSOLE selection.</span>'; return; }

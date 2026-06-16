@@ -445,6 +445,130 @@ async fn get_calibration_reports(
     Json(serde_json::json!({ "count": out.len(), "reports": out }))
 }
 
+/// GET /api/hub — the calibration-hub aggregate that backs Studio's HUB
+/// workspace ("what does THIS workload cost on THIS board"). Joins every
+/// registry board (ofpga-chipdb) with the community calibration reports →
+/// per-(board, primitive) best measured J/op, a lowest-joule leaderboard per
+/// primitive, and coverage stats. Honest by construction: a cell exists only
+/// where a device actually measured; the rest is awaiting bench calibration.
+async fn get_hub(State(state): State<AppState>) -> Json<serde_json::Value> {
+    use std::collections::{HashMap, HashSet};
+    use tei_forge::ofpga_chipdb::boards as cb;
+
+    // A board is flashable if any of its aliases is a forge target.
+    let forge_names: HashSet<&'static str> = tei_forge::TARGETS
+        .iter()
+        .filter_map(|t| tei_forge::board_info(t.id).map(|b| b.name))
+        .collect();
+
+    // Aggregate the best (lowest) measured J/op per (canonical board, primitive).
+    // Device-reported board_id may be an alias → resolve to the canonical name.
+    let mut best: HashMap<(String, u32), (f64, String, String, u64)> = HashMap::new();
+    let mut reports_by_board: HashMap<String, usize> = HashMap::new();
+    let mut reports_total = 0usize;
+    if let Ok(content) = std::fs::read_to_string(state.reports_path.as_ref()) {
+        for line in content.lines() {
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+                continue;
+            };
+            let Some(bid) = v.get("board_id").and_then(|x| x.as_str()) else {
+                continue;
+            };
+            let jop = v.get("j_per_op").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            if !(jop.is_finite() && jop > 0.0) {
+                continue;
+            }
+            let canon = cb::find_board(bid)
+                .map(|b| b.name.to_string())
+                .unwrap_or_else(|| bid.to_string());
+            let prim = v.get("primitive_id").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+            let src = v
+                .get("ledger")
+                .and_then(|l| l.get("joules_source"))
+                .and_then(|x| x.as_str())
+                .unwrap_or("table")
+                .to_string();
+            let sub = v
+                .get("substrate")
+                .and_then(|x| x.as_str())
+                .unwrap_or("?")
+                .to_string();
+            let n = v.get("n_ops").and_then(|x| x.as_u64()).unwrap_or(0);
+            reports_total += 1;
+            *reports_by_board.entry(canon.clone()).or_insert(0) += 1;
+            let e = best
+                .entry((canon, prim))
+                .or_insert((f64::INFINITY, String::new(), String::new(), 0));
+            if jop < e.0 {
+                *e = (jop, src, sub, n);
+            }
+        }
+    }
+
+    // Board cards — every board in the single registry.
+    let boards: Vec<_> = cb::BOARDS
+        .iter()
+        .map(|b| {
+            let es = cb::energy_source(b);
+            serde_json::json!({
+                "id": b.aliases.first().copied().unwrap_or(b.name),
+                "name": b.name,
+                "vendor": b.vendor,
+                "chip": b.fpga_device,
+                "category": format!("{:?}", b.category),
+                "energy_source": es.tag(),
+                "energy_how": es.label(),
+                "forge": forge_names.contains(b.name),
+                "report_count": reports_by_board.get(b.name).copied().unwrap_or(0),
+            })
+        })
+        .collect();
+
+    // Cells + per-primitive leaderboard (lowest-joule board wins).
+    let mut cells = Vec::new();
+    let mut prim_best: HashMap<u32, (String, f64)> = HashMap::new();
+    for ((board, prim), (jop, src, sub, n)) in &best {
+        cells.push(serde_json::json!({
+            "board": board, "primitive_id": prim, "j_per_op": jop,
+            "source": src, "substrate": sub, "n_ops": n,
+        }));
+        let e = prim_best.entry(*prim).or_insert((board.clone(), f64::INFINITY));
+        if *jop < e.1 {
+            *e = (board.clone(), *jop);
+        }
+    }
+    let mut prim_ids: Vec<u32> = prim_best.keys().copied().collect();
+    prim_ids.sort_unstable();
+    let primitives: Vec<_> = prim_ids
+        .iter()
+        .map(|id| {
+            let (board, jop) = prim_best.get(id).unwrap();
+            let (name, family) = state
+                .stack
+                .get(*id)
+                .map(|p| (p.name.clone(), p.family.clone()))
+                .unwrap_or_else(|| (format!("primitive {id}"), String::new()));
+            serde_json::json!({
+                "id": id, "name": name, "family": family,
+                "best_board": board, "best_j_per_op": jop,
+            })
+        })
+        .collect();
+
+    Json(serde_json::json!({
+        "coverage": {
+            "boards_total": cb::BOARDS.len(),
+            "boards_measured": reports_by_board.len(),
+            "reports_total": reports_total,
+            "primitives_measured": prim_best.len(),
+            "forge_targets": forge_names.len(),
+        },
+        "boards": boards,
+        "primitives": primitives,
+        "cells": cells,
+    }))
+}
+
 async fn post_dispatch(
     State(state): State<AppState>,
     Json(req): Json<DispatchRequest>,
@@ -910,6 +1034,7 @@ async fn main() -> anyhow::Result<()> {
             "/api/calibration/reports",
             get(get_calibration_reports).post(post_calibration_report),
         )
+        .route("/api/hub", get(get_hub))
         .route("/api/forge/build", post(post_forge_build))
         .route("/api/forge/targets", get(get_forge_targets))
         .route("/api/forge/board", get(get_forge_board))
