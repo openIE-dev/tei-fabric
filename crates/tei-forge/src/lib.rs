@@ -275,6 +275,7 @@ pub const BENCH_BOARDS: &[&str] = &[
     "alchitry-au-v2",
     "alchitry-au-plus",
     "alchitry-pt-v2",
+    "alchitry-cu-v2",
 ];
 
 /// The chipdb board backing a forge target — the canonical identity
