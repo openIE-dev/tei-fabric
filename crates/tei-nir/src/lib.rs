@@ -39,6 +39,9 @@ use std::collections::BTreeMap;
 mod nir;
 pub use nir::{classify, lower, NirGraph, NirKind, NirNode};
 
+mod price;
+pub use price::{price, EnergyEstimate, NeuroCost, Provenance};
+
 #[cfg(feature = "hdf5")]
 mod hdf5_reader;
 #[cfg(feature = "hdf5")]
