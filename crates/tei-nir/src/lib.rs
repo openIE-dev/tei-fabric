@@ -39,6 +39,11 @@ use std::collections::BTreeMap;
 mod nir;
 pub use nir::{classify, lower, NirGraph, NirKind, NirNode};
 
+#[cfg(feature = "hdf5")]
+mod hdf5_reader;
+#[cfg(feature = "hdf5")]
+pub use hdf5_reader::from_hdf5;
+
 /// A node: one neuron population (or layer), with its neuron count.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Population {

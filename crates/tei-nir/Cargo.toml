@@ -9,8 +9,18 @@ license = "MIT OR Apache-2.0"
 name = "tei_nir"
 path = "src/lib.rs"
 
+[features]
+# Read real .nir files (NIR's reference HDF5 format). Optional + off by
+# default so the core crate (and the workspace build) never needs libhdf5;
+# `--features hdf5` pulls the maintained hdf5-metno crate (binds libhdf5).
+hdf5 = ["dep:hdf5-metno"]
+
 [dependencies]
-# NIR ingest reads the graph model from its JSON projection (the HDF5 reader
-# is a thin follow-on adapter producing the same NirGraph).
+# NIR ingest reads the graph model from its JSON projection; the optional
+# `hdf5` feature adds a reader for NIR's reference HDF5 format → same NirGraph.
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# `static` builds a pinned HDF5 1.14 from source (cmake), so the feature is
+# self-contained — no system libhdf5, and immune to the brew HDF5-2.x version
+# the crate doesn't yet parse.
+hdf5-metno = { version = "0.10", optional = true, features = ["static"] }
