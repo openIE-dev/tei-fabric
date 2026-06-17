@@ -20,6 +20,7 @@ members = [
     "crates/embedded/tei-embassy",
     "crates/tei-stack",
     "crates/tei-ir",
+    "crates/tei-nir",
     "crates/tei-substrate-traits",
     "crates/tei-d-baseline",
     "crates/tei-d-photonic",

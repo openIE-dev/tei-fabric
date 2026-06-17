@@ -1,0 +1,12 @@
+[package]
+name = "tei-nir"
+version = "0.1.0"
+edition = "2021"
+description = "Deterministic, attested place-and-route for spiking-neural graphs (NIR-shaped) onto a neuromorphic chip's cores. The piece the neuromorphic toolchain is missing: today's mapping is slow non-deterministic Python heuristics that forfeit the silicon's advantage; this is a reproducible, energy-priceable Rust solver — same graph + target → byte-identical placement + checksum. Host-side compiler tooling (like tei-cost-surface), not firmware."
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "tei_nir"
+path = "src/lib.rs"
+
+[dependencies]
