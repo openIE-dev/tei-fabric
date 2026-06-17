@@ -55,6 +55,7 @@ authors = ["Thermodynamic Edge Intelligence Corp."]
 # Workspace crates
 tei-stack = { path = "crates/tei-stack" }
 tei-ir = { path = "crates/tei-ir" }
+tei-nir = { path = "crates/tei-nir" }
 tei-substrate-traits = { path = "crates/tei-substrate-traits" }
 tei-d-baseline = { path = "crates/tei-d-baseline" }
 tei-d-photonic = { path = "crates/tei-d-photonic" }

@@ -10,6 +10,7 @@ description = "Neuromorphic substrate dialect — LIF spike-event physics calibr
 [dependencies]
 tei-stack.workspace = true
 tei-ir.workspace = true
+tei-nir.workspace = true
 tei-substrate-traits.workspace = true
 serde.workspace = true
 

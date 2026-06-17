@@ -80,6 +80,12 @@ const TIMESTEPS_PER_SEC: f64 = 1.0e4;
 /// `sparsity` at the dense default.
 pub const DEFAULT_ACTIVITY: f64 = 0.1;
 
+/// Cross-core spike-routing energy premium for placement pricing: a spike that
+/// crosses a core boundary traverses the mesh, costing more than a local
+/// synaptic op. Illustrative mesh-hop default (Loihi-class), NOT a measured
+/// constant — the routing cost the deterministic mapper exists to minimize.
+pub const NIR_ROUTE_FACTOR: f64 = 4.0;
+
 /// Catalog primitive ID for STDP (NEURO family) — the only primitive that
 /// pays the plasticity term. LIF (id 50) and future NEURO additions route
 /// through the same SOP + membrane-update model.
@@ -100,6 +106,24 @@ impl Neuromorphic {
 
     pub fn with_params(stack: Arc<Stack>, params: NeuromorphicParams) -> Self {
         Self { stack, params }
+    }
+
+    /// Bridge this substrate's first-principles per-event physics into the
+    /// graph-level placement cost `tei-nir` prices with, so a *placed* SNN and
+    /// a per-primitive dispatch agree on the fundamental energy quanta:
+    /// `sop_j → e_synop_j`, `neuron_update_j → e_neuron_j`, and the default
+    /// activity → spikes/neuron (synops = activity × total_synapses in both
+    /// models). The cross-core route premium is a placement concept the per-op
+    /// model doesn't carry; [`NIR_ROUTE_FACTOR`] is a documented mesh-hop
+    /// default, not a measured constant. Literature constants ⇒ Table tier.
+    pub fn nir_cost(&self) -> tei_nir::NeuroCost {
+        tei_nir::NeuroCost {
+            e_neuron_j: self.params.neuron_update_j,
+            e_synop_j: self.params.sop_j,
+            route_factor: NIR_ROUTE_FACTOR,
+            spikes_per_neuron: DEFAULT_ACTIVITY,
+            source: tei_nir::Provenance::Table,
+        }
     }
 
     fn snn_energy(&self, primitive: &Primitive, profile: &OpProfile) -> Cost {

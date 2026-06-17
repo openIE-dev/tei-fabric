@@ -451,6 +451,68 @@ async fn get_calibration_reports(
 /// per-(board, primitive) best measured J/op, a lowest-joule leaderboard per
 /// primitive, and coverage stats. Honest by construction: a cell exists only
 /// where a device actually measured; the rest is awaiting bench calibration.
+/// Body for [`post_nir_price`].
+#[derive(Deserialize)]
+struct NirPriceRequest {
+    /// The NIR graph (JSON projection: `{nodes:{...}, edges:[...]}`).
+    graph: serde_json::Value,
+    /// Target core count (default 8).
+    #[serde(default)]
+    cores: Option<usize>,
+    /// Per-core neuron capacity (default 1024).
+    #[serde(default)]
+    neurons_per_core: Option<u32>,
+}
+
+/// POST /api/nir/price — map a spiking-neural (NIR) graph onto a neuromorphic
+/// target and price the placement in joules. The cross-crate hookup: tei-nir's
+/// deterministic, attested place-and-route + the `neuromorphic` substrate's
+/// first-principles energy constants (one cost model), so a placed SNN is
+/// priced in the same joules as everything else on the cost surface. A worse
+/// mapping (more cross-core spike routing) prices higher.
+///
+/// Body: `{ graph: <NIR JSON>, cores?: u32, neurons_per_core?: u32 }`.
+async fn post_nir_price(
+    State(state): State<AppState>,
+    Json(req): Json<NirPriceRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let graph = tei_nir::NirGraph::from_json(&req.graph.to_string())
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("NIR parse: {e}")))?;
+    let sg = tei_nir::lower(&graph);
+    let target = tei_nir::Target {
+        cores: req.cores.unwrap_or(8).max(1),
+        neurons_per_core: req.neurons_per_core.unwrap_or(1024),
+    };
+    let placement = tei_nir::place(&sg, &target);
+    // One energy model: the neuromorphic substrate's calibrated per-event
+    // physics, exposed as the placement-pricing cost.
+    let cost = tei_d_neuromorphic::Neuromorphic::new(state.stack.clone()).nir_cost();
+    let est = tei_nir::price(&sg, &placement, &cost);
+    Ok(Json(serde_json::json!({
+        "joules_per_inference": est.joules,
+        "neuron_updates": est.neuron_updates,
+        "synops": est.synops,
+        "cross_core_synops": est.cross_core_synops,
+        "source": format!("{:?}", est.source),
+        "placement": {
+            "populations": sg.populations.len(),
+            "connections": sg.connections.len(),
+            "per_core_neurons": placement.per_core_neurons,
+            "cross_core_synapses": placement.cross_core_synapses,
+            "overflowed": placement.overflowed,
+            "checksum": format!("{:016x}", placement.checksum),
+        },
+        "target": { "cores": target.cores, "neurons_per_core": target.neurons_per_core },
+        "energy_model": {
+            "substrate": "neuromorphic",
+            "e_synop_j": cost.e_synop_j,
+            "e_neuron_j": cost.e_neuron_j,
+            "route_factor": cost.route_factor,
+            "spikes_per_neuron": cost.spikes_per_neuron,
+        },
+    })))
+}
+
 async fn get_hub(State(state): State<AppState>) -> Json<serde_json::Value> {
     use std::collections::{HashMap, HashSet};
     use tei_forge::ofpga_chipdb::boards as cb;
@@ -1131,6 +1193,7 @@ async fn main() -> anyhow::Result<()> {
             get(get_calibration_reports).post(post_calibration_report),
         )
         .route("/api/hub", get(get_hub))
+        .route("/api/nir/price", post(post_nir_price))
         .route("/api/fleet", get(get_fleet))
         .route("/api/forge/build", post(post_forge_build))
         .route("/api/forge/targets", get(get_forge_targets))
