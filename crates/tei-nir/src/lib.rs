@@ -36,6 +36,9 @@
 
 use std::collections::BTreeMap;
 
+mod nir;
+pub use nir::{classify, lower, NirGraph, NirKind, NirNode};
+
 /// A node: one neuron population (or layer), with its neuron count.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Population {

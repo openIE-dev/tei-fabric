@@ -10,3 +10,7 @@ name = "tei_nir"
 path = "src/lib.rs"
 
 [dependencies]
+# NIR ingest reads the graph model from its JSON projection (the HDF5 reader
+# is a thin follow-on adapter producing the same NirGraph).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
