@@ -9,10 +9,18 @@ license = "MIT OR Apache-2.0"
 name = "tei_meter"
 path = "src/lib.rs"
 
+[features]
+# Pulls nvml-wrapper for the NVIDIA GPU measured tier. Off by default so the
+# normal (Mac/CI) build never links it; enable on GPU hosts.
+nvml = ["dep:nvml-wrapper"]
+
 [dependencies]
 serde = { workspace = true }
 # Parses macmon's `pipe` JSON (all_power) for the Measured tier.
 serde_json = { workspace = true }
+# NVIDIA GPU energy counter (optional). dlopen-based: compiles everywhere,
+# only does anything where libnvidia-ml is present.
+nvml-wrapper = { version = "0.10", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # `getloadavg(3)` for the Apple-Silicon load→watts estimate. Host-only; never

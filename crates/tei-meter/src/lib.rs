@@ -35,7 +35,9 @@
 //! (`all_power`, the IOReport SoC power) — sudoless, no extra privileges.
 
 pub mod correction;
+pub mod linux;
 pub use correction::{Correction, CorrectionMethod, TargetEstimate, fpga_to_asic_default};
+pub use linux::{NvmlMeter, RaplMeter};
 
 use serde::Serialize;
 use std::io::{BufRead, BufReader};
@@ -421,6 +423,7 @@ impl HostMeter for FixedWattsMeter {
 /// nothing, so the runtime always emits a labeled receipt. Call [`prewarm`]
 /// at startup so macmon is warm by the first request.
 pub fn detect_meter() -> Box<dyn HostMeter + Send + Sync> {
+    // macOS: macmon (once warm) → Apple-Silicon load model.
     if cfg!(target_os = "macos") && MacmonMeter::probe() {
         let _ = sampler();
         if macmon_warm() {
@@ -431,6 +434,15 @@ pub fn detect_meter() -> Box<dyn HostMeter + Send + Sync> {
     let apple = AppleSiliconMeter::new();
     if apple.available() {
         return Box::new(apple);
+    }
+    // GPU / Linux hosts: NVIDIA GPU energy (compute-dominant) → CPU RAPL.
+    let nvml = NvmlMeter::new();
+    if nvml.available() {
+        return Box::new(nvml);
+    }
+    let rapl = RaplMeter::new();
+    if rapl.available() {
+        return Box::new(rapl);
     }
     Box::new(FixedWattsMeter::new(25.0))
 }
