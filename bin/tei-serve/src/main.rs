@@ -1267,6 +1267,15 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
+    // Start the macmon energy sampler now so the Measured tier is warm
+    // (~3 s) before the first /api/cloud/run. No-op where macmon is absent.
+    tei_meter::prewarm();
+    if tei_meter::MacmonMeter::probe() {
+        info!("macmon present — host energy meter warming to Measured tier");
+    } else {
+        info!("macmon absent — host energy meter using Estimated tier");
+    }
+
     let stack_path =
         std::env::var("STACK_JSON_PATH").unwrap_or_else(|_| "data/stack.json".to_string());
     let stack = Stack::load_from_path(&stack_path)?;

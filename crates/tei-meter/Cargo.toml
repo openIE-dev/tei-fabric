@@ -11,8 +11,7 @@ path = "src/lib.rs"
 
 [dependencies]
 serde = { workspace = true }
-
-[dev-dependencies]
+# Parses macmon's `pipe` JSON (all_power) for the Measured tier.
 serde_json = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]

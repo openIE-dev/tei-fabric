@@ -182,7 +182,8 @@ function renderLadder(d) {
     `<span class="text-brand-gray">host</span><span class="text-right">${h.identity.name}</span>` +
     `<span class="text-brand-gray">avg power</span><span class="text-right">${h.avg_watts.toPrecision(3)} W</span>` +
     `<span class="text-brand-gray">duration</span><span class="text-right">${(h.duration_s * 1000).toPrecision(3)} ms</span>` +
-    `<span class="text-brand-gray">acquisition</span><span class="text-right">${h.acquisition}</span>`;
+    `<span class="text-brand-gray">acquisition</span><span class="text-right">${h.acquisition} · ${h.meter}</span>` +
+    `<span class="text-brand-gray">power samples</span><span class="text-right">${h.samples > 0 ? h.samples + ' integrated' : 'point estimate'}</span>`;
 
   $('honest').textContent = d.note;
   $('result-extra').style.display = 'block';
