@@ -23,6 +23,7 @@ import Layout from '../layouts/Layout.astro';
       <button data-ws="ai"      class="ws-btn">AI</button>
       <button data-ws="fleet"   class="ws-btn ws-soon">FLEET</button>
       <button data-ws="hub"     class="ws-btn">HUB</button>
+      <button data-ws="nir"     class="ws-btn">NIR</button>
     </nav>
 
     <div class="flex-1 min-w-0">
@@ -288,6 +289,25 @@ next backend milestone — honest status, not a dead button).</div>
             <summary class="font-mono text-[10px] text-brand-gray uppercase tracking-wider cursor-pointer hover:text-brand-light">recent measurements (raw)</summary>
             <div id="hub-table" class="font-mono text-[12px] text-brand-light overflow-x-auto mt-2">—</div>
           </details>
+        </div>
+      </div>
+
+      <div id="ws-nir" class="ws hidden">
+        <div class="glass-card p-6 space-y-5">
+          <p class="section-label">nir — map a spiking model onto a neuromorphic target, priced in joules</p>
+          <p class="text-brand-gray text-[12px] leading-relaxed">Paste an NIR graph (the hardware-agnostic spiking-NN IR). teiOS lowers it, deterministically places it on the target's cores, and prices the placement in joules through the neuromorphic substrate's energy model — the cross-core spike routing the mapper minimizes shows up as joules. Same graph + target → same attested checksum.</p>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="space-y-3">
+              <p class="font-mono text-[10px] text-brand-gray uppercase tracking-wider">NIR graph (JSON)</p>
+              <textarea id="nir-input" spellcheck="false" class="w-full h-64 bg-black/40 rounded-lg p-3 font-mono text-[11px] text-brand-light border border-white/10 leading-snug"></textarea>
+              <div class="flex items-center gap-3 flex-wrap">
+                <label class="font-mono text-[10px] text-brand-gray">cores <input id="nir-cores" type="number" value="4" min="1" class="w-16 bg-black/40 rounded px-2 py-1 text-brand-white border border-white/10 ml-1" /></label>
+                <label class="font-mono text-[10px] text-brand-gray">neurons/core <input id="nir-npc" type="number" value="64" min="1" class="w-20 bg-black/40 rounded px-2 py-1 text-brand-white border border-white/10 ml-1" /></label>
+                <button id="btn-nir-map" class="primary">MAP &amp; PRICE →</button>
+              </div>
+            </div>
+            <div id="nir-out" class="font-mono text-[12px] text-brand-light">map a graph to see its placement + joules.</div>
+          </div>
         </div>
       </div>
     </div>
@@ -805,7 +825,7 @@ window.addEventListener('keydown', e => {
 });
 
 // ── workspaces: the rail IS the IDE ──────────────────────────────────
-const WS = ['code','board','build','flash','console','data','ai','fleet','hub'];
+const WS = ['code','board','build','flash','console','data','ai','fleet','hub','nir'];
 function wsShow(name) {
   if (!WS.includes(name)) name = 'console';
   for (const w of WS) {
@@ -817,6 +837,7 @@ function wsShow(name) {
   if (name === 'hub') hubLoad();
   if (name === 'fleet') fleetLoad();
   if (name === 'data') dataRender();
+  if (name === 'nir') nirInit();
   if (name === 'board') boardPopulate().then(() => {
     const d = new URLSearchParams(location.search).get('d');
     if (d && !diagramApplied) { diagramApplied = true; diagramApply(d); } else boardLoad();
@@ -920,6 +941,65 @@ async function hubRawLoad() {
   } catch { el.innerHTML = '<span class="text-brand-gray">store unreachable.</span>'; }
 }
 $('btn-hub-refresh')?.addEventListener('click', hubLoad);
+
+// ── NIR: map a spiking model onto a neuromorphic target, priced ──────
+const NIR_EXAMPLE = JSON.stringify({
+  nodes: {
+    in:   { type: "Input",  shape: [2] },
+    fc1:  { type: "Affine", weight_shape: [64, 2] },
+    lif1: { type: "LIF",    shape: [64] },
+    fc2:  { type: "Affine", weight_shape: [64, 64] },
+    lif2: { type: "LIF",    shape: [64] },
+    out:  { type: "Output", shape: [64] }
+  },
+  edges: [["in","fc1"],["fc1","lif1"],["lif1","fc2"],["fc2","lif2"],["lif2","out"]]
+}, null, 2);
+
+function nirInit() {
+  const ta = $('nir-input');
+  if (ta && !ta.value.trim()) ta.value = NIR_EXAMPLE;
+}
+
+$('btn-nir-map')?.addEventListener('click', async () => {
+  const out = $('nir-out');
+  let graph;
+  try { graph = JSON.parse($('nir-input').value); }
+  catch (e) { out.innerHTML = `<span class="text-red-400">JSON parse error: ${e.message}</span>`; return; }
+  const cores = parseInt($('nir-cores').value) || 1;
+  const neurons_per_core = parseInt($('nir-npc').value) || 1024;
+  out.textContent = 'mapping…';
+  try {
+    const r = await fetch(`${API_BASE}/api/nir/price`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ graph, cores, neurons_per_core }),
+    });
+    if (!r.ok) { out.innerHTML = `<span class="text-red-400">${r.status}: ${(await r.text()).slice(0,200)}</span>`; return; }
+    const d = await r.json();
+    const J = Number(d.joules_per_inference);
+    const pretty = J < 1e-6 ? (J*1e9).toFixed(2)+' nJ' : J < 1e-3 ? (J*1e6).toFixed(2)+' µJ' : (J*1e3).toFixed(3)+' mJ';
+    const pc = (d.placement.per_core_neurons||[]).map((n,i)=>`<span class="inline-block bg-black/30 rounded px-2 py-0.5 mr-1 mb-1">core ${i}: ${n}</span>`).join('');
+    const em = d.energy_model || {};
+    const stat = (v,l)=>`<div class="bg-black/30 rounded-lg p-3"><div class="text-brand-white text-lg font-semibold">${v}</div><div class="text-brand-gray text-[10px] uppercase tracking-wider">${l}</div></div>`;
+    out.innerHTML =
+      `<div class="grid grid-cols-2 gap-3 mb-4">
+        ${stat(pretty+'/inf', 'joules')}
+        ${stat(d.cross_core_synops, 'cross-core synops')}
+        ${stat(d.synops, 'total synops')}
+        ${stat(d.neuron_updates, 'neuron updates')}
+      </div>
+      <p class="text-brand-gray text-[10px] uppercase tracking-wider mb-1">placement (${d.placement.populations} pops · ${d.placement.connections} edges)</p>
+      <div class="mb-2">${pc || '—'}</div>
+      <div class="text-brand-light text-[11px] mb-3">
+        cross-core synapses: <span class="text-brand-amber">${d.placement.cross_core_synapses}</span>${d.placement.overflowed ? ' · <span class="text-red-400">OVERFLOW (graph exceeds total core capacity)</span>' : ''}<br/>
+        attested checksum: <span class="text-brand-gray">${d.placement.checksum}</span>
+      </div>
+      <details class="text-[10px] text-brand-gray">
+        <summary class="cursor-pointer hover:text-brand-light uppercase tracking-wider">energy model · provenance ${d.source}</summary>
+        <div class="mt-1">neuromorphic substrate · e_synop ${Number(em.e_synop_j).toExponential(1)} J · e_neuron ${Number(em.e_neuron_j).toExponential(1)} J · route ×${em.route_factor} · ${em.spikes_per_neuron} spk/neuron.
+        <span class="text-brand-light">${d.source}</span>-tier (first-principles constants); a dev-kit measurement flips it to Measured.</div>
+      </details>`;
+  } catch (e) { out.innerHTML = `<span class="text-red-400">fabric unreachable: ${e?.message || e}</span>`; }
+});
 
 // ── DATA: record the full ledger stream, roll it up, export ──────────
 const dataRec = { on: false, rows: [], started: 0 };
