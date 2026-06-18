@@ -21,6 +21,7 @@ members = [
     "crates/tei-stack",
     "crates/tei-ir",
     "crates/tei-nir",
+    "crates/tei-meter",
     "crates/tei-substrate-traits",
     "crates/tei-d-baseline",
     "crates/tei-d-photonic",
@@ -56,6 +57,7 @@ authors = ["Thermodynamic Edge Intelligence Corp."]
 tei-stack = { path = "crates/tei-stack" }
 tei-ir = { path = "crates/tei-ir" }
 tei-nir = { path = "crates/tei-nir" }
+tei-meter = { path = "crates/tei-meter" }
 tei-substrate-traits = { path = "crates/tei-substrate-traits" }
 tei-d-baseline = { path = "crates/tei-d-baseline" }
 tei-d-photonic = { path = "crates/tei-d-photonic" }

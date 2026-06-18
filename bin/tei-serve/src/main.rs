@@ -926,6 +926,173 @@ async fn post_execute(
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
+/// A human label for the machine tei-serve runs on. `TEI_HOST_NAME` overrides;
+/// otherwise derived from the active meter (Apple Silicon → Mac Studio).
+fn host_label(meter: &(dyn tei_meter::HostMeter + Send + Sync)) -> String {
+    if let Ok(name) = std::env::var("TEI_HOST_NAME") {
+        return name;
+    }
+    match meter.name() {
+        "apple-silicon" => "Apple Mac Studio (Apple Silicon)".to_string(),
+        other => format!("server host ({other})"),
+    }
+}
+
+/// Run one executor (the *real CPU work*) wrapped in the host energy meter.
+fn measured_exec<E: tei_sim_core::exec::Executor>(
+    meter: &(dyn tei_meter::HostMeter + Send + Sync),
+    host: String,
+    exec: E,
+    job: &E::Job,
+) -> (tei_sim_core::exec::ExecutionResult, tei_meter::RunReceipt) {
+    let mut noop = |_p: tei_sim_core::exec::Progress| {};
+    tei_meter::measure_run(meter, host, || exec.execute(job, &mut noop))
+}
+
+/// f64 field out of an optional calibration block.
+fn calib_f64(calib: &Option<serde_json::Value>, key: &str) -> Option<f64> {
+    calib.as_ref()?.get(key)?.as_f64()
+}
+
+/// POST /api/cloud/run — the cloud runtime over a *real* host.
+///
+/// Runs a workload through a native simulator — real CPU work on the machine
+/// tei-serve runs on (today the prod Mac Studio) — and returns a **three-tier
+/// energy ladder**, each rung labeled with its provenance so they can never be
+/// conflated:
+///
+/// - `model.cost_surface_j` — what dispatch *predicted* on the target
+///   substrate (cost-surface dialect constants). **Modeled × Target.**
+/// - `model.simulated_j` — the simulator's own energy: real event counts
+///   (spikes/MACs/flips…) priced by the dialect's per-event joules.
+///   **Simulated × Target.** Tighter than the prediction, still not silicon.
+/// - `host.host_joules` — the **real** energy *this machine* burned running the
+///   simulation. **Estimated × StandIn** on Apple Silicon (load→watts;
+///   `Measured` once IOReport/PMC lands). A real number from a stand-in.
+///
+/// This is the seam every future backend plugs into: swap the host meter +
+/// stand-in identity (rented FPGA, specialized-fabric cloud, real TEI silicon)
+/// and the same response shape carries the honest tier.
+async fn post_cloud_run(
+    State(state): State<AppState>,
+    Json(req): Json<ExecuteRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let stack = state.stack.clone();
+    let subs = state.substrates.clone();
+
+    let value = tokio::task::spawn_blocking(move || {
+        let meter = tei_meter::detect_meter();
+        let m = meter.as_ref();
+        let host = host_label(m);
+
+        // Each arm: derive the dialect-pricing args, run the metered execution,
+        // then price the resulting ledger with the dialect (calib::*).
+        let (substrate, result, calib, receipt): (
+            &'static str,
+            tei_sim_core::exec::ExecutionResult,
+            Option<serde_json::Value>,
+            tei_meter::RunReceipt,
+        ) = match req {
+            ExecuteRequest::Stochastic(job) => {
+                use tei_sim_stochastic::maxcut::ProblemSpec;
+                let variables = match &job.problem {
+                    ProblemSpec::Complete { n }
+                    | ProblemSpec::Cycle { n }
+                    | ProblemSpec::RandomRegular { n, .. } => *n,
+                    ProblemSpec::CompleteBipartite { a, b } => a + b,
+                    ProblemSpec::Petersen => 10,
+                };
+                let sweeps = job.schedule.sweeps;
+                let (r, rc) = measured_exec(m, host, tei_sim_stochastic::StochasticExecutor, &job);
+                let c = calib::stochastic(&stack, &subs, sweeps, variables, &r.ledger);
+                ("stochastic", r, c, rc)
+            }
+            ExecuteRequest::Spiking(job) => {
+                let neurons: u64 = job.layers.iter().map(|l| l.n as u64).sum();
+                let timesteps = (job.duration / job.dt).round() as u64;
+                let (r, rc) = measured_exec(m, host, tei_sim_spiking::SpikingExecutor, &job);
+                let c = r
+                    .outputs
+                    .get("n_synapses")
+                    .and_then(|v| v.as_u64())
+                    .and_then(|n_syn| {
+                        calib::spiking(&stack, &subs, neurons, timesteps, n_syn, &r.ledger)
+                    });
+                ("spiking", r, c, rc)
+            }
+            ExecuteRequest::Crossbar(job) => {
+                let (rows, cols, n_queries) = (job.rows, job.cols, job.n_queries);
+                let (r, rc) = measured_exec(m, host, tei_sim_crossbar::CrossbarExecutor, &job);
+                let c = calib::crossbar(&stack, &subs, rows, cols, n_queries, &r.ledger);
+                ("crossbar", r, c, rc)
+            }
+            ExecuteRequest::Photonic(job) => {
+                let (n, n_queries) = (job.n, job.n_queries);
+                let (r, rc) = measured_exec(m, host, tei_sim_photonic::PhotonicExecutor, &job);
+                let c = calib::photonic(&stack, &subs, n, n_queries, &r.ledger);
+                ("photonic", r, c, rc)
+            }
+            ExecuteRequest::Gaussian(job) => {
+                let (r, rc) = measured_exec(m, host, tei_sim_gaussian::GaussianExecutor, &job);
+                ("gaussian", r, None, rc)
+            }
+            ExecuteRequest::Circuit(job) => {
+                let (r, rc) = measured_exec(m, host, tei_sim_circuit::CircuitExecutor, &job);
+                ("circuit", r, None, rc)
+            }
+            ExecuteRequest::Field(job) => {
+                let (r, rc) = measured_exec(m, host, tei_sim_field::FieldExecutor, &job);
+                ("field", r, None, rc)
+            }
+            ExecuteRequest::Field3(job) => {
+                let (r, rc) = measured_exec(m, host, tei_sim_field::Field3Executor, &job);
+                ("field3", r, None, rc)
+            }
+            ExecuteRequest::Adiabatic(job) => {
+                let (r, rc) = measured_exec(m, host, tei_sim_adiabatic::AdiabaticExecutor, &job);
+                let c = calib::adiabatic(&r.outputs);
+                ("adiabatic", r, c, rc)
+            }
+            ExecuteRequest::Mnist(job) => {
+                let (r, rc) = measured_exec(m, host, tei_sim_crossbar::mnist::MnistExecutor, &job);
+                let c = calib::mnist_accuracy(&r.outputs);
+                ("mnist", r, c, rc)
+            }
+        };
+
+        // Cost-surface prediction vs simulator event-count pricing. For the
+        // circuit column the raw ledger carries a real ∫i·v figure even with
+        // no calib block, so fall back to it for `simulated_j`.
+        let cost_surface_j = calib_f64(&calib, "estimated_j");
+        let simulated_j = calib_f64(&calib, "measured_j")
+            .or(if result.ledger.joules > 0.0 { Some(result.ledger.joules) } else { None });
+
+        serde_json::json!({
+            "substrate": substrate,
+            "model": {
+                "target": substrate,
+                "cost_surface_j": cost_surface_j,   // Modeled × Target
+                "simulated_j": simulated_j,         // Simulated × Target
+                "calibration": calib,               // full assumed-vs-measured block
+                "outputs": result.outputs,
+            },
+            "host": serde_json::to_value(&receipt).unwrap_or_default(),
+            "note": "Three energy tiers, do not conflate: model.cost_surface_j \
+                     is the dispatch PREDICTION on the target substrate \
+                     (modeled). model.simulated_j is the simulator's own energy \
+                     from real event counts priced by dialect constants \
+                     (simulated, still not silicon). host.host_joules is the \
+                     REAL energy THIS machine burned running the simulation, \
+                     attributed to the stand-in host (estimated on Apple \
+                     Silicon). The host figure estimates the target only after \
+                     a characterized stand-in→target correction.",
+        })
+    })
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(value))
+}
+
 /// Pack a FieldJob into the exact f32 buffers the F4 WGSL kernels expect.
 /// The browser WebGPU driver uploads these verbatim — the packing math
 /// (CPML tables, ce = dt/ε, per-step source amplitudes) stays in Rust.
@@ -1202,6 +1369,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/forge/artifact", get(get_forge_artifact))
         .route("/api/dispatch/stream", post(post_dispatch_stream))
         .route("/api/execute", post(post_execute))
+        .route("/api/cloud/run", post(post_cloud_run))
         .route("/api/field-gpu-pack", post(post_field_gpu_pack))
         .route("/api/field-gpu-shaders", get(get_field_gpu_shaders))
         .route("/api/import/onnx", post(post_import_onnx))

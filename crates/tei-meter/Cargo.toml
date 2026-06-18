@@ -1,0 +1,21 @@
+[package]
+name = "tei-meter"
+version = "0.1.0"
+edition = "2024"
+description = "Host-side energy meter for the cloud runtime: measures the real wall-power a workload burns on the machine tei-serve runs on (today: an Apple-Silicon Mac Studio), and stamps every reading with two-axis provenance (Acquisition × Substrate-identity) so a measured host figure can never be mistaken for a target-substrate prediction. Ports the Apple-Silicon method from invisible-infrastructure's inv-energy crate (credited) so the prod fabric server stays self-contained."
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "tei_meter"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# `getloadavg(3)` for the Apple-Silicon load→watts estimate. Host-only; never
+# reaches the no_std embedded crates.
+libc = "0.2"

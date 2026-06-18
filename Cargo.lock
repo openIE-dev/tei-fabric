@@ -1941,6 +1941,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tei-meter"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "tei-nir"
 version = "0.1.0"
 dependencies = [
@@ -1975,6 +1984,7 @@ dependencies = [
  "tei-forge",
  "tei-import",
  "tei-ir",
+ "tei-meter",
  "tei-nir",
  "tei-sim-adiabatic",
  "tei-sim-circuit",

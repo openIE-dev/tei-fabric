@@ -15,6 +15,7 @@ path = "src/main.rs"
 tei-stack.workspace = true
 tei-ir.workspace = true
 tei-nir.workspace = true
+tei-meter.workspace = true
 tei-substrate-traits.workspace = true
 tei-cost-surface.workspace = true
 tei-import.workspace = true

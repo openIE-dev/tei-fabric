@@ -1377,6 +1377,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tei-embassy"
+version = "0.1.0"
+dependencies = [
+ "critical-section",
+ "embassy-time",
+]
+
+[[package]]
 name = "tei-ina228"
 version = "0.1.0"
 dependencies = [
@@ -1413,6 +1421,7 @@ dependencies = [
  "portable-atomic",
  "serde_json",
  "static_cell",
+ "tei-embassy",
  "tei-ina228",
  "tei-ledger",
  "tei-rt",
