@@ -1,0 +1,215 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+<Layout title="Cloud" description="Run teiOS in the cloud — own no hardware, install nothing. Pick a substrate, run the real algorithm through the real runtime on simulated targets, and see the honest energy ladder: what it would cost on the target chip versus the real energy the host machine burned.">
+
+<section class="max-w-5xl mx-auto px-6 pt-20 pb-10">
+  <p class="section-label mb-5">teiOS &middot; hardware-free</p>
+  <h1 class="font-display text-5xl md:text-6xl font-bold text-brand-white leading-[1.05] tracking-tight mb-6">
+    Run teiOS. <span class="text-brand-amber italic">Own no hardware.</span>
+  </h1>
+  <p class="text-brand-light text-lg md:text-xl max-w-3xl leading-relaxed">
+    Pick a substrate, run a real workload through the real runtime, and read the energy honestly. We report three numbers and never blur them: what the work would cost on the <em>target</em> chip, what the <em>simulator</em> measured running it, and the real energy the <em>host machine</em> burned to do the simulating. The host is a stand-in for TEI silicon — its joules are real, but they are not the target&rsquo;s.
+  </p>
+</section>
+
+<section class="max-w-7xl mx-auto px-6 pb-24">
+  <div class="grid lg:grid-cols-[380px_1fr] gap-6">
+    <!-- controls -->
+    <div class="glass-card p-6 self-start">
+      <p class="section-label mb-1">Substrate</p>
+      <div id="picker" class="flex flex-wrap gap-2 mt-2 mb-4"></div>
+      <p id="sub-blurb" class="text-brand-gray text-[13px] leading-relaxed mb-4"></p>
+      <div id="fields" class="grid grid-cols-2 gap-3 mb-5"></div>
+      <button id="run" class="w-full font-mono text-sm uppercase tracking-wider py-3 rounded border border-brand-amber text-brand-amber hover:bg-brand-amber hover:text-brand-dark transition-colors">
+        Run on the fabric
+      </button>
+      <p id="status" class="font-mono text-[11px] text-brand-gray mt-3 min-h-[1.2em]"></p>
+    </div>
+
+    <!-- results -->
+    <div class="glass-card p-6">
+      <p class="section-label mb-1">Energy ladder</p>
+      <p class="text-brand-gray text-[13px] leading-relaxed mb-5">
+        Three tiers, never conflated. The host figure estimates the target only after a characterized stand-in&rarr;target correction.
+      </p>
+      <div id="ladder" class="space-y-4">
+        <p class="text-brand-gray font-mono text-sm">Run a workload to see the ladder.</p>
+      </div>
+
+      <div id="result-extra" class="mt-8" style="display:none;">
+        <p class="section-label mb-3">Result</p>
+        <div id="outputs" class="font-mono text-[13px] text-brand-light grid grid-cols-2 gap-x-6 gap-y-1 mb-6"></div>
+        <p class="section-label mb-3">Host receipt</p>
+        <div id="receipt" class="font-mono text-[13px] text-brand-light grid grid-cols-2 gap-x-6 gap-y-1"></div>
+        <p id="honest" class="text-brand-gray text-[12px] leading-relaxed mt-6 border-l-2 border-brand-border pl-4"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script is:inline>
+const API_BASE = (() => {
+  const url = new URL(window.location.href);
+  const o = url.searchParams.get('api');
+  if (o) return o;
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return 'http://localhost:9651';
+  return '';
+})();
+function $(id) { return document.getElementById(id); }
+
+// ── substrate presets ──────────────────────────────────────────────────
+// Each builds the /api/cloud/run body from a few simple knobs. Only columns
+// whose dialect prices a full target-vs-simulated comparison are offered.
+const SUBSTRATES = {
+  stochastic: {
+    label: 'Annealing',
+    blurb: 'Probabilistic-bit Max-Cut annealer. The thermodynamic-computing column — anneal a spin glass toward its lowest-energy cut.',
+    fields: [['n', 'Nodes', 80], ['sweeps', 'Sweeps', 8000]],
+    body: v => ({
+      substrate: 'stochastic',
+      problem: { kind: 'complete', n: v.n | 0 },
+      schedule: { sweeps: v.sweeps | 0, beta0: 0.1, beta1: 5.0, kind: 'geometric' },
+    }),
+    outputs: ['best_cut', 'known_optimum', 'n_nodes', 'n_edges'],
+  },
+  crossbar: {
+    label: 'Analog MVM',
+    blurb: 'In-memory matrix-vector multiply on an analog resistive crossbar — the compute-in-memory column.',
+    fields: [['rows', 'Rows', 256], ['cols', 'Cols', 256], ['n_queries', 'Queries', 64]],
+    body: v => ({ substrate: 'crossbar', rows: v.rows | 0, cols: v.cols | 0, n_queries: v.n_queries | 0 }),
+    outputs: ['rows', 'cols', 'n_queries'],
+  },
+  spiking: {
+    label: 'Spiking',
+    blurb: 'A leaky-integrate-and-fire spiking network — the neuromorphic column. Poisson drive into a small feedforward net.',
+    fields: [['hidden', 'Hidden neurons', 128], ['ms', 'Duration (ms)', 100]],
+    body: v => ({
+      substrate: 'spiking',
+      layers: [
+        { name: 'in', n: 256, tau: 0.02, v_th: 1.0, poisson_rate: 40.0, poisson_weight: 0.2 },
+        { name: 'hid', n: Math.max(1, v.hidden | 0), tau: 0.02, v_th: 1.0 },
+        { name: 'out', n: 10, tau: 0.02, v_th: 1.0 },
+      ],
+      connections: [
+        { pre: 0, post: 1, probability: 0.1, weight: 0.5, delay: 1 },
+        { pre: 1, post: 2, probability: 0.2, weight: 0.5, delay: 1 },
+      ],
+      duration: Math.max(1, v.ms | 0) / 1000, dt: 0.001, seed: 7,
+    }),
+    outputs: ['n_synapses', 'total_spikes'],
+  },
+};
+
+let active = 'stochastic';
+
+// ── energy formatting ───────────────────────────────────────────────────
+function fmtJ(j) {
+  if (j == null) return '—';
+  const a = Math.abs(j);
+  if (a === 0) return '0 J';
+  if (a < 1e-9) return (j * 1e12).toPrecision(3) + ' pJ';
+  if (a < 1e-6) return (j * 1e9).toPrecision(3) + ' nJ';
+  if (a < 1e-3) return (j * 1e6).toPrecision(3) + ' µJ';
+  if (a < 1) return (j * 1e3).toPrecision(3) + ' mJ';
+  return j.toPrecision(3) + ' J';
+}
+
+// ── rendering ─────────────────────────────────────────────────────────
+function renderPicker() {
+  const p = $('picker'); p.innerHTML = '';
+  for (const [key, s] of Object.entries(SUBSTRATES)) {
+    const b = document.createElement('button');
+    b.textContent = s.label;
+    b.className = 'font-mono text-xs uppercase tracking-wider px-3 py-1.5 rounded border transition-colors ' +
+      (key === active
+        ? 'border-brand-amber text-brand-amber'
+        : 'border-brand-border text-brand-gray hover:text-brand-light');
+    b.onclick = () => { active = key; renderPicker(); renderFields(); };
+    p.appendChild(b);
+  }
+}
+
+function renderFields() {
+  const s = SUBSTRATES[active];
+  $('sub-blurb').textContent = s.blurb;
+  const f = $('fields'); f.innerHTML = '';
+  for (const [key, label, def] of s.fields) {
+    const wrap = document.createElement('label');
+    wrap.className = 'block';
+    wrap.innerHTML = `<span class="font-mono text-[10px] uppercase tracking-wider text-brand-gray">${label}</span>`;
+    const input = document.createElement('input');
+    input.type = 'number'; input.value = def; input.id = `f-${key}`;
+    input.className = 'w-full mt-1 bg-brand-navy border border-brand-border rounded px-2 py-1.5 font-mono text-sm text-brand-white focus:border-brand-amber outline-none';
+    wrap.appendChild(input); f.appendChild(wrap);
+  }
+}
+
+function collect() {
+  const s = SUBSTRATES[active], v = {};
+  for (const [key] of s.fields) v[key] = parseFloat($(`f-${key}`).value);
+  return s.body(v);
+}
+
+function tier(title, sub, value, accent) {
+  return `<div>
+    <div class="flex items-baseline justify-between mb-1">
+      <span class="font-mono text-sm" style="color:${accent}">${title}</span>
+      <span class="font-mono text-base text-brand-white">${fmtJ(value)}</span>
+    </div>
+    <p class="font-mono text-[10px] uppercase tracking-wider text-brand-gray">${sub}</p>
+  </div>`;
+}
+
+function renderLadder(d) {
+  const m = d.model, h = d.host;
+  $('ladder').innerHTML =
+    tier('Target — predicted', 'Modeled × Target · cost surface', m.cost_surface_j, '#F59E0B') +
+    tier('Target — simulated', 'Simulated × Target · event counts × dialect', m.simulated_j, '#34d399') +
+    tier('This machine — measured', `${h.acquisition} × stand-in · ${h.meter}`, h.host_joules, '#0EA5E9');
+
+  // outputs
+  const ob = $('outputs'); ob.innerHTML = '';
+  const want = SUBSTRATES[active].outputs;
+  for (const k of want) {
+    const val = m.outputs && m.outputs[k];
+    if (val === undefined) continue;
+    ob.innerHTML += `<span class="text-brand-gray">${k}</span><span class="text-right">${typeof val === 'number' ? (+val.toPrecision(5)) : val}</span>`;
+  }
+
+  // receipt
+  $('receipt').innerHTML =
+    `<span class="text-brand-gray">host</span><span class="text-right">${h.identity.name}</span>` +
+    `<span class="text-brand-gray">avg power</span><span class="text-right">${h.avg_watts.toPrecision(3)} W</span>` +
+    `<span class="text-brand-gray">duration</span><span class="text-right">${(h.duration_s * 1000).toPrecision(3)} ms</span>` +
+    `<span class="text-brand-gray">acquisition</span><span class="text-right">${h.acquisition}</span>`;
+
+  $('honest').textContent = d.note;
+  $('result-extra').style.display = 'block';
+}
+
+async function run() {
+  const btn = $('run'); btn.disabled = true;
+  $('status').textContent = 'running on the fabric…';
+  try {
+    const res = await fetch(`${API_BASE}/api/cloud/run`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(collect()),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    const d = await res.json();
+    renderLadder(d);
+    $('status').textContent = `done · ${d.substrate}`;
+  } catch (e) {
+    $('status').textContent = String(e.message || e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+renderPicker();
+renderFields();
+$('run').onclick = run;
+</script>
+
+</Layout>
