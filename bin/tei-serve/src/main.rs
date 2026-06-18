@@ -1093,6 +1093,58 @@ async fn post_cloud_run(
     Ok(Json(value))
 }
 
+/// Body for `/api/cloud/fpga-estimate`.
+#[derive(Deserialize)]
+struct FpgaEstimateRequest {
+    /// Target substrate the FPGA datapath stands in for.
+    substrate: String,
+    /// Real energy measured on the FPGA card running that datapath (joules).
+    fpga_joules: f64,
+    /// Stand-in name (defaults to the AWS F2 part).
+    #[serde(default)]
+    standin: Option<String>,
+}
+
+/// POST /api/cloud/fpga-estimate — the AWS-FPGA T2 tier as a pure calculator.
+///
+/// Given a **measured** FPGA energy for a target substrate's datapath, returns
+/// the target-ASIC estimate with bounds and the cited FPGA→ASIC correction
+/// (Kuon & Rose). `Measured × Target, via correction` — honest, with error
+/// bars. Refuses analog substrates (no FPGA stand-in exists for their physics).
+///
+/// This is the seam the live F2 path feeds: today you POST a measured number,
+/// once a bitstream + card-power reader land the same correction is applied to
+/// the energy the card actually reports.
+async fn post_cloud_fpga_estimate(
+    Json(req): Json<FpgaEstimateRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    match tei_meter::fpga_to_asic_default(&req.substrate) {
+        Some(corr) => {
+            let standin = req
+                .standin
+                .unwrap_or_else(|| "AWS F2 (Virtex UltraScale+)".to_string());
+            let est = corr.apply(req.fpga_joules, &req.substrate, &standin);
+            let mut v = serde_json::to_value(&est)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            v["note"] = serde_json::json!(
+                "Target estimate = measured FPGA energy × a published FPGA→ASIC \
+                 dynamic-power de-rating (Kuon & Rose 2007). Measured input, \
+                 Target output via a characterized correction, with bounds — \
+                 not silicon-measured on the target."
+            );
+            Ok(Json(v))
+        }
+        None => Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            format!(
+                "no FPGA stand-in for '{}': {}",
+                req.substrate,
+                tei_meter::correction::unavailable_reason(&req.substrate)
+            ),
+        )),
+    }
+}
+
 /// Pack a FieldJob into the exact f32 buffers the F4 WGSL kernels expect.
 /// The browser WebGPU driver uploads these verbatim — the packing math
 /// (CPML tables, ce = dt/ε, per-step source amplitudes) stays in Rust.
@@ -1379,6 +1431,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/dispatch/stream", post(post_dispatch_stream))
         .route("/api/execute", post(post_execute))
         .route("/api/cloud/run", post(post_cloud_run))
+        .route("/api/cloud/fpga-estimate", post(post_cloud_fpga_estimate))
         .route("/api/field-gpu-pack", post(post_field_gpu_pack))
         .route("/api/field-gpu-shaders", get(get_field_gpu_shaders))
         .route("/api/import/onnx", post(post_import_onnx))

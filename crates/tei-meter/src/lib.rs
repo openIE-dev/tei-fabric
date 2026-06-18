@@ -34,6 +34,9 @@
 //! tier reads [macmon](https://github.com/vladkens/macmon)'s `pipe` JSON
 //! (`all_power`, the IOReport SoC power) — sudoless, no extra privileges.
 
+pub mod correction;
+pub use correction::{Correction, CorrectionMethod, TargetEstimate, fpga_to_asic_default};
+
 use serde::Serialize;
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
