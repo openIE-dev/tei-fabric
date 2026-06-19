@@ -48,6 +48,45 @@ import Layout from '../layouts/Layout.astro';
   </div>
 </section>
 
+<section class="max-w-7xl mx-auto px-6 pb-24">
+  <p class="section-label mb-5">Measured stand-in &middot; the FPGA tier</p>
+  <h2 class="font-display text-3xl md:text-4xl font-bold text-brand-white tracking-tight mb-4">
+    From a measured stand-in to a <span class="text-brand-amber italic">target estimate</span>.
+  </h2>
+  <p class="text-brand-light text-base max-w-3xl leading-relaxed mb-8">
+    A rented FPGA is the one fabric that runs your actual datapath and reports <em>real</em> energy. It is not the target chip — hardened silicon is more efficient — so we de-rate the measured FPGA energy to the target with published bounds and a citation. Digital datapaths only; analog substrates have no honest FPGA stand-in, and the calculator says so.
+  </p>
+  <div class="grid lg:grid-cols-[380px_1fr] gap-6">
+    <div class="glass-card p-6 self-start">
+      <label class="block mb-4">
+        <span class="font-mono text-[10px] uppercase tracking-wider text-brand-gray">Substrate</span>
+        <select id="fpga-sub" class="w-full mt-1 bg-brand-navy border border-brand-border rounded px-2 py-1.5 font-mono text-sm text-brand-white focus:border-brand-amber outline-none">
+          <option value="stochastic">stochastic (digital p-bit)</option>
+          <option value="reversible">reversible (digital)</option>
+          <option value="baseline">baseline (digital)</option>
+          <option value="photonic">photonic (analog — no stand-in)</option>
+          <option value="in-memory">in-memory (analog — no stand-in)</option>
+          <option value="neuromorphic">neuromorphic (analog — no stand-in)</option>
+        </select>
+      </label>
+      <label class="block mb-5">
+        <span class="font-mono text-[10px] uppercase tracking-wider text-brand-gray">Measured FPGA energy (µJ)</span>
+        <input id="fpga-uj" type="number" value="7" step="0.1" class="w-full mt-1 bg-brand-navy border border-brand-border rounded px-2 py-1.5 font-mono text-sm text-brand-white focus:border-brand-amber outline-none" />
+      </label>
+      <button id="fpga-run" class="w-full font-mono text-sm uppercase tracking-wider py-3 rounded border border-brand-amber text-brand-amber hover:bg-brand-amber hover:text-brand-dark transition-colors">
+        Estimate target
+      </button>
+      <p id="fpga-status" class="font-mono text-[11px] text-brand-gray mt-3 min-h-[1.2em]"></p>
+    </div>
+    <div class="glass-card p-6">
+      <p class="section-label mb-1">Target estimate</p>
+      <div id="fpga-out" class="mt-3">
+        <p class="text-brand-gray font-mono text-sm">Enter a measured FPGA energy to derive a target estimate.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <script is:inline>
 const API_BASE = (() => {
   const url = new URL(window.location.href);
@@ -208,9 +247,54 @@ async function run() {
   }
 }
 
+// ── FPGA target-estimate calculator (T2 tier) ───────────────────────────
+async function fpgaRun() {
+  const btn = $('fpga-run'); btn.disabled = true;
+  const substrate = $('fpga-sub').value;
+  const fpga_joules = (parseFloat($('fpga-uj').value) || 0) * 1e-6;
+  $('fpga-status').textContent = 'estimating…';
+  try {
+    const res = await fetch(`${API_BASE}/api/cloud/fpga-estimate`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ substrate, fpga_joules }),
+    });
+    if (res.status === 422) {
+      // Honest refusal — analog substrate has no FPGA stand-in.
+      const msg = await res.text();
+      $('fpga-out').innerHTML =
+        `<p class="font-mono text-sm text-brand-amber mb-2">No FPGA stand-in</p>
+         <p class="text-brand-gray text-[13px] leading-relaxed">${msg}</p>`;
+      $('fpga-status').textContent = 'refused (honest)';
+      return;
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    const d = await res.json();
+    const c = d.correction;
+    $('fpga-out').innerHTML =
+      `<div class="flex items-baseline justify-between mb-1">
+         <span class="font-mono text-sm" style="color:#0EA5E9">${d.target} — target estimate</span>
+         <span class="font-mono text-base text-brand-white">${fmtJ(d.target_joules)}</span>
+       </div>
+       <p class="font-mono text-[11px] text-brand-gray mb-4">range ${fmtJ(d.target_joules_lo)} – ${fmtJ(d.target_joules_hi)} · Measured × Target, via correction</p>
+       <div class="font-mono text-[13px] text-brand-light grid grid-cols-2 gap-x-6 gap-y-1">
+         <span class="text-brand-gray">measured on</span><span class="text-right">${d.from_standin}</span>
+         <span class="text-brand-gray">measured energy</span><span class="text-right">${fmtJ(d.from_joules)}</span>
+         <span class="text-brand-gray">de-rating</span><span class="text-right">×${c.factor.toPrecision(3)} (${c.factor_lo.toPrecision(2)}–${c.factor_hi.toPrecision(2)})</span>
+         <span class="text-brand-gray">method</span><span class="text-right">${c.method}</span>
+       </div>
+       <p class="text-brand-gray text-[12px] leading-relaxed mt-5 border-l-2 border-brand-border pl-4">${c.source}. ${d.note}</p>`;
+    $('fpga-status').textContent = `done · ${d.target}`;
+  } catch (e) {
+    $('fpga-status').textContent = String(e.message || e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 renderPicker();
 renderFields();
 $('run').onclick = run;
+$('fpga-run').onclick = fpgaRun;
 </script>
 
 </Layout>
